@@ -114,6 +114,18 @@ def create_exercise_record(
     }
 
 
+def _serialize_exercise_record(r: ExerciseRecord) -> dict:
+    """单条运动记录的响应序列化（get / update 共用）。"""
+    return {
+        "id": r.id,
+        "exercise_type": r.exercise_type,
+        "duration_minutes": r.duration_minutes,
+        "met": r.met,
+        "calories_burned": r.calories_burned,
+        "record_date": r.record_date.isoformat(),
+    }
+
+
 def get_exercise_records(db: Session, user_id: int, day: date) -> list[dict]:
     """按日期取运动记录。"""
     recs = db.scalars(
@@ -121,17 +133,26 @@ def get_exercise_records(db: Session, user_id: int, day: date) -> list[dict]:
         .where(ExerciseRecord.user_id == user_id, ExerciseRecord.record_date == day)
         .order_by(ExerciseRecord.id)
     ).all()
-    return [
-        {
-            "id": r.id,
-            "exercise_type": r.exercise_type,
-            "duration_minutes": r.duration_minutes,
-            "met": r.met,
-            "calories_burned": r.calories_burned,
-            "record_date": r.record_date.isoformat(),
-        }
-        for r in recs
-    ]
+    return [_serialize_exercise_record(r) for r in recs]
+
+
+def update_exercise_record(
+    db: Session, user_id: int, record_id: int, duration_minutes: float
+) -> dict | None:
+    """
+    编辑运动记录时长，消耗按 MET 公式线性重算（MET 与体重已固化在记录里，
+    时长变化时 kcal = MET × 体重 × 时长(h) 等比例缩放）。
+    """
+    rec = db.get(ExerciseRecord, record_id)
+    if rec is None or rec.user_id != user_id:
+        return None
+    if duration_minutes <= 0:
+        return None
+    k = duration_minutes / rec.duration_minutes
+    rec.duration_minutes = duration_minutes
+    rec.calories_burned = round(rec.calories_burned * k, 1)
+    db.commit()
+    return _serialize_exercise_record(rec)
 
 
 def delete_exercise_record(db: Session, user_id: int, record_id: int) -> bool:

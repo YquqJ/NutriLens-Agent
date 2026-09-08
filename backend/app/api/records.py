@@ -8,6 +8,7 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -25,6 +26,24 @@ router = APIRouter(prefix="/api", tags=["records"])
 def _parse_date(s: str | None) -> date:
     """Query 参数日期解析（YYYY-MM-DD），缺省今天。"""
     return date.fromisoformat(s) if s else date.today()
+
+
+# ----------------------------------------------------------------------
+# 编辑请求体（M6.6：记录管理页的编辑能力）
+# ----------------------------------------------------------------------
+class DietItemUpdate(BaseModel):
+    """编辑单个饮食条目：只改克数，营养值由服务层按比例重算。"""
+
+    id: int
+    grams: float = Field(gt=0, le=3000)
+
+
+class DietRecordUpdate(BaseModel):
+    items: list[DietItemUpdate]
+
+
+class ExerciseRecordUpdate(BaseModel):
+    duration_minutes: float = Field(gt=0, le=1440)
 
 
 # ----------------------------------------------------------------------
@@ -49,6 +68,22 @@ def delete_diet_record(
         raise HTTPException(status_code=404, detail="记录不存在")
 
 
+@router.put("/diet/records/{record_id}")
+def update_diet_record(
+    record_id: int,
+    req: DietRecordUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """编辑饮食记录条目克数（营养值按比例重算），返回更新后的完整记录。"""
+    updated = diet_service.update_diet_record(
+        db, user.id, record_id, [i.model_dump() for i in req.items]
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    return updated
+
+
 # ----------------------------------------------------------------------
 # 运动记录
 # ----------------------------------------------------------------------
@@ -69,6 +104,22 @@ def delete_exercise_record(
 ):
     if not exercise_service.delete_exercise_record(db, user.id, record_id):
         raise HTTPException(status_code=404, detail="记录不存在")
+
+
+@router.put("/exercise/records/{record_id}")
+def update_exercise_record(
+    record_id: int,
+    req: ExerciseRecordUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """编辑运动记录时长（消耗按 MET 公式等比例重算），返回更新后的完整记录。"""
+    updated = exercise_service.update_exercise_record(
+        db, user.id, record_id, req.duration_minutes
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    return updated
 
 
 # ----------------------------------------------------------------------

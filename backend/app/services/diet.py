@@ -123,6 +123,35 @@ def create_diet_record(
     return {"record_id": rec.id, "total_calories": rec.total_calories}
 
 
+def _serialize_diet_record(r: DietRecord) -> dict:
+    """单条饮食记录的响应序列化（get / update 共用，避免两处手写重复）。"""
+    return {
+        "id": r.id,
+        "meal_type": r.meal_type,
+        "source": r.source,
+        "record_date": r.record_date.isoformat(),
+        "totals": {
+            "calories": r.total_calories,
+            "protein": r.total_protein,
+            "fat": r.total_fat,
+            "carbs": r.total_carbs,
+        },
+        "items": [
+            {
+                "id": it.id,
+                "food_name": it.food_name,
+                "grams": it.grams,
+                "calories": it.calories,
+                "protein": it.protein,
+                "fat": it.fat,
+                "carbs": it.carbs,
+                "confidence": it.confidence,
+            }
+            for it in r.items
+        ],
+    }
+
+
 def get_diet_records(db: Session, user_id: int, day: date) -> list[dict]:
     """按日期取饮食记录（含明细）。"""
     recs = db.scalars(
@@ -130,34 +159,39 @@ def get_diet_records(db: Session, user_id: int, day: date) -> list[dict]:
         .where(DietRecord.user_id == user_id, DietRecord.record_date == day)
         .order_by(DietRecord.id)
     ).all()
-    return [
-        {
-            "id": r.id,
-            "meal_type": r.meal_type,
-            "source": r.source,
-            "record_date": r.record_date.isoformat(),
-            "totals": {
-                "calories": r.total_calories,
-                "protein": r.total_protein,
-                "fat": r.total_fat,
-                "carbs": r.total_carbs,
-            },
-            "items": [
-                {
-                    "id": it.id,
-                    "food_name": it.food_name,
-                    "grams": it.grams,
-                    "calories": it.calories,
-                    "protein": it.protein,
-                    "fat": it.fat,
-                    "carbs": it.carbs,
-                    "confidence": it.confidence,
-                }
-                for it in r.items
-            ],
-        }
-        for r in recs
-    ]
+    return [_serialize_diet_record(r) for r in recs]
+
+
+def update_diet_record(
+    db: Session, user_id: int, record_id: int, items: list[dict]
+) -> dict | None:
+    """
+    编辑饮食记录：按条目 id 更新克数，营养值按克数比例线性重算，重算记录汇总。
+
+    营养值只做线性缩放（原条目已含绝对营养值，新值 = 原值 × 新克数/原克数），
+    不重新查食物库 —— 用户改克数是"我要吃更多/更少"，不是换食物。
+    """
+    rec = db.get(DietRecord, record_id)
+    if rec is None or rec.user_id != user_id:
+        return None
+    by_id = {it.id: it for it in rec.items}
+    for upd in items:
+        it = by_id.get(upd["id"])
+        grams = float(upd["grams"])
+        if it is None or grams <= 0:
+            continue  # 非法/越权的条目 id 直接跳过，不整条失败
+        k = grams / it.grams
+        it.grams = grams
+        it.calories = round(it.calories * k, 1)
+        it.protein = round(it.protein * k, 1)
+        it.fat = round(it.fat * k, 1)
+        it.carbs = round(it.carbs * k, 1)
+    rec.total_calories = round(sum(i.calories for i in rec.items), 1)
+    rec.total_protein = round(sum(i.protein for i in rec.items), 1)
+    rec.total_fat = round(sum(i.fat for i in rec.items), 1)
+    rec.total_carbs = round(sum(i.carbs for i in rec.items), 1)
+    db.commit()
+    return _serialize_diet_record(rec)
 
 
 def delete_diet_record(db: Session, user_id: int, record_id: int) -> bool:
