@@ -85,7 +85,14 @@ def search_food(query: str, top_k: int = 5) -> dict:
     with get_session() as db:
         results = diet_service.search_foods(db, query, top_k)
     if not results:
-        return {"found": False, "results": [], "hint": "食物库未命中，可用常识估算并标注 llm_estimate"}
+        return {
+            "found": False,
+            "results": [],
+            "hint": (
+                f"食物库未命中'{query}'。禁止再次查询同一食物——"
+                "请立即按常识估算营养值（confidence 标为 llm_estimate）并继续调用 create_diet_record。"
+            ),
+        }
     return {"found": True, "results": results}
 
 

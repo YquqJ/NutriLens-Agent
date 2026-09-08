@@ -61,8 +61,8 @@ worker 分工：
       验收：工具直调读写 user_profiles ✅（tests/test_profile_tools.py，含部分更新语义、非法枚举拦截、REST 路由下沉后回归）
 - [x] **M3.3** `agents/supervisor.py`：路由节点 —— 结构化输出 {next_agent, task}，hop_count≥2 强制结束
       验收：逻辑测试 4 用例通过（跳转/状态更新/防死循环/trace 追加）✅；真实 LLM 路由联调 3 用例已写，待配置 DASHSCOPE_API_KEY 后运行
-- [ ] **M3.4** `agents/diet_agent.py`：create_react_agent 绑定饮食工具 + 系统提示词（指代消解后的 task 驱动）
-      验收：文字"我午饭吃了一碗牛肉面"全流程落库
+- [x] **M3.4** `agents/diet_agent.py`：create_react_agent 绑定饮食工具 + 系统提示词（指代消解后的 task 驱动）
+      验收：文字"我午饭吃了一碗牛肉面"全流程落库 ✅（E2E 真实 LLM+DB：interrupt 挂起→编辑克数恢复→落库断言；取消路径同样覆盖）
 - [ ] **M3.5** `agents/exercise_agent.py` + `agents/plan_agent.py`：同构 worker
       验收：各自域内指令正确落库/出计划
 - [ ] **M3.6** `agents/graph.py`：Supervisor 图组装 + PostgresSaver checkpointer 接线

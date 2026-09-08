@@ -24,6 +24,8 @@ dependencies = [
     # ---- LLM / Agent ----
     "openai>=1.60",                     # DashScope 兼容模式统一走 OpenAI SDK
     "langgraph>=0.4,<0.5",              # 多 Agent 编排（interrupt/Command 为 0.2+ 语法，锁定 0.4.x）
+    "langgraph-prebuilt>=0.2,<0.5",     # 显式上界：langgraph 0.4.10 只声明 prebuilt>=0.2.0 无上界，
+                                        # 不锁会解析到 1.1.0（配套 langgraph 1.x）导致 import 崩溃
     "langgraph-checkpoint-postgres>=2.0",
     "langchain-core>=0.3",
     "langchain-openai>=0.3",            # ChatOpenAI 配 DashScope base_url 调 Qwen
