@@ -55,8 +55,8 @@ worker 分工：
 - [x] `tools/diet.py`：analyze_food_image / search_food / create_diet_record(interrupt HITL) / get_diet_records / delete_diet_record
 
 **待开发（按序）：**
-- [ ] **M3.1** `tools/exercise.py`：create/get/delete_exercise_record 工具（复用 services/exercise）
-      验收：单测 MET 计算 + 工具直调落库
+- [x] **M3.1** `tools/exercise.py`：create/get/delete_exercise_record 工具（复用 services/exercise）
+      验收：单测 MET 计算 + 工具直调落库 ✅（tests/test_exercise_tools.py，6 用例全过：含 MET 未命中降级提示、越权删除校验）
 - [ ] **M3.2** `tools/profile.py`：get_profile / update_profile 工具（agent 读改身体档案与长期偏好）
       验收：工具直调读写 user_profiles
 - [ ] **M3.3** `agents/supervisor.py`：路由节点 —— 结构化输出 {next_agent, task}，hop_count≥2 强制结束
