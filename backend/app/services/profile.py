@@ -13,6 +13,10 @@
 LLM 只负责"解释"计算结果，绝不做算术 —— 避免 LLM 算错 42 的经典问题。
 """
 
+from sqlalchemy.orm import Session
+
+from app.db.models import UserProfile
+
 ACTIVITY_FACTORS: dict[str, float] = {
     "sedentary": 1.2,  # 久坐，几乎不运动
     "light": 1.375,    # 每周 1-3 次轻量运动
@@ -65,3 +69,33 @@ def recalc_profile_metrics(
     tdee = calc_tdee(bmr, activity_level or "sedentary")
     target = calc_calorie_target(tdee, goal or "maintain")
     return bmr, tdee, target
+
+
+# ----------------------------------------------------------------------
+# 档案读写（REST 路由与 Agent 工具共用的下沉层）
+# ----------------------------------------------------------------------
+def get_profile(db: Session, user_id: int) -> UserProfile | None:
+    """读档案。无档案返回 None（调用方决定如何呈现）。"""
+    return db.get(UserProfile, user_id)
+
+
+def apply_profile_update(db: Session, user_id: int, updates: dict) -> UserProfile:
+    """
+    部分更新档案（只覆盖 updates 中出现的键），并重算 BMR/TDEE/目标回填。
+    无档案时自动创建。调用方负责 commit 后的字段刷新。
+    """
+    profile = get_profile(db, user_id)
+    if profile is None:
+        profile = UserProfile(user_id=user_id)
+        db.add(profile)
+
+    for field, value in updates.items():
+        setattr(profile, field, value)
+
+    profile.bmr, profile.tdee, profile.calorie_target = recalc_profile_metrics(
+        profile.gender, profile.weight_kg, profile.height_cm,
+        profile.age, profile.activity_level, profile.goal,
+    )
+    db.commit()
+    db.refresh(profile)
+    return profile
