@@ -100,3 +100,17 @@
 - **问题**：不重置时 hop_count 跨轮累积 —— 第一轮路由两次后，第二轮直接被防死循环守卫强制结束，worker 得不到任何执行机会（E2E 第二轮 invoke 无任何回复暴露了这点）。
 - **方案**：图入口加 `turn_reset` 节点，每轮用户消息进来时重置这三个字段。`Command(resume=...)` 恢复中断不经过 START，不受影响。
 - **对比过的替代方案**：由 API 层每次 invoke 传 `hop_count: 0` —— 可行但把不变式外包给了调用方，忘传即静默劣化；图自治（self-contained）更稳。
+
+## 2026-09-09 踩坑：astream 走 async checkpointer 接口，同步 PostgresSaver 直接 NotImplementedError
+
+- **现象**：SSE 端点用 `graph.astream(...)`，第一个请求即抛 `NotImplementedError`（langgraph/checkpoint/base 的 `aget_tuple`）。
+- **原因**：`astream` 全链路调用 checkpointer 的 **async** 接口（`aget_tuple`/`aput`...），同步版 `PostgresSaver` 只实现了同步方法，基类 async 方法直接 raise。而 pending_sends 补丁打在同步类上，迁移 `AsyncPostgresSaver` 意味着补丁重写 + 连接管理重做。
+- **解决**：生成器改为**同步** `graph.stream(...)`。starlette 的 StreamingResponse 原生支持同步迭代器（在 anyio 线程池里逐帧拉取），不必迁移异步版——一个同步迭代器的代价是流期间占用一个线程池线程，对当前规模可接受。
+- **面试口径**：FastAPI 异步栈里跑同步阻塞迭代器是刻意取舍——异步化的收益（并发吞吐）远小于迁移成本（checkpointer 双实现 + 补丁重写），等出现真实并发瓶颈再还这笔债。
+
+## 2026-09-09 决策：SSE 工具轨迹从节点 updates 差量配对提取，而非逐工具实时推送
+
+- **背景**：tool_calls 事件需要 {name, args, result} 三元组；react 子图内部的工具调用默认不产生顶层节点更新。
+- **方案**：worker 节点（子图整体）完成时的 updates 差量里，`AIMessage.tool_calls` 与 `ToolMessage` 按 `tool_call_id` 配对，一次性提取该 worker 本轮全部调用。
+- **代价（已确认可接受）**：HITL 挂起发生在工具内部时，节点差量要等 resume 之后才产出——interrupt 之前已执行的工具（如 search_food）轨迹事件会在**恢复后补发**，顺序晚于 interrupt 事件。若未来要"每工具实时推"，需开 `subgraphs=True` 拿子图内部节点更新，chunk 会带 namespace 三元组，复杂度上一个台阶，目前不值。
+- **顺带决策**：assistant 消息内容取自流结束后 `get_state()` 的最后一条 AI 消息（权威），token 拼接仅作兜底——多 hop 场景下拼接会把中间临场文本混进最终汇报。

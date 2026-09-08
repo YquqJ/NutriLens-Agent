@@ -7,7 +7,7 @@ FastAPI 应用入口。
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, conversations, records, uploads, users
+from app.api import auth, chat, conversations, records, uploads, users
 
 app = FastAPI(
     title="NutriLens API",
@@ -37,5 +37,4 @@ app.include_router(users.router)
 app.include_router(uploads.router)
 app.include_router(records.router)
 app.include_router(conversations.router)
-# chat（SSE 流式 Agent 端点）在 M2 LangGraph 图就绪后注册：
-# app.include_router(chat.router)
+app.include_router(chat.router)  # SSE 流式 Agent 端点（M3.7）

@@ -67,8 +67,8 @@ worker 分工：
       验收：各自域内指令正确落库/出计划 ✅（E2E：慢跑落库无 HITL + 计划引用档案数字与过敏偏好）
 - [x] **M3.6** `agents/graph.py`：Supervisor 图组装 + PostgresSaver checkpointer 接线
       验收：同一 thread_id 二次 invoke 能续上历史 ✅（tests/test_supervisor_graph.py：E2E 真实 LLM+PostgresSaver 二轮 invoke，第二轮基于第一轮落库记录回答追问；全图 HITL interrupt→resume→落库 也已覆盖。附带：qa_agent 占位形态接入图；turn_reset 入口节点修 hop_count 跨轮累积；NutriLensPostgresSaver 补丁修 pending_sends JSONB 往返 —— 细节见 DESIGN_NOTES）
-- [ ] **M3.7** `api/chat.py`：SSE 流式端点（token/agent_trace/tool_calls/interrupt 四类事件分帧）+ `Command(resume=...)` 恢复端点 + 消息落库 messages 表
-      验收：curl 联调——发消息→收到 interrupt→确认→落库→看板可见
+- [x] **M3.7** `api/chat.py`：SSE 流式端点（token/agent_trace/tool_calls/interrupt 四类事件分帧）+ `Command(resume=...)` 恢复端点 + 消息落库 messages 表
+      验收：curl 联调——发消息→收到 interrupt→确认→落库→看板可见 ✅（tests/test_chat_api.py E2E：SSE 收到 agent_trace/interrupt→resume 确认→DietRecord 落库→messages 表 user/assistant 各一条、assistant 带 agent_name 与 tool_trace；另含无挂起中断 resume 返回 400 的守卫用例。SSE 验证方式为 TestClient 流式断言，等价于 curl 链路）
 - [ ] **M3.8** 食物库 seed 脚本：导入中国食物成分表数据 ~800-1000 条（含 alias）
       验收：search_food("西红柿") 命中并带别名"番茄"
 
