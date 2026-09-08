@@ -85,8 +85,9 @@ def test_diet_agent_full_flow_with_hitl(test_user):
         edited = [it for it in all_items if it["grams"] == 500.0]
         assert edited, "应存在克数为用户编辑值(500)的条目"
         assert all(it["calories"] > 0 for it in all_items)
-        # 食物库当前为空（seed 在 M3.8），必然是 LLM 估算
-        assert all(it["confidence"] == "llm_estimate" for it in all_items)
+        # 置信度必须是三档之一：M3.8 食物库 seed 后"牛肉面"能查库命中
+        # （db_exact/db_fuzzy），此前库为空只能 llm_estimate
+        assert all(it["confidence"] in ("db_exact", "db_fuzzy", "llm_estimate") for it in all_items)
     finally:
         db.close()
 

@@ -48,7 +48,10 @@ def search_foods(db: Session, query: str, top_k: int = 5) -> list[dict]:
                 return 1, "prefix"
         return 2, "fuzzy"
 
-    ranked = sorted((match_rank(f), f) for f in rows)[:top_k]
+    # 只按 rank 键排序：元组整体排序在 rank 相同（平局）时会回退比较
+    # 第二个元素 Food 对象，ORM 对象不可比较直接 TypeError（食物库
+    # 规模上去后平局常见，M3.8 全量 seed 时暴露）
+    ranked = sorted(((match_rank(f), f) for f in rows), key=lambda t: t[0])[:top_k]
     return [
         {
             "food_id": f.id,

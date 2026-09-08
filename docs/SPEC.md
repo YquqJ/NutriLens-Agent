@@ -69,8 +69,8 @@ worker 分工：
       验收：同一 thread_id 二次 invoke 能续上历史 ✅（tests/test_supervisor_graph.py：E2E 真实 LLM+PostgresSaver 二轮 invoke，第二轮基于第一轮落库记录回答追问；全图 HITL interrupt→resume→落库 也已覆盖。附带：qa_agent 占位形态接入图；turn_reset 入口节点修 hop_count 跨轮累积；NutriLensPostgresSaver 补丁修 pending_sends JSONB 往返 —— 细节见 DESIGN_NOTES）
 - [x] **M3.7** `api/chat.py`：SSE 流式端点（token/agent_trace/tool_calls/interrupt 四类事件分帧）+ `Command(resume=...)` 恢复端点 + 消息落库 messages 表
       验收：curl 联调——发消息→收到 interrupt→确认→落库→看板可见 ✅（tests/test_chat_api.py E2E：SSE 收到 agent_trace/interrupt→resume 确认→DietRecord 落库→messages 表 user/assistant 各一条、assistant 带 agent_name 与 tool_trace；另含无挂起中断 resume 返回 400 的守卫用例。SSE 验证方式为 TestClient 流式断言，等价于 curl 链路）
-- [ ] **M3.8** 食物库 seed 脚本：导入中国食物成分表数据 ~800-1000 条（含 alias）
-      验收：search_food("西红柿") 命中并带别名"番茄"
+- [x] **M3.8** 食物库 seed 脚本：导入中国食物成分表数据 ~800-1000 条（含 alias）
+      验收：search_food("西红柿") 命中并带别名"番茄" ✅（foods_data.py 整理 789 条（17 大类：主食/面点/餐食/肉类/水产/豆类/蔬菜/菌藻/水果/坚果/奶类/饮品/零食/调味/菜肴等），seed_foods.py 幂等导入（按 name 去重不覆盖）；tests/test_food_seed.py 覆盖幂等性 + 别名双向命中 + 规模断言。附带修复：search_foods 元组排序平局时比较 Food 对象的 TypeError——全量 seed 后平局常见才暴露）
 
 ## M4 Agentic RAG `[ ]`
 

@@ -114,3 +114,17 @@
 - **方案**：worker 节点（子图整体）完成时的 updates 差量里，`AIMessage.tool_calls` 与 `ToolMessage` 按 `tool_call_id` 配对，一次性提取该 worker 本轮全部调用。
 - **代价（已确认可接受）**：HITL 挂起发生在工具内部时，节点差量要等 resume 之后才产出——interrupt 之前已执行的工具（如 search_food）轨迹事件会在**恢复后补发**，顺序晚于 interrupt 事件。若未来要"每工具实时推"，需开 `subgraphs=True` 拿子图内部节点更新，chunk 会带 namespace 三元组，复杂度上一个台阶，目前不值。
 - **顺带决策**：assistant 消息内容取自流结束后 `get_state()` 的最后一条 AI 消息（权威），token 拼接仅作兜底——多 hop 场景下拼接会把中间临场文本混进最终汇报。
+
+## 2026-09-09 踩坑：元组排序平局回退比较 ORM 对象 —— 小数据集测不出来的 bug
+
+- **现象**：食物库全量 seed（789 条）后，`search_foods` 抛 `TypeError: '<' not supported between instances of 'Food' and 'Food'`。
+- **原因**：`sorted((match_rank(f), f) for f in rows)` 对 (rank, Food) 元组整体排序——rank 相同时 Python 回退比较元组第二项，ORM 对象没有定义 `<` 直接崩。之前不触发纯粹因为测试库数据少、rank 无平局。
+- **解决**：`key=lambda t: t[0]` 只按 rank 键排序。
+- **教训（面试口径）**：元组排序的平局回退是 Python 隐式行为，配自定义对象就是定时炸弹，且只有数据量上来才会引爆——"排序键要么唯一、要么显式给 key"。
+
+## 2026-09-09 踩坑：测试断言编码了"环境为空"的假设，seed 后整体翻车
+
+- **现象**：M3.8 灌入食物库后 `test_diet_agent_full_flow_with_hitl` 稳定失败（非偶发），断言所有条目 `confidence == "llm_estimate"`。
+- **原因**：该测试写于食物库为空时，注释里明确写着"食物库当前为空（seed 在 M3.8），必然是 LLM 估算"——把环境快照当成了行为契约。seed 后"牛肉面"可查库精确命中，agent 正确改用 db_exact，旧断言反而把**正确行为**判为失败。
+- **解决**：断言改为契约级——confidence 必须是三档枚举之一，不绑定具体哪档（哪一档取决于库里有没有该食物，那是环境）。
+- **教训**：写"当前环境恰好如何"的断言时，在旁边标注触发条件翻转的里程碑（本次注释恰好标了 M3.8，看到失败就能立刻定位）；断言尽量对着接口契约写，别对着环境快照写。
