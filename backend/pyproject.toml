@@ -1,0 +1,49 @@
+[project]
+name = "nutrilens-backend"
+version = "0.1.0"
+description = "NutriLens 健康管理智能助手后端 —— 基于 LangGraph 的多 Agent 健康管理服务"
+authors = [
+    { name = "QAQ2333", email = "827199525@qq.com" }
+]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # ---- Web 框架 ----
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.20",        # 文件上传（multipart/form-data）
+    # ---- 数据库 ----
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",             # PostgreSQL 异步/同步驱动
+    "pgvector>=0.3",                    # pgvector 的 SQLAlchemy 集成（向量列类型）
+    # ---- 配置与认证 ----
+    "pydantic-settings>=2.6",
+    "pyjwt>=2.10",
+    "bcrypt>=4.2",                      # 密码哈希（弃用 passlib，规避其与 bcrypt>=4 的兼容问题）
+    # ---- 阿里云 OSS ----
+    "oss2>=2.19",
+    # ---- LLM / Agent ----
+    "openai>=1.60",                     # DashScope 兼容模式统一走 OpenAI SDK
+    "langgraph>=0.4,<0.5",              # 多 Agent 编排（interrupt/Command 为 0.2+ 语法，锁定 0.4.x）
+    "langgraph-checkpoint-postgres>=2.0",
+    "langchain-core>=0.3",
+    "langchain-openai>=0.3",            # ChatOpenAI 配 DashScope base_url 调 Qwen
+    "rank-bm25>=0.2",                   # BM25 关键词检索（混合检索的其中一路）
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "httpx>=0.28",                      # FastAPI TestClient 依赖
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,0 +1,26 @@
+# ---- Python / uv ----
+__pycache__/
+*.pyc
+.venv/
+.uv-cache/
+.pytest_cache/
+
+# ---- Node / 前端 ----
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# ---- 环境与密钥（绝不入库）----
+.env
+backend/.env
+frontend/.env.local
+
+# ---- 本地数据 ----
+backend/data/
+*.db
+
+# ---- IDE / 系统 ----
+.idea/
+.vscode/
+*.log
+.DS_Store

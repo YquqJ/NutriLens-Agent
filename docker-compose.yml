@@ -1,0 +1,26 @@
+# ============================================================
+# NutriLens 本地开发环境
+#   - postgres : PostgreSQL 16 + pgvector 向量扩展
+#     业务数据 / LangGraph checkpoint / 长期记忆 / RAG 向量检索共用这一个实例
+# 使用：docker compose up -d
+# ============================================================
+services:
+  postgres:
+    image: pgvector/pgvector:pg16   # 官方 Postgres 镜像 + 预装 pgvector 扩展
+    container_name: nutrilens-postgres
+    environment:
+      POSTGRES_USER: nutrilens
+      POSTGRES_PASSWORD: nutrilens
+      POSTGRES_DB: nutrilens
+    ports:
+      - "5433:5432"  # 宿主机 5433 → 容器 5432（本机 5432 常被其他项目占用）
+    volumes:
+      - nutrilens_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nutrilens"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  nutrilens_pgdata:
