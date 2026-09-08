@@ -7,6 +7,14 @@
 
 ---
 
+## 2026-09-08 决策：LLM 输出断言的容差设计（E2E 测试稳定性）
+
+- **现象**：plan_agent E2E 间歇性挂——模型偶尔把 2055.6 写成"约 2056"或"2,055"，纯字符串匹配 `2055 in content` 失败。
+- **规则**：对 LLM 生成内容的断言分两类处理——
+  1. **行为类断言**（调了哪些工具、写没写库）：精确断言，这是确定性事实；
+  2. **内容类断言**（引用了数字、提到了偏好）：做归一化（去逗号）+ 容差（精确值或 ±1 取整变体）+ 多次运行（3 轮全过才算稳定）。
+- **教训**：LLM E2E 测试的 flaky 先看断言是否过严，再怀疑代码；断言挂了不要立刻改代码，先单独重跑定位是行为问题还是表述问题。
+
 ## 2026-09-08 踩坑：langgraph 与 langgraph-prebuilt 版本错配，import 直接崩
 
 - **现象**：`from langgraph.prebuilt import create_react_agent` 报 `ModuleNotFoundError: No module named 'langgraph.stream'`。

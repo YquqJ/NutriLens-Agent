@@ -63,8 +63,8 @@ worker 分工：
       验收：逻辑测试 4 用例通过（跳转/状态更新/防死循环/trace 追加）✅；真实 LLM 路由联调 3 用例已写，待配置 DASHSCOPE_API_KEY 后运行
 - [x] **M3.4** `agents/diet_agent.py`：create_react_agent 绑定饮食工具 + 系统提示词（指代消解后的 task 驱动）
       验收：文字"我午饭吃了一碗牛肉面"全流程落库 ✅（E2E 真实 LLM+DB：interrupt 挂起→编辑克数恢复→落库断言；取消路径同样覆盖）
-- [ ] **M3.5** `agents/exercise_agent.py` + `agents/plan_agent.py`：同构 worker
-      验收：各自域内指令正确落库/出计划
+- [x] **M3.5** `agents/exercise_agent.py` + `agents/plan_agent.py`：同构 worker
+      验收：各自域内指令正确落库/出计划 ✅（E2E：慢跑落库无 HITL + 计划引用档案数字与过敏偏好）
 - [ ] **M3.6** `agents/graph.py`：Supervisor 图组装 + PostgresSaver checkpointer 接线
       验收：同一 thread_id 二次 invoke 能续上历史
 - [ ] **M3.7** `api/chat.py`：SSE 流式端点（token/agent_trace/tool_calls/interrupt 四类事件分帧）+ `Command(resume=...)` 恢复端点 + 消息落库 messages 表

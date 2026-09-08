@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(PYTHONIOENCODING=utf-8 uv run pytest:*)",
+      "Bash(uv sync)",
+      "Bash(uv run python -m app.db.init_db:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git log:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(docker compose up:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose logs:*)",
+      "Bash(docker ps:*)"
+    ]
+  }
+}
