@@ -6,6 +6,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getToken } from '@/api/http'
 import { listConversations, createConversation, getMessages, deleteConversation } from '@/api/conversations'
+import { uploadImage } from '@/api/uploads'
 import { getErrorMessage } from '@/utils/error'
 import ChatMessage from '@/components/ChatMessage.vue'
 import HitlCard from '@/components/HitlCard.vue'
@@ -25,8 +26,12 @@ const input = ref('')
 const streaming = ref(false)
 const pendingMsg = ref<ChatMsg | null>(null)
 const listEl = ref<HTMLElement | null>(null)
+const imageUrl = ref<string | null>(null)
+const uploading = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
 
 const busy = computed(() => streaming.value || !!pendingMsg.value)
+const canSend = computed(() => !busy.value && (!!input.value.trim() || !!imageUrl.value))
 
 const EXAMPLES = ['帮我记录午餐：一碗牛肉面', '我今天吃了多少卡路里？', '减脂期每天吃多少蛋白质？']
 
@@ -181,12 +186,38 @@ async function removeConversation(id: string) {
 }
 
 // ---- 发送 / 恢复 ----
+function pickImage() {
+  fileInput.value?.click()
+}
+
+async function onFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  ;(e.target as HTMLInputElement).value = ''
+  if (!file) return
+  uploading.value = true
+  try {
+    imageUrl.value = await uploadImage(file)
+  } catch (err) {
+    ElMessage.error(getErrorMessage(err, '图片上传失败'))
+  } finally {
+    uploading.value = false
+  }
+}
+
+function clearImage() {
+  imageUrl.value = null
+}
+
 async function send(text?: string) {
-  const content = (text ?? input.value).trim()
-  if (!content || busy.value || !activeId.value) return
+  const typed = (text ?? input.value).trim()
+  const img = imageUrl.value
+  if (busy.value || !activeId.value) return
+  if (!typed && !img) return
+  const content = typed || '识别这张图'
   input.value = ''
+  imageUrl.value = null
   messages.value.push({
-    key: uid(), role: 'user', content, imageUrl: null,
+    key: uid(), role: 'user', content, imageUrl: img,
     agentName: null, toolTrace: [], streaming: false, interrupt: null,
   })
   const live: ChatMsg = {
@@ -197,7 +228,11 @@ async function send(text?: string) {
   streaming.value = true
   scrollBottom()
   try {
-    await streamRequest(`/api/conversations/${activeId.value}/chat`, { content }, live)
+    await streamRequest(
+      `/api/conversations/${activeId.value}/chat`,
+      { content, image_url: img },
+      live,
+    )
   } catch (e) {
     live.content += `\n[请求失败] ${getErrorMessage(e)}`
     live.streaming = false
@@ -296,25 +331,38 @@ onMounted(loadConversations)
       </div>
 
       <!-- 输入区 -->
-      <div class="composer">
-        <el-input
-          v-model="input"
-          type="textarea"
-          :rows="1"
-          :autosize="{ minRows: 1, maxRows: 4 }"
-          resize="none"
-          placeholder="描述你的饮食或运动，如「午餐吃了一碗牛肉面」"
-          :disabled="busy"
-          @keydown.enter.exact.prevent="send()"
-        />
-        <el-button
-          type="primary"
-          :disabled="!input.trim() || busy"
-          :loading="streaming"
-          @click="send()"
-        >
-          发送
-        </el-button>
+      <div class="composer-wrap">
+        <div v-if="imageUrl" class="preview">
+          <img :src="imageUrl" alt="待发送图片" />
+          <button class="preview-rm" title="移除图片" @click="clearImage">
+            <el-icon><Close /></el-icon>
+          </button>
+        </div>
+
+        <div class="composer">
+          <input ref="fileInput" type="file" accept="image/*" hidden @change="onFileChange" />
+          <el-button class="img-btn" :disabled="busy" :loading="uploading" @click="pickImage">
+            <el-icon><Picture /></el-icon>
+          </el-button>
+          <el-input
+            v-model="input"
+            type="textarea"
+            :rows="1"
+            :autosize="{ minRows: 1, maxRows: 4 }"
+            resize="none"
+            placeholder="描述你的饮食或运动，如「午餐吃了一碗牛肉面」"
+            :disabled="busy"
+            @keydown.enter.exact.prevent="send()"
+          />
+          <el-button
+            type="primary"
+            :disabled="!canSend"
+            :loading="streaming"
+            @click="send()"
+          >
+            发送
+          </el-button>
+        </div>
       </div>
     </section>
   </div>
@@ -432,17 +480,54 @@ onMounted(loadConversations)
   color: var(--primary-deep);
 }
 
+.composer-wrap {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.preview {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 10px;
+}
+.preview img {
+  display: block;
+  max-width: 160px;
+  max-height: 120px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  object-fit: cover;
+}
+.preview-rm {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  color: var(--ink-3);
+  cursor: pointer;
+  font-size: 12px;
+}
+.preview-rm:hover {
+  color: var(--warn);
+}
 .composer {
   display: flex;
   gap: 10px;
   align-items: flex-end;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
 }
 .composer :deep(.el-textarea__inner) {
   border-radius: var(--radius-sm);
 }
 .composer .el-button {
   height: 38px;
+}
+.img-btn {
+  width: 38px;
+  flex: none;
 }
 </style>
