@@ -86,3 +86,28 @@ def hybrid_search(db: Session, query: str, top_k: int = 5) -> list[dict]:
         }
         for e in top
     ]
+
+
+def retrieve(db: Session, query: str, top_k: int = 5) -> list[dict]:
+    """
+    完整检索管线（M4.3 接线）：混合召回（求全）→ rerank 精排（求准）。
+
+    降级策略：rerank 端点不可用（网络/限流）时回退 RRF 序截断——
+    粗排结果可用总比整条问答链路报错好，rerank 顺序是锦上添花而非
+    正确性依赖。失败静默降级但把 rrf_score 保留在结果里可追溯。
+    """
+    candidates = hybrid_search(db, query, top_k=top_k * 2)
+    if not candidates:
+        return []
+    try:
+        from app.rag.rerank import rerank
+
+        pairs = rerank(query, [c["content"] for c in candidates], top_n=top_k)
+        reranked = []
+        for idx, score in pairs:
+            item = dict(candidates[idx])
+            item["relevance_score"] = score
+            reranked.append(item)
+        return reranked
+    except Exception:
+        return candidates[:top_k]

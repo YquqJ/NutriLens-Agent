@@ -76,7 +76,7 @@ worker 分工：
 
 - [x] **M4.1** `rag/embedding.py`：text-embedding-v3 客户端 + 批量入库
 - [x] **M4.2** `rag/retriever.py`：混合检索（pgvector 余弦 + rank_bm25 内存索引）→ RRF 融合
-- [ ] **M4.3** `rag/rerank.py`：gte-rerank 重排（DashScope 原生 API，非 OpenAI 兼容模式）
+- [x] **M4.3** `rag/rerank.py`：gte-rerank 重排（DashScope 原生 API，非 OpenAI 兼容模式）
 - [ ] **M4.4** 知识库 seed：营养/健身知识文档切片入库
 - [ ] **M4.5** `agents/qa_agent.py`：迭代自检（检索结果不足 → 改写 query 重检，≤2 轮）
       验收：问"减脂期每天吃多少蛋白质"，回答带来源且检索轨迹可见
