@@ -24,10 +24,12 @@ SSE 分帧格式（W3C 标准，前端按行解析）：
   生命周期与依赖 teardown 交错容易踩坑），落库时自开短会话；
 - token 只来自 worker 的文本输出：supervisor 是非流式结构化输出不产 token；
   AIMessageChunk 里 content 为空的分片是 tool_call 编码，不推给前端；
-- 工具调用轨迹从 worker 节点的 updates 差量里配对提取（AIMessage.tool_calls
-  与 ToolMessage 按 tool_call_id 对应）。注意：HITL 挂起发生在工具内部时，
-  该节点的差量要等 resume 之后才产出 —— 即 interrupt 之前已执行的工具
-  （如 search_food）的轨迹事件会在恢复后补发，顺序上晚于 interrupt 事件。
+- 工具调用轨迹两个来源：react worker（diet/exercise/plan）从其节点 updates
+  的 messages 差量配对提取（AIMessage.tool_calls 与 ToolMessage 按
+  tool_call_id 对应）；qa_agent 是普通节点，轨迹由 update["tool_calls"]
+  直接带回。注意：HITL 挂起发生在工具内部时，该节点的差量要等 resume
+  之后才产出 —— 即 interrupt 之前已执行的工具（如 search_food）的轨迹
+  事件会在恢复后补发，顺序上晚于 interrupt 事件。
 """
 
 import json
@@ -133,7 +135,11 @@ def _run_graph_and_stream(
             for node, update in chunk.items():
                 if node in WORKERS and isinstance(update, dict):
                     current_agent = node  # resume 路径没有 supervisor 决策事件，从这里兜住
-                    new_calls = _extract_tool_calls(update)
+                    # 工具轨迹两个来源：react worker 从 messages 差量配对提取；
+                    # qa_agent 是普通节点，轨迹由节点 update 的 tool_calls 直接带回
+                    new_calls = _extract_tool_calls(update) + list(
+                        update.get("tool_calls") or []
+                    )
                     for tc in new_calls:
                         yield _sse("tool_calls", tc)
                     tool_trace.extend(new_calls)

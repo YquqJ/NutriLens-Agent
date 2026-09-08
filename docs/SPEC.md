@@ -78,7 +78,7 @@ worker 分工：
 - [x] **M4.2** `rag/retriever.py`：混合检索（pgvector 余弦 + rank_bm25 内存索引）→ RRF 融合
 - [x] **M4.3** `rag/rerank.py`：gte-rerank 重排（DashScope 原生 API，非 OpenAI 兼容模式）
 - [x] **M4.4** 知识库 seed：营养/健身知识文档切片入库
-- [ ] **M4.5** `agents/qa_agent.py`：迭代自检（检索结果不足 → 改写 query 重检，≤2 轮）
+- [x] **M4.5** `agents/qa_agent.py`：迭代自检（检索结果不足 → 改写 query 重检，≤2 轮）
       验收：问"减脂期每天吃多少蛋白质"，回答带来源且检索轨迹可见
 
 ## M5 热量看板 API `[x]`（2026-09-08 完成，冒烟验证）
