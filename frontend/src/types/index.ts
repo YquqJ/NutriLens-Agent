@@ -105,11 +105,40 @@ export interface ToolTraceEntry {
   reason?: string
 }
 
+// ---- HITL 确认卡片（diet_agent 的 create_diet_record 中断载荷）----
+export interface DietDraftItem {
+  food_name: string
+  grams: number
+  calories: number
+  protein: number
+  fat: number
+  carbs: number
+  confidence: string
+}
+export interface DietConfirmPayload {
+  type: 'diet_confirm'
+  meal_type: string
+  record_date: string
+  items: DietDraftItem[]
+}
+
+// ---- 对话页本地消息（历史 + 流式实时合一的 UI 结构）----
+export interface ChatMessage {
+  key: string
+  role: 'user' | 'assistant'
+  content: string
+  imageUrl: string | null
+  agentName: string | null
+  toolTrace: ToolTraceEntry[]
+  streaming: boolean
+  interrupt: DietConfirmPayload | null
+}
+
 // ---- SSE 事件（后端 chat.py 分帧协议）----
 export type SseEvent =
   | { type: 'token'; content: string }
   | { type: 'agent_trace'; to: string; task: string }
   | { type: 'tool_calls'; entry: ToolTraceEntry }
-  | { type: 'interrupt'; payload: unknown }
+  | { type: 'interrupt'; payload: DietConfirmPayload }
   | { type: 'done'; interrupted: boolean; agent_name?: string; persisted?: boolean }
   | { type: 'error'; message: string }
