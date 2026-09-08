@@ -65,8 +65,8 @@ worker 分工：
       验收：文字"我午饭吃了一碗牛肉面"全流程落库 ✅（E2E 真实 LLM+DB：interrupt 挂起→编辑克数恢复→落库断言；取消路径同样覆盖）
 - [x] **M3.5** `agents/exercise_agent.py` + `agents/plan_agent.py`：同构 worker
       验收：各自域内指令正确落库/出计划 ✅（E2E：慢跑落库无 HITL + 计划引用档案数字与过敏偏好）
-- [ ] **M3.6** `agents/graph.py`：Supervisor 图组装 + PostgresSaver checkpointer 接线
-      验收：同一 thread_id 二次 invoke 能续上历史
+- [x] **M3.6** `agents/graph.py`：Supervisor 图组装 + PostgresSaver checkpointer 接线
+      验收：同一 thread_id 二次 invoke 能续上历史 ✅（tests/test_supervisor_graph.py：E2E 真实 LLM+PostgresSaver 二轮 invoke，第二轮基于第一轮落库记录回答追问；全图 HITL interrupt→resume→落库 也已覆盖。附带：qa_agent 占位形态接入图；turn_reset 入口节点修 hop_count 跨轮累积；NutriLensPostgresSaver 补丁修 pending_sends JSONB 往返 —— 细节见 DESIGN_NOTES）
 - [ ] **M3.7** `api/chat.py`：SSE 流式端点（token/agent_trace/tool_calls/interrupt 四类事件分帧）+ `Command(resume=...)` 恢复端点 + 消息落库 messages 表
       验收：curl 联调——发消息→收到 interrupt→确认→落库→看板可见
 - [ ] **M3.8** 食物库 seed 脚本：导入中国食物成分表数据 ~800-1000 条（含 alias）

@@ -90,7 +90,10 @@ def make_supervisor_node(
         llm: BaseChatModel = get_text_llm(streaming=False)  # 路由是一次结构化输出，关流式
         router = llm.with_structured_output(RouteDecision)
 
-    def supervisor(state: AgentState) -> Command[RouteTarget]:
+    def supervisor(state: AgentState) -> Command:
+        # 注：返回注解不能用 Command[RouteTarget] —— compile 时 LangGraph 会把
+        # 注解里的字面量解析成 goto 目标白名单做校验，"FINISH" 不是图中的
+        # 节点名（真正跳的是 END 常量），带了它直接 ValueError。
         # ---- 1. 防死循环：超限强制结束 ----
         hop_count = state.get("hop_count", 0)
         if hop_count >= MAX_HOPS:

@@ -74,3 +74,29 @@
 ## 2026-09-08 决策：数据库端口/凭据用默认值兜底，服务可裸跑
 
 - **理由**：`config.py` 所有字段给了默认值（密钥为空串），无 `.env` 也能起服务——冒烟测试与单元测试不依赖外部凭据；只有调 LLM/OSS 的功能才需要真 key。
+
+## 2026-09-08 踩坑：supervisor 返回注解 Command[RouteTarget] 导致图编译失败
+
+- **现象**：`StateGraph.compile()` 抛 `ValueError: Found edge ending at unknown node FINISH`。
+- **原因**：LangGraph 在 compile 时会解析节点函数返回注解里的字面量类型，作为 `Command` 的 goto 目标白名单做静态校验。`RouteTarget` 包含 `"FINISH"`（只是路由决策枚举值，真正跳转用的是 `END` 常量即 `"__end__"`），于是校验认为存在一条指向不存在节点的边。
+- **解决**：supervisor 节点函数返回注解改为裸 `Command`（放弃静态 goto 校验，换取枚举与图节点名的解耦）。
+- **教训**：`Command[Literal[...]]` 注解不是文档，是被运行时消费的约束；枚举值和图节点名要保持"同构但隔离"时，别让校验器看见枚举。
+
+## 2026-09-08 踩坑：langgraph 0.4.10 + checkpoint-postgres 的 pending_sends 序列化崩溃
+
+- **现象**：图用 PostgresSaver 编译运行正常，但 worker 子图（create_react_agent）一调工具就抛 `TypeError: Object of type Send is not JSON serializable`。
+- **原因链**（排查了整条版本矩阵）：
+  1. react 子图用 Send API 调度工具节点，`_apply_writes` 把 Send 对象放进 `checkpoint["pending_sends"]`（顶层字段，langgraph 0.4.x 的 v3 checkpoint 格式）；
+  2. checkpoint-postgres 的 `put()` 把整个 checkpoint 用 psycopg 的原生 `json.dumps` 落 JSONB 列 —— Send 不可序列化，2.x/3.x 全线如此；
+  3. 3.x 对 langgraph<0.5 的 DeprecationWarning 是版本号嗅探过于保守（实测 3.x 才是 0.4.10 的正确配对方向），但即使 3.x 也没修 put 路径；
+  4. Send 另有一条落库通道（`put_writes` → `checkpoint_writes` 表，走 serde），但那只服务 v<4 的读迁移逻辑，**恢复执行（PUSH 任务重调度）依赖的是 checkpoint 里的 pending_sends 本身** —— 试过"写时剥离"，interrupt 恢复时 PUSH 任务丢失，agent 节点看到悬空 tool_calls 报 INVALID_CHAT_HISTORY。
+- **解决**：`NutriLensPostgresSaver(PostgresSaver)` 补丁 —— put 时把 Send 编码成 JSON 安全结构（serde msgpack + base64），`_load_checkpoint_tuple` 时解码还原，保证与 MemorySaver 行为一致。依赖版本钉在 `langgraph-checkpoint-postgres>=3.0,<4.0`（2.x 连读迁移都没有，更不可用）。
+- **验证**：全图 HITL（interrupt 挂起 → Command(resume) → 落库）E2E 测试固化在 tests/test_supervisor_graph.py。
+- **面试口径**：这是"锁版本"策略的代价样本 —— 0.4.x 的 checkpoint 格式（v3/pending_sends）与 3.x saver 的预期格式（v4/通道化）之间有一个版本缝隙，官方没测的组合只能自己补桥。
+
+## 2026-09-08 决策：turn_reset 入口节点 —— "轮内"状态每轮重置
+
+- **背景**：hop_count/agent_trace/tool_calls 持久化在 checkpoint 里，但语义是"本轮"（防死循环计数/前端渲染轨迹）。
+- **问题**：不重置时 hop_count 跨轮累积 —— 第一轮路由两次后，第二轮直接被防死循环守卫强制结束，worker 得不到任何执行机会（E2E 第二轮 invoke 无任何回复暴露了这点）。
+- **方案**：图入口加 `turn_reset` 节点，每轮用户消息进来时重置这三个字段。`Command(resume=...)` 恢复中断不经过 START，不受影响。
+- **对比过的替代方案**：由 API 层每次 invoke 传 `hop_count: 0` —— 可行但把不变式外包给了调用方，忘传即静默劣化；图自治（self-contained）更稳。

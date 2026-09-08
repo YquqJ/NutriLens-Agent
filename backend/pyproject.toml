@@ -26,7 +26,11 @@ dependencies = [
     "langgraph>=0.4,<0.5",              # 多 Agent 编排（interrupt/Command 为 0.2+ 语法，锁定 0.4.x）
     "langgraph-prebuilt>=0.2,<0.5",     # 显式上界：langgraph 0.4.10 只声明 prebuilt>=0.2.0 无上界，
                                         # 不锁会解析到 1.1.0（配套 langgraph 1.x）导致 import 崩溃
-    "langgraph-checkpoint-postgres>=2.0",
+    "langgraph-checkpoint-postgres>=3.0,<4.0",     # 必须 3.x：langgraph 0.4.10 的 pregel 会往
+                                        # checkpoint 写 pending_sends（含 Send 对象），2.x 的
+                                        # put 用原生 json.dumps 落库直接 TypeError；3.x 才有对应
+                                        # 序列化支持。3.x 对 langgraph<0.5 的 DeprecationWarning
+                                        # 是版本嗅探过于保守（见 DESIGN_NOTES），功能实测正常
     "langchain-core>=0.3",
     "langchain-openai>=0.3",            # ChatOpenAI 配 DashScope base_url 调 Qwen
     "rank-bm25>=0.2",                   # BM25 关键词检索（混合检索的其中一路）
