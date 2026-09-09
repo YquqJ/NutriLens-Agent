@@ -155,3 +155,11 @@
 - **理由**：编辑语义是"我要吃更多/更少、练更久"，不是"换食物/换体重"；且落库时营养值已按当时体重/食物库固化（见 models.py 头部说明），重查会引入新的取值源，反而破坏"历史记录不漂移"的承诺。线性缩放保持记录自洽，且纯本地计算无外部依赖。
 - **代价**：改克数不重新做单位换算（如"半份"之类非均匀变化），但克数编辑是等比例缩放的自然模型，够用。
 
+
+## 2026-09-09 踩坑：SSE 事件类型放 event: 行，前端却在 data JSON 里找 type（M6.3 回归修复）
+
+- **现象**：对话页发消息后永远停在"正在思考…"，无 token、无 agent 徽章、无 HITL 卡片，也无报错。后端 curl 直连分帧完全正常（agent_trace/interrupt/done 齐全），数据库里 user 消息与 checkpoint 也都写了。
+- **原因**：协议错位——后端 `_sse(event, data)` 把事件类型放在 SSE 标准的 `event:` 行，data JSON 本身不含 `type` 字段；前端 `handle()` 却 `switch (e.type)` 分发。`e.type` 恒为 `undefined`，switch 一个分支都不进；而分帧解析处的 `catch {}` 把这个静默失败吞掉，连报错都没有。另有一处：tool_calls 的 data 直接就是 `{name, args, result}`，前端却期望包在 `entry` 字段里。
+- **排查路径**：curl 直连后端 ✅ → curl 走 Vite 代理 ✅（排除代理缓冲）→ 查 messages/checkpoints 表确认图确实跑到 diet_agent 并 interrupt（排除后端卡死）→ 缩到前端解析代码，对照 `types/index.ts` 的 SseEvent 定义发现 type 字段两边语义不同。
+- **解决**：前端解析处一处改动：`event:` 行的名字在 `JSON.parse` 后补进对象再分发（tool_calls 包成 `{type, entry}`），不逐事件改后端六处 yield。
+- **教训**：M6.3 验收只验了后端 curl 分帧，没有验前端渲染（SPEC 验收标准里写的是"SSE 收到 agent_trace/interrupt"——收到的主体含糊）。前后端各自定义协议契约（后端 chat.py docstring、前端 types/index.ts）但没有对照测试。跨端协议要么在共享类型里单一来源，要么至少写一个"前端解析逻辑跑真实后端流"的等价性验证（本次用 Node 脚本复刻分帧逻辑跑真流，26 token + interrupt + done 全部分发命中）。

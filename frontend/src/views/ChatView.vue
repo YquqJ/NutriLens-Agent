@@ -131,7 +131,14 @@ async function streamRequest(url: string, body: unknown, live: ChatMsg) {
       }
       if (event && data) {
         try {
-          handle(JSON.parse(data) as SseEvent)
+          // 事件类型在 SSE 的 event: 行里，data JSON 本身不含 type 字段；
+          // tool_calls 的 data 直接就是 ToolTraceEntry，需包成 entry
+          const parsed = JSON.parse(data)
+          handle(
+            event === 'tool_calls'
+              ? { type: event, entry: parsed }
+              : ({ ...parsed, type: event } as SseEvent),
+          )
         } catch {
           /* 忽略解析失败的帧 */
         }
