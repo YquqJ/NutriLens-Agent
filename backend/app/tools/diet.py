@@ -160,7 +160,9 @@ def create_diet_record(
             record_date=date.fromisoformat(record_date) if record_date else None,
             source="agent",
         )
-    return {"status": "created", **result}
+    # 结果带上确认后的条目明细：用户可能在 HITL 卡片改过克数，
+    # 模型只看 {record_id, total_calories} 会照抄自己草稿里的原估算值汇报
+    return {"status": "created", **result, "items": final_items}
 
 
 # ======================================================================
@@ -181,6 +183,23 @@ def get_diet_records(record_date: Optional[str] = None) -> dict:
             db, user_id, date.fromisoformat(record_date) if record_date else date.today()
         )
     return {"records": records, "daily_summary": summary}
+
+
+@tool
+def get_daily_summary(record_date: Optional[str] = None) -> dict:
+    """
+    查询用户某日的热量收支汇总。参数 record_date 为 YYYY-MM-DD，缺省今天。
+
+    返回字段：intake=当日已摄入热量、burned=当日运动消耗、net=净收支
+    (摄入−消耗)、calorie_target=每日热量目标、remaining=剩余可摄入热量
+    （即"热量缺口"=目标−摄入+消耗）、macros=三大宏量营养素。
+    回答"今天还剩多少热量 / 热量缺口 / 还能吃多少 / 摄入是否超标"时优先用这个。
+    """
+    user_id = get_current_user_id()
+    day = date.fromisoformat(record_date) if record_date else date.today()
+    with get_session() as db:
+        summary = diet_service.get_daily_summary(db, user_id, day)
+    return summary
 
 
 @tool

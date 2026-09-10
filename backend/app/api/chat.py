@@ -100,6 +100,7 @@ def _run_graph_and_stream(
     graph = get_graph()
     token_buffer: list[str] = []  # 兜底文本（正常取最终 state 的最后一条 AI 消息）
     tool_trace: list[dict] = []  # 本轮全部工具调用（落 messages.tool_trace）
+    seen_calls: set[str] = set()  # 已发过的工具调用内容键（resume 后 react 子图会重放相同差量）
     current_agent: Optional[str] = None  # 产出最终回复的 agent（落 agent_name）
     interrupted = False
 
@@ -141,8 +142,15 @@ def _run_graph_and_stream(
                         update.get("tool_calls") or []
                     )
                     for tc in new_calls:
+                        # resume 恢复时 react 子图节点差量会整段重放（同一批
+                        # AIMessage/ToolMessage 再发一次），按内容键去重，
+                        # 避免 tool_calls 事件与落库轨迹翻倍
+                        key = json.dumps(tc, ensure_ascii=False, sort_keys=True, default=str)
+                        if key in seen_calls:
+                            continue
+                        seen_calls.add(key)
                         yield _sse("tool_calls", tc)
-                    tool_trace.extend(new_calls)
+                        tool_trace.append(tc)
 
         if interrupted:
             # 挂起等用户：不落 assistant 消息（草稿在 interrupt 事件里，
@@ -175,7 +183,14 @@ def _run_graph_and_stream(
                 db.close()
         yield _sse(
             "done",
-            {"interrupted": False, "agent_name": current_agent, "persisted": bool(content)},
+            {
+                "interrupted": False,
+                "agent_name": current_agent,
+                "persisted": bool(content),
+                # 权威终稿：流式 token 可能混入 react agent 的工具间叙述（"现在我将…"），
+                # 前端收到 done 后用 content 替换累积的 token 文本，保证最终消息干净
+                "content": content,
+            },
         )
     except Exception as e:
         # 流中途异常：以 error 帧收尾（HTTP 状态码已 200，无法再改）

@@ -7,6 +7,7 @@ exercise_agent —— 运动记录专职 worker。
    提示词只需告诉模型这个机制，不用自己记 MET 值。
 """
 
+from datetime import date
 from typing import Optional
 
 from langchain_core.messages import SystemMessage
@@ -51,7 +52,13 @@ def _exercise_prompt(state: AgentState) -> list:
     必须拼上 state["messages"]，否则模型失去历史。
     """
     task = state.get("task") or ""
-    system = SystemMessage(content=f"{EXERCISE_SYSTEM_PROMPT}\n\n【当前任务】{task}")
+    system = SystemMessage(
+        content=(
+            f"{EXERCISE_SYSTEM_PROMPT}\n\n"
+            f"【当前日期】{date.today().isoformat()}（回答涉及今天/昨天/明天时以此为准，不要臆测日期）。\n\n"
+            f"【当前任务】{task}"
+        )
+    )
     return [system] + state["messages"]
 
 

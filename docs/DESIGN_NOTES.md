@@ -163,3 +163,71 @@
 - **排查路径**：curl 直连后端 ✅ → curl 走 Vite 代理 ✅（排除代理缓冲）→ 查 messages/checkpoints 表确认图确实跑到 diet_agent 并 interrupt（排除后端卡死）→ 缩到前端解析代码，对照 `types/index.ts` 的 SseEvent 定义发现 type 字段两边语义不同。
 - **解决**：前端解析处一处改动：`event:` 行的名字在 `JSON.parse` 后补进对象再分发（tool_calls 包成 `{type, entry}`），不逐事件改后端六处 yield。
 - **教训**：M6.3 验收只验了后端 curl 分帧，没有验前端渲染（SPEC 验收标准里写的是"SSE 收到 agent_trace/interrupt"——收到的主体含糊）。前后端各自定义协议契约（后端 chat.py docstring、前端 types/index.ts）但没有对照测试。跨端协议要么在共享类型里单一来源，要么至少写一个"前端解析逻辑跑真实后端流"的等价性验证（本次用 Node 脚本复刻分帧逻辑跑真流，26 token + interrupt + done 全部分发命中）。
+
+## 2026-09-09 踩坑：HITL 编辑值落库正确但汇报错误（工具结果信息不足 + 三连坑）
+
+- **现象**：用户在确认卡片把 450g 改成 350g，落库正确（350g/546kcal），但 assistant 汇报文本说"450克/702千卡"。
+- **原因**：`create_diet_record` 工具的返回值只有 `{status, record_id, total_calories}`，不含确认后的条目明细。react 模型汇报时拿不到真实条目，就照抄自己草稿（interrupt 前的 450g 估算）。
+- **解决**：工具结果带上 `items`（final_items，即用户确认后的值）。react 模型看到 350g/546 就如实汇报。
+- **连带发现一（轨迹重放）**：resume 恢复时 react 子图的节点差量会整段重放（同一批 AIMessage/ToolMessage 再发一遍），chat.py 的 tool_calls 提取会翻倍（4 条里 2 条重复）。按内容键去重修复。DB 落库无重复（重放只是流事件层现象）。
+- **连带发现二（重复路由）**：resume 后 supervisor 有概率把"已完成的任务"再当新任务派给同一 worker（多跑一轮模型、流里出现两段汇报）。hop_count 守卫兜住了但浪费一轮。强化提示词：对话尾部出现"已记录/已创建"完成态必须 FINISH。
+- **连带发现三（Vue 响应性）**：前端 `live` 消息是普通对象 push 进 reactive 数组，SSE 事件里对原始引用的 mutate 不触发重渲染（绕过 proxy set 陷阱）——打字机效果实际从未生效，内容只在其它 ref 变化时一次性弹出。改 `reactive()` 包装。
+- **已知未修的瑕疵**：下一轮对话的 tool_calls 事件会补发上一轮 resume 前的工具轨迹（LangGraph pending writes 的补发行为），跨轮轨迹有轻微"污染"（如运动消息的执行过程里混着上一轮的饮食工具）。纯展示层，暂不处理。
+- **教训**：工具的返回值不只是给落库用的，也是模型下一轮的上下文——HITL 确认后的"事实"必须回流给模型，否则模型汇报的是自己的记忆而非世界现状。
+
+## 2026-09-09 追加：工具结果带 items 仍不够，汇报纪律要写进提示词
+
+- **现象**：工具结果已含确认后的 items（80g/200g/319.2kcal），模型汇报仍复述自己的草稿估算（100g/150g/297kcal）。牛肉面场景能对、早餐场景翻车——qwen 对"以工具结果为准"这件事不稳定。
+- **原因**：上下文里同时存在两份"事实"——模型自己的草稿（原始 tool_call args）和工具返回的确认值，模型选哪份是概率行为。
+- **解决**：diet_agent 系统提示词加【汇报纪律】：克数与营养值必须以 create_diet_record 返回结果为准，禁止复述估算草稿。复现验证：草稿 100/150 → 改 80/200 → 汇报为 80/200/319.2。
+- **教训**：给模型两份相似信息时，"哪份是权威"必须显式声明，不能依赖模型自行判断（数据契约 vs 记忆，同 [[SSE type 协议错位]] 一类：上下文里有歧义时行为不稳定）。
+
+## 2026-09-09 踩坑：supervisor 重复路由复发——prompt 软约束失效，改代码级硬兜底
+
+- **现象**：用户一次提问"建议我之后该怎么吃"，回复里出现两段几乎一样的内容，且都带 RAG 引用 `[1]–[6]` 但引用编号不同（`[1][3][4][6][2]` vs `[3][6][4][5]`）。根因：qa_agent 被 supervisor 连续路由了两次——hop1 派 qa_agent 答一遍，hop2 的 qwen-plus 没识别出"已答完"又把 qa_agent 派了一遍；每次独立重新检索，所以两段引用编号不一样。
+- **为什么之前的修复没兜住**：这是 09-09 HITL 三连坑里"连带发现二（重复路由）"的复发。当时只做了 prompt 强化（"对话尾部出现完成态必须 FINISH"），那是软约束、靠 LLM 自觉遵守，qwen-plus 这轮没听进去。
+- **解决**：supervisor 加代码级硬兜底——同一轮内不允许把同一个 agent 连续路由两次：本次路由决策目标 == `agent_trace` 里上一个刚跑完的 agent 时，强制改成 FINISH。
+- **两个必须想清楚的取舍（面试口径）**：
+  1. 判重用 `agent_trace` 而非 `next_agent`：后者在 turn_reset 里没被重置、跨轮残留，会导致"新一轮首个 agent 恰好和上一轮相同"被误杀。
+  2. 不能改成"看到 AI 回复就 FINISH"：那会误伤 diet→plan 这类跨 agent 复合请求（记录早餐后再出计划）。"同 agent 判重"只拦重复，不拦跨 agent 接力。
+- **教训**：多 Agent 防重复回答，prompt 软约束是底线不是防线，关键不变量要在代码层兜底——"靠 LLM 自觉" vs "代码强制"，正是面试里"你如何保证 agent 不重复干活"这道题的标准答案分界线。
+
+## 2026-09-10 踩坑：image_url 写进 state 后断链，图片识别从未接通（M6.4 起）
+
+- **现象**：`/chat` 传了 `image_url`，但回复像完全没收到图片——文字只有"这是我昨天吃的午饭"（不含任何食物信息），模型也没调 `analyze_food_image`。
+- **原因**：`image_url` 的消费链断在中途。`chat.py` 把它写进 `AgentState.image_url`，唯一消费它的 `analyze_food_image` 工具需要模型主动传 URL；而模型（diet_agent 的 qwen-plus 文本模型）从头到尾看不到这个 URL——supervisor 路由只看 `state["messages"]`（纯文本）、不读 `image_url` 字段，diet_agent 提示词却写着"图片 URL 会在任务里给出"——这句描述的是一条**从未接通的设想流程**。设计意图和实现之间隔了一整条没接的线。
+- **解决**：在 `_diet_prompt` 里直接从 `state["image_url"]` 注入【图片】块（含 URL + "先 analyze_food_image 再 search_food"的指令），不再依赖 supervisor 把 URL 写进 task。理由：supervisor 是文本路由、本就不该理解图片；diet_agent 是唯一有图片工具的 worker，URL 就在它自己的 state 里，就地注入最直接。顺带把提示词规则 3 的"图片 URL 会在任务里给出"改成"系统提示的【图片】里给出"，与实现对齐。
+- **教训**：一个字段"写进了 state"不等于"被消费了"。排查"某输入没生效"，先 grep 这个字段的所有消费点，看它有没有一条路通到真正用它的地方——中间只要有一环没读，就是静默断链，连报错都没有。
+
+## 2026-09-10 踩坑：react agent 工具间叙述泄漏到前端，连系统提示词都被"返"回来
+
+- **现象**：图片记录流里，assistant 回复把系统提示词原样返回了——【图片】指令、"现在我将逐一查询…"、工具返回的 JSON，全挤在最终消息里。
+- **原因**：两层叠加。① qwen-plus 在调工具前/之间会"自言自语"，把 step-by-step 指令复述一遍（含【图片】块注入的"先 analyze_food_image 再 search_food"），这些文本是 AIMessage 的 `content`；② `chat.py` 的 "messages" 流模式把所有 AIMessageChunk 的 content 都当 token 推给前端，前端无脑 `live.content += e.content` 累积——叙述和最终汇报混在一起。
+- **解决**：双管齐下——
+  1. 软约束：diet_agent 提示词加【过程纪律】"调用工具前/之间不输出任何解释或过程文字，直接调用工具"；
+  2. 硬兜底（关键）：`chat.py` 的 done 帧带上权威终稿 `content`（即 get_state 取的最后一条 AI 消息），前端收到 done 后用它**替换**累积的 token 文本、而非追加。这样无论模型多话，最终消息一定是干净的最终汇报。
+- **教训**：react agent 的工具间叙述是"过程产物"，不是"答案"。流式渲染不能把过程产物当答案——要区分"过程 token"与"终稿"，终稿以图结束后最后一条 AI 消息为准。这是对 [[SSE 工具轨迹从节点 updates 差量配对提取]] 里"token 拼接仅作兜底"那条决策的后续：当时只在持久化层执行了，本次把前端实时视图也拉进同一个权威来源。
+
+## 2026-09-10 踩坑：plan_agent 只输出承诺性开场白就结束，计划永远出不来
+
+- **现象**：对话里输入"请为我制定饮食计划"，plan_agent 只回复一句"接下来我将为您制定一份符合减脂目标、避开禁忌食物、营养均衡的个性化饮食计划。"，之后无任何计划正文。
+- **原因链**：
+  1. plan_agent 是 react agent，qwen-plus 倾向先说一句"接下来我将…"的承诺性开场白再动手；如果这一句**不带 tool_call**（`create_react_agent` 收到纯文本 AI 消息就当作最终答案结束循环），循环直接终止，开场白就成了最终输出；
+  2. 即便 supervisor 意识到任务没完成想再派 plan_agent 补做，也被"同 agent 判重"硬兜底（[[supervisor 重复路由复发]]里的防线）拦成 FINISH——这道防线本职是防重复回答，此处误伤了"没干完要继续干"的正当场景，但根因不在它；
+  3. diet_agent 早在 [[react agent 工具间叙述泄漏到前端]] 就加了【过程纪律】规则 6，plan_agent 却一直漏加了这条——同类问题，只改了一个 worker。
+- **解决**：plan_agent 系统提示词补两条纪律——【过程纪律】（调工具前/之间不输出解释或过程文字，直接 get_profile）＋【交付纪律】（档案齐全就一次性输出完整计划正文，禁止只说承诺性开场白就结束本轮，开场白之后正文必须跟上）。
+- **教训**：同一形态的多个 worker（diet/exercise/plan 都是 create_react_agent），只要在其中一个发现并修复了一类模型行为 bug，就要**逐个排查其余 worker 是否漏了同一道防线**——这里 plan_agent 就是漏掉的。exercise_agent 同样没有【过程纪律】，是下一个可能的同款坑。
+
+## 2026-09-10 踩坑："今天还剩多少热量缺口"错答成"尚未记录饮食"——工具意图不可发现 + 日期幻觉
+
+- **现象**：问"我今天剩余多少热量缺口"，diet_agent 答"今日（2024-06-13）您尚未记录任何饮食"——既没答出缺口，日期还是编的。
+- **原因（两层，都不是"缺计算"）**：
+  1. 计算早已存在：`services/diet.py:get_daily_summary()` 返回 `remaining`(=目标−摄入+运动消耗) 等全量收支字段，且 `get_diet_records` 工具的返回值里就已带上 `daily_summary`。但该工具的 docstring 只写"查询饮食记录"，模型为答"热量缺口"去调它、看到 `records: []` 就停在"尚未记录"，忽略了手边现成的 `remaining`；diet_agent 提示词与 supervisor 的 AGENT_DUTIES 也都没把"热量缺口 / 剩余可摄入"写成一等意图 → **工具意图不可发现**。
+  2. 日期幻觉：supervisor 与所有 worker 的提示词都只说"未说明日期默认今天"，但从没把真实日期注入提示词，qwen-plus 拿不到"今天"就瞎编 2024-06-13（工具内部 `date.today()` 其实是对的，错的只是模型嘴里说的日期）。
+- **解决**：
+  1. 新增专职工具 `get_daily_summary`（包装 `diet_service.get_daily_summary`），docstring 显式声明"还剩多少热量/热量缺口"意图与各字段含义，加入 diet_agent 工具集；diet_agent 提示词加【热量缺口】规则把它导向该工具；supervisor 的 AGENT_DUTIES 补"热量缺口/剩余可摄入热量"。
+  2. `make_supervisor_node` 拼系统提示时注入 `date.today().isoformat()`（占位符 `{today}`），让指代消解把"今天"改写成真实日期。
+  3. 【后续补丁，关键】日期只注入 supervisor 不够——最终回复文本由 worker 生成，worker 提示词里没有日期，模型照样固答 baked-in 的 "2024-06-13"。于是把 `【当前日期】{date.today()}` 直接注入 diet/exercise/plan 三个 react worker 的 `_xxx_prompt`（即"答案生产层"）。
+- **教训**：
+  1. 服务层"算好了"≠ 模型"够得着"。排查"agent 答不对"，先查两样：① 数据/计算到底有没有（grep service 层）；② 模型有没有一条明确的路径够到它——工具 docstring、worker 提示词意图、supervisor 路由职责，三处都要写明，缺一处答案就停在半路。
+  2. "模型幻觉日期"这类问题，提示词注入要打在**产出那句话的层级**上：supervisor 改写 task 是一层，worker 生成终稿是另一层，只改前者挡不住后者。qwen-plus 对"今天"有 baked-in 默认值（本例恒为 2024-06-13），不给它真实日期它就固答这个。

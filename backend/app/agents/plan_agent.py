@@ -10,6 +10,7 @@ plan_agent —— 个性化计划专职 worker。
    数字齐了才能出计划 —— 宁可多一轮对话，不出无依据的计划。
 """
 
+from datetime import date
 from typing import Optional
 
 from langchain_core.messages import SystemMessage
@@ -38,13 +39,24 @@ PLAN_SYSTEM_PROMPT = """你是健康计划顾问，负责给用户生成个性�
    update_profile 补档（只传新增/变更字段），然后基于新档案出计划；
 3. 计划要落地：具体到每餐吃什么量级（与 calorie_target 对得上）、
    每周运动频率/项目/时长，并结合 goal_note 里的偏好与过敏信息；
-4. 用户只是更新档案不出计划时，更新完简短确认即可。"""
+4. 用户只是更新档案不出计划时，更新完简短确认即可；
+5.【过程纪律】调用工具前和工具调用之间，不要输出任何解释、计划或过程文字——
+   直接调用 get_profile，让档案读取只体现在工具轨迹里，不要在文本里复述要做什么；
+6.【交付纪律】档案齐全时，必须一次性输出完整计划正文（每餐吃什么、吃多少、
+   运动怎么安排），禁止只说"接下来我将…""好的，我这就…"之类的承诺性开场白
+   就结束本轮——开场白只是铺垫，正文必须紧跟其后，没给完整计划就不算完成任务。"""
 
 
 def _plan_prompt(state: AgentState) -> list:
     """完整消息列表：SystemMessage(人设+任务) + 对话历史。"""
     task = state.get("task") or ""
-    system = SystemMessage(content=f"{PLAN_SYSTEM_PROMPT}\n\n【当前任务】{task}")
+    system = SystemMessage(
+        content=(
+            f"{PLAN_SYSTEM_PROMPT}\n\n"
+            f"【当前日期】{date.today().isoformat()}（回答涉及今天/昨天/明天时以此为准，不要臆测日期）。\n\n"
+            f"【当前任务】{task}"
+        )
+    )
     return [system] + state["messages"]
 
 

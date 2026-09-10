@@ -140,5 +140,5 @@ export type SseEvent =
   | { type: 'agent_trace'; to: string; task: string }
   | { type: 'tool_calls'; entry: ToolTraceEntry }
   | { type: 'interrupt'; payload: DietConfirmPayload }
-  | { type: 'done'; interrupted: boolean; agent_name?: string; persisted?: boolean }
+  | { type: 'done'; interrupted: boolean; agent_name?: string; persisted?: boolean; content?: string }
   | { type: 'error'; message: string }

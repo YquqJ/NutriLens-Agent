@@ -18,7 +18,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from app.agents.diet_agent import make_diet_agent
+from app.agents.diet_agent import _diet_prompt, make_diet_agent
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.models import User
@@ -38,6 +38,36 @@ def test_user():
     db.query(User).filter(User.id == user_id).delete()
     db.commit()
     db.close()
+
+
+# ---- 纯函数单元测试（不依赖 LLM/DB）----
+def test_diet_prompt_injects_image_url():
+    """image_url 必须进入模型上下文，否则 analyze_food_image 永远不会被调用。
+
+    回归背景：M6.4 起 image_url 只写进 state，没有任何代码把它送进
+    diet_agent 的模型提示词，图片识别链路从未接通。
+    """
+    state = {
+        "messages": [HumanMessage("这是我昨天吃的午饭")],
+        "task": "记录昨日午餐",
+        "image_url": "https://example.com/food.jpg",
+    }
+    system = _diet_prompt(state)[0].content
+    assert "https://example.com/food.jpg" in system
+
+
+def test_diet_prompt_omits_image_when_absent():
+    """无图时不应注入图片 URL。"""
+    state = {"messages": [HumanMessage("我午饭吃了一碗牛肉面")], "task": "记录午餐"}
+    system = _diet_prompt(state)[0].content
+    assert "https://example.com/food.jpg" not in system
+
+
+def test_diet_prompt_injects_today_date():
+    """worker 提示词必须带真实日期，否则模型凭记忆臆测"今天"（曾固答 2024-06-13）。"""
+    state = {"messages": [HumanMessage("我今天热量缺口多少")], "task": "查今日热量缺口"}
+    system = _diet_prompt(state)[0].content
+    assert date.today().isoformat() in system
 
 
 @pytest.mark.skipif(not settings.dashscope_api_key, reason="未配置 DASHSCOPE_API_KEY")

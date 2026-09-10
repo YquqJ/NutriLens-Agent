@@ -15,6 +15,7 @@ Supervisor 路由节点 —— 多 Agent 系统的调度核心。
 单测注入桩（伪造固定决策），不依赖真实 LLM；联调时用 qwen-plus。
 """
 
+from datetime import date
 from typing import Literal, Optional
 
 from langchain_core.language_models import BaseChatModel
@@ -35,7 +36,8 @@ MAX_HOPS = 2
 AGENT_DUTIES: dict[str, str] = {
     "diet_agent": (
         "饮食记录与查询：拍照识别食物、文字描述解析成记录（含营养匹配与用户确认）、"
-        "查/删饮食记录、查每日营养汇总。涉及'吃了什么/多少克/卡路里摄入'选它。"
+        "查/删饮食记录、查每日营养汇总（摄入/消耗/热量目标/剩余可摄入热量，即热量缺口）。"
+        "涉及'吃了什么/多少克/卡路里摄入/今天还剩多少热量/热量缺口'选它。"
     ),
     "exercise_agent": (
         "运动记录与查询：记录一次运动（类型/时长）、按 MET 计算消耗、查/删运动记录。"
@@ -66,14 +68,19 @@ class RouteDecision(BaseModel):
 
 SUPERVISOR_SYSTEM_PROMPT = """你是健康管理系统的调度员（supervisor）。你的唯一职责是路由，不要自己回答问题。
 
+当前真实日期：{today}（做日期指代消解时以它为准，不要凭记忆猜日期）。
+
 可用执行者：
 {duties}
 以及 FINISH：任务已完成（结果已在对话中）或用户只是寒暄/没有可执行任务。
 
 判断规则：
 1. 依据完整对话历史判断用户最新意图，只选一个执行者；
-2. task 字段把用户请求改写成独立指令：补全指代消解（他/它/昨天那顿→具体内容），未提及的日期默认今天；
+2. task 字段把用户请求改写成独立指令：补全指代消解（他/它/昨天那顿→具体内容）；
+   "今天"一律消解为 {today}，"昨天/明天"据此前后推算；未提及日期默认今天；
 3. worker 的执行结果会回到你这里：如果结果已经足以回答用户，选 FINISH；
+   判断依据：对话尾部已出现 worker 的完成汇报（如"已记录/已创建/已查询到/已生成"），
+   说明任务已达成，必须选 FINISH —— 不要把已完成的结果再当成新任务重复路由；
 4. 拿不准属于谁时，按最贴近用户目的的那个选。"""
 
 
@@ -112,14 +119,29 @@ def make_supervisor_node(
                 (
                     "system",
                     SUPERVISOR_SYSTEM_PROMPT.format(
-                        duties="\n".join(f"- {k}：{v}" for k, v in AGENT_DUTIES.items())
+                        duties="\n".join(f"- {k}：{v}" for k, v in AGENT_DUTIES.items()),
+                        today=date.today().isoformat(),
                     ),
                 ),
                 *state["messages"],
             ]
         )
 
-        # ---- 3. 更新路由状态并跳转 ----
+        # ---- 3. 硬兜底：同一轮内不允许同一 agent 连续路由两次 ----
+        # 规则 3 是 prompt 软约束，qwen-plus 可能不遵守（qa_agent 答完又被派一遍，
+        # 流里出现两段重复回答）；代码层强制：本次决策目标 == agent_trace 里
+        # 上一个刚跑完的 agent，说明 LLM 没识别出"已答完"，直接 FINISH。
+        # 用 agent_trace（turn_reset 每轮清空）而非 next_agent（跨轮残留）判断，
+        # 避免新一轮首个 agent 恰好与上一轮相同被误杀。
+        trace = state.get("agent_trace", [])
+        last_agent = trace[-1].split("→")[-1] if trace else None
+        if decision.next_agent == last_agent:
+            decision = RouteDecision(
+                next_agent="FINISH",
+                task="上一 agent 已完成本任务，避免同 agent 连续重复路由",
+            )
+
+        # ---- 4. 更新路由状态并跳转 ----
         return Command(
             goto=END if decision.next_agent == "FINISH" else decision.next_agent,
             update={

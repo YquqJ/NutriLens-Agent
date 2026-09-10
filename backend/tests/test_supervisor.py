@@ -84,6 +84,41 @@ def test_agent_trace_accumulates():
     ]
 
 
+def test_blocks_rerouting_same_agent_consecutively():
+    """硬兜底：同一轮内 supervisor 不能把同一个 agent 连续路由两次。
+
+    LLM 未识别出"已答完"时会把刚跑完的 agent 再派一遍（qa_agent 被
+    连续路由两次 → 流里出现两段重复回答），代码层在此强制 FINISH。
+    """
+    supervisor = make_supervisor_node(
+        _stub_router(RouteDecision(next_agent="qa_agent", task="再给点建议"))
+    )
+    cmd = supervisor(
+        {
+            "messages": [HumanMessage("建议我之后怎么吃")],
+            "hop_count": 1,
+            "agent_trace": ["supervisor→qa_agent"],
+        }
+    )
+    assert cmd.goto == END
+    assert cmd.update["next_agent"] == "FINISH"
+
+
+def test_allows_routing_to_different_agent():
+    """硬兜底不误伤跨 agent 接力：上一个 agent 是 diet_agent，本次派 plan_agent 应放行。"""
+    supervisor = make_supervisor_node(
+        _stub_router(RouteDecision(next_agent="plan_agent", task="出个减脂计划"))
+    )
+    cmd = supervisor(
+        {
+            "messages": [HumanMessage("出个减脂计划")],
+            "hop_count": 1,
+            "agent_trace": ["supervisor→diet_agent"],
+        }
+    )
+    assert cmd.goto == "plan_agent"
+
+
 # ======================================================================
 # 真实 LLM 联调（需要 DASHSCOPE_API_KEY，未配置自动跳过）
 # ======================================================================

@@ -2,7 +2,7 @@
 // 对话页：会话列表 + SSE 流式渲染 + HITL 确认卡片。
 // 流式协议：POST /chat 返回 SSE 分帧（token/agent_trace/tool_calls/interrupt/done），
 // fetch + ReadableStream 逐帧解析；interrupt 挂起后经 /chat/resume 恢复。
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getToken } from '@/api/http'
 import { listConversations, createConversation, getMessages, deleteConversation } from '@/api/conversations'
@@ -95,7 +95,8 @@ async function streamRequest(url: string, body: unknown, live: ChatMsg) {
         scrollBottom()
         break
       case 'agent_trace':
-        live.agentName = e.to
+        // supervisor 收尾时 next_agent=FINISH，不是真实 agent，不更新徽章
+        if (e.to && e.to !== 'FINISH') live.agentName = e.to
         break
       case 'tool_calls':
         live.toolTrace.push(e.entry)
@@ -107,7 +108,12 @@ async function streamRequest(url: string, body: unknown, live: ChatMsg) {
         break
       case 'done':
         live.streaming = false
-        if (!e.interrupted) live.agentName = e.agent_name || live.agentName
+        if (!e.interrupted) {
+          live.agentName = e.agent_name || live.agentName
+          // 用后端权威终稿替换流式累积的 token 文本：token 流可能混入
+          // react agent 的工具间叙述（"现在我将…"），终稿才是干净的最终回答
+          if (e.content) live.content = e.content
+        }
         break
       case 'error':
         live.content += `\n[出错了] ${e.message}`
@@ -227,10 +233,12 @@ async function send(text?: string) {
     key: uid(), role: 'user', content, imageUrl: img,
     agentName: null, toolTrace: [], streaming: false, interrupt: null,
   })
-  const live: ChatMsg = {
+  // reactive 包装：SSE 事件流中会持续 mutate 此对象（token 追加/轨迹 push），
+  // 普通对象 push 进 reactive 数组后，对原始引用的 mutate 不触发重渲染
+  const live = reactive<ChatMsg>({
     key: uid(), role: 'assistant', content: '', imageUrl: null,
     agentName: null, toolTrace: [], streaming: true, interrupt: null,
-  }
+  })
   messages.value.push(live)
   streaming.value = true
   scrollBottom()

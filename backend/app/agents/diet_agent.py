@@ -18,6 +18,7 @@ diet_agent —— 饮食记录专职 worker。
    （db_exact/db_fuzzy/llm_estimate）是整个产品的数据可信度根基。
 """
 
+from datetime import date
 from typing import Optional
 
 from langchain_core.messages import SystemMessage
@@ -30,6 +31,7 @@ from app.tools.diet import (
     analyze_food_image,
     create_diet_record,
     delete_diet_record,
+    get_daily_summary,
     get_diet_records,
     search_food,
 )
@@ -49,6 +51,7 @@ DIET_TOOLS = [
     search_food,
     create_diet_record,
     get_diet_records,
+    get_daily_summary,
     delete_diet_record,
 ]
 
@@ -61,10 +64,20 @@ DIET_SYSTEM_PROMPT = """你是饮食记录员，负责用户饮食的记录与�
    必须立即改用常识估算并继续流程（调 create_diet_record 落库）——
    换参数重查同一食物是错误行为，会导致死循环；
 2. 写入记录必须用 create_diet_record（系统会请求用户确认，无需你额外确认）；
-3. 用户消息带图片时（图片 URL 会在任务里给出），先用 analyze_food_image 识别，
+3. 用户消息带图片时（图片 URL 会在系统提示的【图片】里给出），先用 analyze_food_image 识别，
    再逐项 search_food 匹配营养；
 4. 餐次判定：早餐/午餐/晚餐/加餐；未说明日期默认今天；
-5. 完成后用一两句话汇报结果（记了什么、合计多少千卡、数据置信度如何）。"""
+5. 完成后用一两句话汇报结果（记了什么、合计多少千卡、数据置信度如何）。
+   【汇报纪律】克数与营养值必须以 create_diet_record 的返回结果（items/total_calories）
+   为准 —— 用户可能在确认环节修改过克数，返回值才是实际落库值；
+   禁止在汇报中复述你自己的估算草稿。
+6.【过程纪律】调用工具前和工具调用之间，不要输出任何解释、计划或过程文字——直接调用工具，
+   让每一步在工具轨迹里体现，不要在文本里复述指令或过程。只在全部完成后按第 5 条汇报。
+7.【热量缺口】用户问"今天还剩多少热量/热量缺口/还能吃多少/今天吃超标了吗"时，
+   用 get_daily_summary 查当日收支：remaining=剩余可摄入（目标−已摄入+运动消耗）、
+   intake=已摄入、burned=运动消耗、calorie_target=每日目标、net=净收支。
+   直接引用这些数字回答；档案未填时 calorie_target/remaining 为 null，
+   此时应引导用户先完善身体档案，而不是只答"尚未记录"。"""
 
 
 def _diet_prompt(state: AgentState) -> list:
@@ -75,7 +88,22 @@ def _diet_prompt(state: AgentState) -> list:
     必须 [SystemMessage(人设+任务)] + state["messages"] 拼全量。
     """
     task = state.get("task") or ""
-    system = SystemMessage(content=f"{DIET_SYSTEM_PROMPT}\n\n【当前任务】{task}")
+    system_text = (
+        f"{DIET_SYSTEM_PROMPT}\n\n"
+        f"【当前日期】{date.today().isoformat()}（回答涉及今天/昨天/明天时以此为准，不要臆测日期）。\n\n"
+        f"【当前任务】{task}"
+    )
+    image_url = state.get("image_url")
+    if image_url:
+        # image_url 直接从这里注入（不依赖 supervisor 改写 task）：supervisor
+        # 是文本路由，只看 messages、不知道图片字段，若靠它把 URL 写进 task，
+        # 图片识别链路会静默断掉（M6.4 起就是这个断法）。
+        system_text += (
+            f"\n\n【图片】本条用户消息携带食物图片，URL：{image_url}。"
+            "必须先调用 analyze_food_image(image_url=该URL) 识别图中食物，"
+            "再逐项 search_food 匹配营养、create_diet_record 落库。"
+        )
+    system = SystemMessage(content=system_text)
     return [system] + state["messages"]
 
 
