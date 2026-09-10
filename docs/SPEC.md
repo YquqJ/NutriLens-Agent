@@ -71,6 +71,8 @@ worker 分工：
       验收：curl 联调——发消息→收到 interrupt→确认→落库→看板可见 ✅（tests/test_chat_api.py E2E：SSE 收到 agent_trace/interrupt→resume 确认→DietRecord 落库→messages 表 user/assistant 各一条、assistant 带 agent_name 与 tool_trace；另含无挂起中断 resume 返回 400 的守卫用例。SSE 验证方式为 TestClient 流式断言，等价于 curl 链路）
 - [x] **M3.8** 食物库 seed 脚本：导入中国食物成分表数据 ~800-1000 条（含 alias）
       验收：search_food("西红柿") 命中并带别名"番茄" ✅（foods_data.py 整理 789 条（17 大类：主食/面点/餐食/肉类/水产/豆类/蔬菜/菌藻/水果/坚果/奶类/饮品/零食/调味/菜肴等），seed_foods.py 幂等导入（按 name 去重不覆盖）；tests/test_food_seed.py 覆盖幂等性 + 别名双向命中 + 规模断言。附带修复：search_foods 元组排序平局时比较 Food 对象的 TypeError——全量 seed 后平局常见才暴露）
+- [x] **M3.9** `agents/memory.py`：摘要压缩记忆 —— messages 超阈值(24)时把最旧 KEEP_TAIL(8) 之前的消息折叠成滚动摘要（summary 字段）并用 RemoveMessage 裁剪，防上下文无限累积；supervisor 路由注入摘要做跨轮指代消解
+      验收：单测 5 用例全过 ✅（tests/test_memory.py，注入桩 LLM：节点级超阈值/未超阈值、图级 RemoveMessage 真瘦身、supervisor 注入、整图接线流向；不依赖真实模型）
 
 ## M4 Agentic RAG `[ ]`
 
@@ -91,7 +93,7 @@ worker 分工：
 - [x] **M6.1** 项目脚手架：Vue3 + Vite + TS + Element Plus + Pinia + axios 拦截器（JWT）
 - [x] **M6.2** 登录/注册 + 身体档案表单
 - [x] **M6.3** 对话页：SSE 渲染（打字机 + agent 徽章 + 工具轨迹折叠面板）+ HITL 确认卡片（可编辑克数）
-- [x] **M6.4** 拍照记录：图片上传 → 触发对话消息携带 image_url
+- [x] **M6.4** 拍照记录：图片上传 → 触发对话消息携带 image_url（后端图片→识别→落库链路已 E2E 验证 + 回归测试 tests/test_image_flow.py；采用感知/决策分离——analyze_image 前置节点确定性识别，见 DESIGN_NOTES「图片识别被 supervisor 指代消解幻觉覆盖」）
 - [x] **M6.5** 看板页：ECharts 热量收支 + 宏量营养素环图 + 7 日趋势折线
 - [x] **M6.6** 记录管理：饮食/运动记录列表、编辑、删除
 

@@ -239,3 +239,85 @@
 - **关键实现点（踩坑）**：langchain 读的是 os.environ 里的 `LANGSMITH_*`，而 pydantic-settings 读 `.env` 只写进 Settings 字段、不碰 os.environ——直接把 key 写 `.env` 并不能让 langchain 看到。且 langsmith 的 `get_env_var` 是 lru_cache（首次读取即缓存）。因此必须在 `config.py` import 时（早于任何 LLM/graph 调用）把字段回填进 os.environ，且 TRACING 值必须是小写 "true"（`tracing_is_enabled()` 用 `== "true"` 严格比较，写 "True" 不生效）。
 - **依赖**：langsmith 已是 langchain-core 的传递依赖（锁 0.12.2），无需新增；等要直接 import langsmith SDK 时再提升为直接依赖。
 - **与自建可观测性的关系**：LangSmith 不替代现有 SSE agent_trace/tool_calls + messages.tool_trace 落库——前者是"回放式"分布式 tracer，后者是"产品内"实时/持久化观测，互补。
+
+## 2026-09-10 踩坑：LangSmith 确认日志在启动时"消失"——import 期 logger.info 被丢弃
+
+- **现象**：按上一条配好 `LANGSMITH_TRACING=true` + key 后重启，控制台看不到"LangSmith 追踪已开启"，据此误判追踪没开。
+- **原因**：确认日志写在 `config.py` import 期（回填 os.environ 的必要条件，必须早于任何 LLM/graph 调用），此时 uvicorn 尚未接管日志、root logger 无 handler，logging 兜底 handler 只输出 WARNING+，`logger.info` 被静默丢弃。**追踪其实一直在工作**：`Client().list_projects()` 通 → key/网络没问题；`list_runs(project_name='nutrilens')` 能看到 supervisor/worker 的真实 trace——只是人看不到那条确认信息。
+- **解决**：`_apply_langsmith_env` 发 info 前加 `if not logging.getLogger().handlers: logging.basicConfig(level=logging.INFO)`——仅在 root 尚无人配置时补 handler（pytest 已在 root 挂 handler，此处变 no-op，不影响测试）。
+- **教训**：import 期日志是"三不管地带"，早于应用日志框架就位。凡"靠看日志确认启动状态"的开关，别假设 import 期的 `logger.info` 一定可见——要么就地补 handler，要么把确认挪到 lifespan/启动事件。可观测性开关本身就该自带可观测：给它一条**保证可见**的开机确认。
+
+## 2026-09-10 踩坑：前端"执行过程"每轮越滚越大——react worker 工具轨迹跨轮累加
+
+- **现象**：对话多轮后，每条 AI 回复的"执行过程"面板里工具越列越多（第 N 轮把前 N-1 轮的工具全带上，实测到 msg#89 已有 21 条工具）；预期应像"深度思考"那样，每条回复只挂自己这一轮的工具。
+- **原因**：`chat.py:_extract_tool_calls` 从 worker 子图的 `update["messages"]` 里提炼工具调用，遍历的是**累积后的完整 messages**。react worker 每轮进入时，其 messages（`Annotated[list, add_messages]`）继承父图历轮历史，历轮的 `AIMessage.tool_calls + ToolMessage` 全都在列表里；直接遍历就等于每轮把历史工具重新提炼一遍。外层"每请求局部变量 `tool_trace=[]`"只能保证不跨请求累加，挡不住"本请求内数据源本身已累积"。此次曾据"局部变量已 reset"误判为"前端已按消息隔离、无 bug"，绕了弯路——只看了累加器，没看数据源。
+- **解决**：`_extract_tool_calls` 以「最后一条 HumanMessage」为边界、只提炼其后的消息。理由：Human 消息总在每轮开头才追加，其后的工具必属本轮；resume 恢复中断不会新增 Human，本轮 interrupt 前已执行的工具仍被正确归入当前这一轮，HITL 单条消息的轨迹完整性不受影响。
+- **教训**：排查"每轮累加"类问题别只盯"累加器是否 reset"，要追到"被遍历的数据源本身是不是 `add_messages` 这类累积通道"。LangGraph 里凡用 reducer 的 channel 跨轮都保留历史；从"状态差量"提炼本轮新增时，要么找累积分界（最后一条 Human / 快照比对），要么按 tool_call_id 去重。
+
+## 2026-09-10 决策：会话自动命名——首条消息 qwen 语义概括 + 兜底截断
+
+- **背景**：会话侧栏每个会话标题都是默认"新会话"，无法区分。
+- **方案**：首条用户消息落库后，若 `title` 仍为默认"新会话"，用 qwen（复用 supervisor 同款 `get_text_llm(streaming=False)` 非流式实例）异步生成 4~10 字语义标题，只生成一次；LLM/网络异常时兜底为截取首条消息前 12 字，不阻断对话。
+- **取舍**：标题只存语义（"早餐记录"），不把日期塞进 title——侧栏已有 `updated_at` 时间列（当天时分 / 过去 M/D），再塞"9.10"属冗余；语义标题 + 时间列 = 用户要的"日期+精简概括"。
+- **为何首消息而非每轮**：首条消息通常已锁定主题，逐轮重命名徒增 LLM 调用与列表抖动（与 ChatGPT 一致）。
+
+## 2026-09-10 踩坑：侧栏会话"当天显示成第二天"——naive datetime 写进 timestamptz 整体偏移
+
+- **现象**：9/10 当天新建/活跃的会话，侧栏时间列显示"9/11"而非当天时分（如 17:50）。
+- **原因**：`models.py` 里所有时间列都是 `DateTime(timezone=True)`（Postgres `timestamptz`），
+  但默认值用 `datetime.now()`（naive 本地时间）。docker-compose 的 pg 容器没设 TZ、默认
+  `Etc/UTC`，naive `17:50` 写进 timestamptz 时被 Postgres 当成 `17:50 UTC`，真实时刻偏移 +8h；
+  读回 `.isoformat()` 变成 `...T17:50:00+00:00`，前端 `new Date` 再按浏览器时区(UTC+8)换算
+  得 `9/11 01:50`。前端 `formatTime` 本身没错——错在存储的数据，不在显示。
+- **解决**：新增 `db/models.py:utcnow()`（`datetime.now(timezone.utc)`）统一替换所有
+  timestamptz 列的 `default`/`onupdate`；`chat.py` 手动刷 `updated_at` 处同步改 aware。
+- **取舍/边界**：`date.today()`（服务本地日）仍用于饮食/运动记录的"归属哪一天"，这是两个
+  不同语义的时钟——日历日归属 vs 时刻记录，前者故意用本地日、后者统一 UTC，不强求一致。
+  存量错误行在下次发消息时 `updated_at` 被 aware now 刷新自然纠正，`created_at` 不显示故不追。
+- **教训**：`DateTime(timezone=True)` 列必须喂 aware datetime；naive 值会被 DB 按会话时区
+  重解读造成整体偏移，且这种偏移常要等前端展示才暴露——"显示层报的度，往往是存储层的病"。
+
+## 2026-09-10 决策：记忆管理——摘要压缩（summary + 近窗口）防 messages 无限累积
+
+- **背景**：会话 messages 是 `add_messages` 累积通道，长会话每轮把全量历史重喂给 supervisor
+  与各 react worker，token/延迟线性增长、逼近上下文窗口。这是本次会话定位到的真正缺口
+  （此前判断："会话列表"只是产品壳，不是上下文管理层，见其对应用户讨论）。
+- **方案**：LangGraph 官方"摘要记忆"模式——
+  1. `agents/memory.py` 新增 summarize 节点，插在 turn_reset 之后、supervisor 之前；
+     当 `len(messages) > MAX_MESSAGES(24)` 时，把最旧 `KEEP_TAIL(8)` 之前的消息交给
+     qwen 折叠成滚动摘要写入 `state.summary`（checkpoint 持久化、跨轮续上）；
+  2. 用 `RemoveMessage(id=...)` 删被折叠的旧消息，messages 真正"瘦身"而非只少读；
+  3. 摘要只喂 supervisor（指代消解需跨轮上下文）；worker 是 task 驱动、只看近窗口。
+- **关键实现点（实验确认）**：裸 `HumanMessage(...).id` 是 None，但消息进图通道时会被
+  LangGraph 补发 UUID id，所以 `RemoveMessage` 按 id 删除在真实链路可靠，无需手动补 id。
+  短对话时 summarize 是 no-op（返回 `{}`），不多一次 LLM 调用。
+- **取舍**：worker 不读 summary（task 已含指代消解）；长期事实（饮食/运动/档案）仍走工具
+  查库而非塞进摘要——摘要负责"对话连续性与指代"，不是事实真值来源。阈值 24/保留 8 是
+  面向 demo 的可信规模、非调优结论。
+
+## 2026-09-10 踩坑：发图消息被识别成"上一轮记录的食物"——supervisor 指代消解幻觉覆盖了图片
+
+- **现象**：用户前一轮刚记了"两根香肠"，下一轮发「这是我的晚饭」+ 食物照片，确认卡里
+  出现的是"香肠"（111g），而不是图片里真实的 白切鸡/炒白菜/米饭/番茄蛋汤。
+- **排查（黑盒对照，层层定位）**：
+  1. 视觉模型直连 `analyze_food_image(该URL)` —— 结果正确（白切鸡150g/炒白菜/米饭/番茄蛋汤），
+     感知层没坏；
+  2. 新鲜会话复现同一条图消息 —— 链路正确；只有"带历史"的会话才错 → 锁定是历史上下文在作祟；
+  3. 查该会话 checkpoint 的 `supervisor` task 字段 → 竟是
+     `"将刚记录的两根香肠标记为晚餐"`。
+- **根因**：supervisor 是纯文本路由、**看不到图片**。它把「这是我的晚饭」这个没有食物名词的
+  文本，用指代消解关联到了最近一轮「我又吃了两根香肠」，于是改写出"把香肠改成晚餐"的错误
+  task。diet_agent 拿到这个 task 后照做，尽管 `image_url` 其实就在 state 里、【图片】指令也
+  注入了——**错误的 task 盖过了软性的【图片】指令**。后来我加的"带图时禁止臆测"软提示，
+  qwen-plus 在强上下文（香肠刚被记录）下依旧无视，说明：**这类依赖"模型自主决定去调视觉
+  工具"的链路，软提示靠不住**。
+- **解决（感知与决策分离）**：新增 `analyze_image` 前置节点（插在 turn_reset 之后、supervisor
+  之前），本条消息带图时**确定性**地先调 `analyze_food_image`，把结果写进新字段
+  `recognized_foods`；再同时注入 supervisor（改写 task 时说"已识别出：白切鸡…，以此为准"）
+  与 diet_agent（【图片识别结果】直接给出食物清单，无需也不应再调 analyze_food_image）。
+  react agent 不再"记得"去看图，识别只发生一次、结果作为事实注入下游，幻觉空间被结构性消除。
+- **教训**：多 Agent 编排里，「把感知/工具调用交给模型按提示自主决定」会被上下文干扰破坏——
+  模型会忘调、漏调，或在强上下文下幻觉。**感知、检索、数值计算这类"确定性强、可预计算"的
+  步骤，应从决策层剥离成图里的确定性前置/工具节点**，把结果作为事实注入，而不是靠软提示赌
+  模型会照做。这跟 diet.py 里"感知(analyze_food_image)与查询(search_food)分离"是同一哲学，
+  只是这次把它推到了图编排层：连"是否去看图"这个决策本身也不交给模型。
