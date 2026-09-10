@@ -160,6 +160,6 @@ function logout() {
 .main {
   flex: 1;
   overflow-y: auto;
-  padding: 28px 32px;
+  padding: 20px 20px;
 }
 </style>

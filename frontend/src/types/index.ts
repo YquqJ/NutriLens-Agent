@@ -132,6 +132,9 @@ export interface ChatMessage {
   toolTrace: ToolTraceEntry[]
   streaming: boolean
   interrupt: DietConfirmPayload | null
+  createdAt?: string | null // 历史消息时间戳；流式新消息由前端补
+  thinkingMs?: number // 首 token 前耗时（思考）
+  answerMs?: number // 首 token 后到结束耗时（生成）
 }
 
 // ---- SSE 事件（后端 chat.py 分帧协议）----

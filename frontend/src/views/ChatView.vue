@@ -57,6 +57,7 @@ function toChatMessage(m: Message): ChatMsg {
     toolTrace,
     streaming: false,
     interrupt: null,
+    createdAt: m.created_at,
   }
 }
 
@@ -76,7 +77,12 @@ function formatTime(iso: string) {
 }
 
 // ---- SSE 流 ----
-async function streamRequest(url: string, body: unknown, live: ChatMsg) {
+async function streamRequest(
+  url: string,
+  body: unknown,
+  live: ChatMsg,
+  timing?: { firstToken: number },
+) {
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
@@ -91,6 +97,7 @@ async function streamRequest(url: string, body: unknown, live: ChatMsg) {
   const handle = (e: SseEvent) => {
     switch (e.type) {
       case 'token':
+        if (timing && timing.firstToken === 0) timing.firstToken = Date.now()
         live.content += e.content
         scrollBottom()
         break
@@ -229,24 +236,30 @@ async function send(text?: string) {
   const content = typed || '识别这张图'
   input.value = ''
   imageUrl.value = null
+  const now = new Date().toISOString()
   messages.value.push({
     key: uid(), role: 'user', content, imageUrl: img,
     agentName: null, toolTrace: [], streaming: false, interrupt: null,
+    createdAt: now,
   })
   // reactive 包装：SSE 事件流中会持续 mutate 此对象（token 追加/轨迹 push），
   // 普通对象 push 进 reactive 数组后，对原始引用的 mutate 不触发重渲染
   const live = reactive<ChatMsg>({
     key: uid(), role: 'assistant', content: '', imageUrl: null,
     agentName: null, toolTrace: [], streaming: true, interrupt: null,
+    createdAt: now,
   })
   messages.value.push(live)
   streaming.value = true
   scrollBottom()
+  const start = Date.now()
+  const timing = { firstToken: 0 }
   try {
     await streamRequest(
       `/api/conversations/${activeId.value}/chat`,
       { content, image_url: img },
       live,
+      timing,
     )
   } catch (e) {
     live.content += `\n[请求失败] ${getErrorMessage(e)}`
@@ -254,6 +267,10 @@ async function send(text?: string) {
   } finally {
     streaming.value = false
     scrollBottom()
+  }
+  if (timing.firstToken > 0) {
+    live.thinkingMs = timing.firstToken - start
+    if (!live.interrupt) live.answerMs = Date.now() - timing.firstToken
   }
   if (!live.interrupt) await refreshList()
 }
@@ -305,10 +322,11 @@ onMounted(loadConversations)
   <div class="chat">
     <!-- 会话列表 -->
     <aside class="convs">
-      <el-button class="new-btn" type="primary" plain @click="newConversation">
+      <el-button class="new-btn" type="primary" @click="newConversation">
         <el-icon><Plus /></el-icon>&nbsp;新会话
       </el-button>
       <div class="conv-list">
+        <div v-if="convs.length" class="conv-label">最近会话</div>
         <div
           v-for="c in convs"
           :key="c.id"
@@ -326,57 +344,73 @@ onMounted(loadConversations)
     <!-- 消息区 -->
     <section class="main">
       <div ref="listEl" class="messages">
-        <div v-if="!messages.length" class="empty">
-          <p class="empty-title">记录你吃了什么、做了什么运动</p>
-          <p class="empty-sub">直接描述，或从下面的问题开始：</p>
-          <div class="examples">
-            <button v-for="ex in EXAMPLES" :key="ex" class="chip" @click="send(ex)">{{ ex }}</button>
+        <div class="col">
+          <div v-if="!messages.length" class="empty">
+            <p class="empty-title">记录你吃了什么、做了什么运动</p>
+            <p class="empty-sub">直接描述，或从下面的问题开始：</p>
+            <div class="examples">
+              <button v-for="ex in EXAMPLES" :key="ex" class="chip" @click="send(ex)">{{ ex }}</button>
+            </div>
           </div>
-        </div>
 
-        <template v-for="m in messages" :key="m.key">
-          <ChatMessage :message="m" />
-          <HitlCard
-            v-if="m.interrupt"
-            :payload="m.interrupt"
-            @confirm="confirmDiet"
-            @cancel="cancelDiet"
-          />
-        </template>
+          <template v-for="m in messages" :key="m.key">
+            <ChatMessage :message="m" />
+            <div v-if="m.interrupt" class="hitl-slot">
+              <HitlCard
+                :payload="m.interrupt"
+                @confirm="confirmDiet"
+                @cancel="cancelDiet"
+              />
+            </div>
+          </template>
+        </div>
       </div>
 
       <!-- 输入区 -->
       <div class="composer-wrap">
-        <div v-if="imageUrl" class="preview">
-          <img :src="imageUrl" alt="待发送图片" />
-          <button class="preview-rm" title="移除图片" @click="clearImage">
-            <el-icon><Close /></el-icon>
-          </button>
-        </div>
+        <div class="col">
+          <div v-if="imageUrl" class="preview">
+            <img :src="imageUrl" alt="待发送图片" />
+            <button class="preview-rm" title="移除图片" @click="clearImage">
+              <el-icon><Close /></el-icon>
+            </button>
+          </div>
 
-        <div class="composer">
-          <input ref="fileInput" type="file" accept="image/*" hidden @change="onFileChange" />
-          <el-button class="img-btn" :disabled="busy" :loading="uploading" @click="pickImage">
-            <el-icon><Picture /></el-icon>
-          </el-button>
-          <el-input
-            v-model="input"
-            type="textarea"
-            :rows="1"
-            :autosize="{ minRows: 1, maxRows: 4 }"
-            resize="none"
-            placeholder="描述你的饮食或运动，如「午餐吃了一碗牛肉面」"
-            :disabled="busy"
-            @keydown.enter.exact.prevent="send()"
-          />
-          <el-button
-            type="primary"
-            :disabled="!canSend"
-            :loading="streaming"
-            @click="send()"
-          >
-            发送
-          </el-button>
+          <div class="composer">
+            <input ref="fileInput" type="file" accept="image/*" hidden @change="onFileChange" />
+            <el-button
+              class="img-btn"
+              :disabled="busy"
+              :loading="uploading"
+              title="上传食物照片"
+              @click="pickImage"
+            >
+              <el-icon style="font-size: 18px;"><Picture /></el-icon>
+            </el-button>
+            <el-input
+              v-model="input"
+              type="textarea"
+              class="composer-input"
+              :rows="1"
+              :autosize="{ minRows: 1, maxRows: 5 }"
+              resize="none"
+              placeholder="描述你的饮食或运动，如「午餐吃了一碗牛肉面」"
+              :disabled="busy"
+              @keydown.enter.exact.prevent="send()"
+            />
+            <el-button
+              type="primary"
+              class="send-btn"
+              circle
+              :disabled="!canSend"
+              :loading="streaming"
+              title="发送"
+              @click="send()"
+            >
+              <el-icon v-if="!streaming"><Promotion /></el-icon>
+            </el-button>
+          </div>
+          <!-- <div class="hint">Enter 发送 · Shift+Enter 换行</div> -->
         </div>
       </div>
     </section>
@@ -387,17 +421,23 @@ onMounted(loadConversations)
 .chat {
   display: flex;
   height: 100%;
-  gap: 20px;
+  gap: 0;
+  background: var(--bg-elevated);
 }
 .convs {
-  width: 220px;
+  width: 224px;
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding: 12px;
+  border-right: 1px solid var(--border);
 }
 .new-btn {
   width: 100%;
+  height: 36px;
+  border-radius: 10px;
+  font-weight: 600;
 }
 .conv-list {
   flex: 1;
@@ -406,38 +446,56 @@ onMounted(loadConversations)
   flex-direction: column;
   gap: 2px;
 }
+.conv-label {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--muted-2);
+}
 .conv-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  border-radius: 10px;
   cursor: pointer;
-  color: var(--ink-2);
+  color: var(--muted);
+  transition: background 0.12s, color 0.12s;
 }
 .conv-item:hover {
-  background: var(--bg);
+  background: var(--surface-hover);
+  color: var(--text);
 }
 .conv-item.active {
   background: var(--primary-soft);
   color: var(--primary-deep);
+}
+.conv-item.active .conv-title {
+  font-weight: 600;
 }
 .conv-title {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 500;
 }
 .conv-time {
+  flex: none;
   font-size: 11px;
-  color: var(--ink-3);
+  color: var(--muted-2);
+}
+.conv-item.active .conv-time {
+  color: var(--primary-deep);
+  opacity: 0.7;
 }
 .conv-del {
+  flex: none;
+  width: 16px;
   opacity: 0;
   font-size: 14px;
-  color: var(--ink-3);
+  color: var(--muted-2);
   transition: opacity 0.12s;
 }
 .conv-item:hover .conv-del {
@@ -456,11 +514,18 @@ onMounted(loadConversations)
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 4px 20px;
+  padding: 24px 8px 24px;
+  background: linear-gradient(180deg, var(--bg-elevated), var(--surface));
+}
+/* 居中阅读列：消息与输入框共用同一宽度，避免超长行与两侧空旷 */
+.col {
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
 }
 .empty {
-  max-width: 460px;
-  margin: 10vh auto 0;
+  max-width: 520px;
+  margin: 12vh auto 0;
   text-align: center;
 }
 .empty-title {
@@ -497,7 +562,12 @@ onMounted(loadConversations)
 
 .composer-wrap {
   border-top: 1px solid var(--line);
-  padding-top: 12px;
+  padding: 12px 0 12px;
+}
+/* HITL 卡片对齐到助手内容列（头像 32 + 间距 12），并限制宽度 */
+.hitl-slot {
+  margin: -12px 0 24px 44px;
+  max-width: 640px;
 }
 .preview {
   position: relative;
@@ -530,19 +600,69 @@ onMounted(loadConversations)
 .preview-rm:hover {
   color: var(--warn);
 }
+
+/* 单行输入框：上传按钮（左） + textarea（占满） + 发送按钮（右），聚焦不变色 */
 .composer {
   display: flex;
-  gap: 10px;
-  align-items: flex-end;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-elevated);
+  padding: 8px 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.composer-input {
+  flex: 1;
+  min-width: 0;
 }
 .composer :deep(.el-textarea__inner) {
-  border-radius: var(--radius-sm);
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 7px 4px;
+  font-size: 14px;
+  line-height: 1.6;
 }
-.composer .el-button {
-  height: 38px;
+/* 聚焦不显示边框/高亮（覆盖全局 .el-textarea__inner:focus 的绿色 inset ring） */
+.composer :deep(.el-textarea__inner:focus) {
+  box-shadow: none !important;
+  border: none !important;
 }
 .img-btn {
-  width: 38px;
   flex: none;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 8px;
+  height: auto;
+  color: var(--muted);
+  border-radius: 8px;
+}
+.img-btn:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.hint {
+  margin-top: 6px;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--muted-2);
+}
+.send-btn {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  --el-button-bg-color: var(--primary);
+  --el-button-border-color: var(--primary);
+  --el-button-text-color: #fff;
+  --el-button-hover-bg-color: var(--primary-deep);
+  --el-button-hover-border-color: var(--primary-deep);
+  --el-button-active-bg-color: #0f8a3f;
+  --el-button-active-border-color: #0f8a3f;
+  --el-button-disabled-bg-color: var(--border);
+  --el-button-disabled-border-color: var(--border);
+  --el-button-disabled-text-color: var(--muted-2);
 }
 </style>

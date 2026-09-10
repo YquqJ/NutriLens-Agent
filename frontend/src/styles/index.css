@@ -1,6 +1,6 @@
 /* ============================================================
    NutriLens 设计系统
-   基调：暖纸白底 + 墨色文字 + 单一深绿主色 + 细边框。
+   基调：暖纸白底 + 墨色文字 + 健康淡绿主色 + 细边框。
    刻意规避"AI 味"：无渐变、无玻璃拟态、无霓虹、无 emoji 图标。
    ============================================================ */
 
@@ -13,11 +13,22 @@
   --ink-3: #8a8e88;        /* 弱文字 / 占位 */
   --line: #e7e5e0;         /* 细边框（hairline） */
   --line-strong: #d8d5ce;  /* 稍强边框 */
-  --primary: #0e7a5f;      /* 深绿主色 */
-  --primary-deep: #0a5e49;
-  --primary-soft: #e4f0eb; /* 主色浅底（选中态 / 标签底） */
+
+  /* 主题色：健康淡绿（单一来源，改这里即全站生效） */
+  --primary: #16a34a;      /* 主绿：按钮 / 链接 / 强调 */
+  --primary-deep: #15803d; /* 深绿：hover / 深色文字 */
+  --primary-soft: #e7f6ee; /* 淡绿底：选中态 / 用户气泡 / 头像底 */
+  --primary-line: #c9ecd6; /* 淡绿描边 */
   --warn: #b4542a;         /* 警示暖橙（热量超标等） */
   --info: #3a6b8f;         /* 信息蓝（克制使用） */
+
+  /* 中性灰（对齐 CookHero 观感，供聊天区使用） */
+  --text: #1f2937;         /* 正文 */
+  --muted: #6b7280;        /* 次级文字 */
+  --muted-2: #9ca3af;      /* 弱文字 / 占位 */
+  --border: #e5e7eb;       /* 中性细边框 */
+  --surface: #f9fafb;      /* 面板浅灰底 */
+  --surface-hover: #f3f4f6;/* hover 浅灰底 */
 
   /* 尺寸 */
   --radius: 10px;          /* 卡片圆角，克制，不 pill */
@@ -34,10 +45,10 @@
 
   /* Element Plus 变量覆盖：把组件库拉进同一套色板 */
   --el-color-primary: var(--primary);
-  --el-color-primary-light-3: #3e9580;
-  --el-color-primary-light-5: #6eb0a2;
-  --el-color-primary-light-7: #9ecbc0;
-  --el-color-primary-light-8: #b8d8cf;
+  --el-color-primary-light-3: #45c27a;
+  --el-color-primary-light-5: #74d49c;
+  --el-color-primary-light-7: #a5e5c1;
+  --el-color-primary-light-8: #bcefd3;
   --el-color-primary-light-9: var(--primary-soft);
   --el-color-primary-dark-2: var(--primary-deep);
   --el-color-success: var(--primary);
