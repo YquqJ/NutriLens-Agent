@@ -85,6 +85,11 @@ def _apply_langsmith_env() -> None:
     os.environ["LANGSMITH_API_KEY"] = settings.langsmith_api_key
     os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
     os.environ["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
+    # 本模块在 import 阶段执行，早于 uvicorn 接管日志；此时 root 无 handler，
+    # 裸 logger.info 会被丢弃（logging 兜底仅输出 WARNING+）。basicConfig 补一个
+    # handler 让这条确认真正可见（pytest 已在 root 挂 handler，此处成为 no-op）。
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=logging.INFO)
     logger.info("LangSmith 追踪已开启：project=%s", settings.langsmith_project)
 
 
