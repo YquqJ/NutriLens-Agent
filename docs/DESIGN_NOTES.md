@@ -231,3 +231,11 @@
 - **教训**：
   1. 服务层"算好了"≠ 模型"够得着"。排查"agent 答不对"，先查两样：① 数据/计算到底有没有（grep service 层）；② 模型有没有一条明确的路径够到它——工具 docstring、worker 提示词意图、supervisor 路由职责，三处都要写明，缺一处答案就停在半路。
   2. "模型幻觉日期"这类问题，提示词注入要打在**产出那句话的层级**上：supervisor 改写 task 是一层，worker 生成终稿是另一层，只改前者挡不住后者。qwen-plus 对"今天"有 baked-in 默认值（本例恒为 2024-06-13），不给它真实日期它就固答这个。
+
+## 2026-09-10 决策：可观测性引入 LangSmith（env 透传 + 进程启动早期回填）
+
+- **背景**：curl 直连 SSE 观察 agent 流程偏繁琐，要一个"网页里按时间轴回看"的分布式 tracer。
+- **方案**：LangSmith（langchain 官方追踪平台），零侵入——langchain-core 的 callback manager 检测到 `LANGSMITH_TRACING_V2=true` 后，每次 run 自动挂 `LangChainTracer`（supervisor 路由决策、react 每一轮工具、interrupt 挂起都在 trace 里，thread_id 即 conversation_id）。
+- **关键实现点（踩坑）**：langchain 读的是 os.environ 里的 `LANGSMITH_*`，而 pydantic-settings 读 `.env` 只写进 Settings 字段、不碰 os.environ——直接把 key 写 `.env` 并不能让 langchain 看到。且 langsmith 的 `get_env_var` 是 lru_cache（首次读取即缓存）。因此必须在 `config.py` import 时（早于任何 LLM/graph 调用）把字段回填进 os.environ，且 TRACING 值必须是小写 "true"（`tracing_is_enabled()` 用 `== "true"` 严格比较，写 "True" 不生效）。
+- **依赖**：langsmith 已是 langchain-core 的传递依赖（锁 0.12.2），无需新增；等要直接 import langsmith SDK 时再提升为直接依赖。
+- **与自建可观测性的关系**：LangSmith 不替代现有 SSE agent_trace/tool_calls + messages.tool_trace 落库——前者是"回放式"分布式 tracer，后者是"产品内"实时/持久化观测，互补。
