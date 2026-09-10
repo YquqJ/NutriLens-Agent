@@ -17,6 +17,9 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+from app.api.chat import _extract_tool_calls
 from app.core.config import settings
 from app.core.security import create_access_token, hash_password
 from app.db.models import Conversation, DietRecord, Message, User
@@ -59,6 +62,31 @@ def _collect_sse(resp) -> list[tuple[str, dict]]:
             events.append((event, json.loads(data)))
             event, data = None, None
     return events
+
+
+def test_extract_tool_calls_only_returns_current_turn():
+    """回归：worker 子图 messages 累积历轮工具，_extract_tool_calls 必须只提炼
+    最后一条 HumanMessage 之后的工具，历史轮的工具不得跨轮重提
+    （曾导致 tool_trace 每轮越滚越大的累加 bug）。"""
+    old_human = HumanMessage(content="我午饭吃了牛肉面")
+    old_ai = AIMessage(
+        content="",
+        tool_calls=[{"id": "old_call", "name": "search_food", "args": {"query": "牛肉面"}}],
+    )
+    old_tool = ToolMessage(content="匹配 1 条", tool_call_id="old_call")
+
+    new_human = HumanMessage(content="我今天热量缺口多少")
+    new_ai = AIMessage(
+        content="",
+        tool_calls=[{"id": "new_call", "name": "get_daily_summary", "args": {}}],
+    )
+    new_tool = ToolMessage(content="剩余 800 千卡", tool_call_id="new_call")
+
+    update = {
+        "messages": [old_human, old_ai, old_tool, new_human, new_ai, new_tool],
+    }
+    names = [t["name"] for t in _extract_tool_calls(update)]
+    assert names == ["get_daily_summary"]
 
 
 def test_resume_without_pending_interrupt_returns_400(auth_headers):
@@ -138,5 +166,9 @@ def test_chat_stream_interrupt_then_resume(auth_headers):
         assert assistant.agent_name == "diet_agent"
         trace = json.loads(assistant.tool_trace)
         assert any(t["name"] == "create_diet_record" for t in trace)
+
+        # 首条消息应已生成语义化会话标题（不再是默认"新会话"）
+        conv = db.get(Conversation, cid)
+        assert conv.title and conv.title != "新会话"
     finally:
         db.close()

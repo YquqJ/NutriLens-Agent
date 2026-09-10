@@ -33,17 +33,18 @@ SSE 分帧格式（W3C 标准，前端按行解析）：
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.types import Command
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.agents.graph import WORKERS, get_graph
+from app.agents.llm import get_text_llm
 from app.core.deps import get_current_user
 from app.db.models import Conversation, Message, User
 from app.db.session import SessionLocal, get_db
@@ -52,6 +53,31 @@ router = APIRouter(prefix="/api/conversations", tags=["chat"])
 
 # 工具结果（如检索命中列表）落库轨迹时截断，避免 tool_trace 膨胀
 _TOOL_RESULT_MAX = 2000
+
+# ---- 会话标题（首条消息语义概括）----
+_TITLE_SYSTEM = (
+    "你是会话标题生成器。根据用户的第一条消息，生成一个 4～10 个汉字的简短会话标题，"
+    "概括其核心意图（如：早餐分析、减脂计划、热量缺口查询）。只输出标题本身，"
+    "不要引号、标点、序号或任何解释。"
+)
+_TITLE_FALLBACK_LEN = 12
+
+
+async def _generate_title(content: str) -> str:
+    """根据会话首条消息生成语义标题；LLM 失败时退回截取首条前 N 字。"""
+    try:
+        llm = get_text_llm(streaming=False)
+        resp = await llm.ainvoke(
+            [SystemMessage(content=_TITLE_SYSTEM), HumanMessage(content=content)]
+        )
+        raw = resp.content if isinstance(resp.content, str) else str(resp.content)
+        title = raw.strip().strip("「」“”\"'《》").strip()
+        if title:
+            return title[:24]
+    except Exception:  # 兜底：LLM/网络异常不阻断对话
+        pass
+    s = content.strip()
+    return s[:_TITLE_FALLBACK_LEN] if s else "新会话"
 
 
 class ChatRequest(BaseModel):
@@ -75,13 +101,25 @@ def _sse(event: str, data: dict) -> str:
 
 def _extract_tool_calls(update: dict) -> list[dict]:
     """
-    从 worker 节点的 messages 差量配出完整工具调用轨迹 [{name, args, result}]。
+    从 worker 节点的 messages 配出「本轮」工具调用轨迹 [{name, args, result}]。
 
     react 循环里 AIMessage.tool_calls 携带 {id, name, args}，执行结果在
-    ToolMessage（tool_call_id 一一对应）；两者都在同一节点差量内，按 id 配对。
+    ToolMessage（tool_call_id 一一对应），两者按 id 配对。关键：worker 子图的
+    messages 是 add_messages 累积的——历轮的 AIMessage.tool_calls + ToolMessage
+    都还在里面，直接遍历会把上一轮的工具重提一遍、tool_trace 跨轮越滚越大。
+    因此以「最后一条 HumanMessage」为界，只提炼其后的消息：Human 消息总是每轮
+    开头才追加，其后的工具必属本轮（resume 恢复中断不会新增 Human，本轮
+    interrupt 前已执行的工具仍被正确归入当前这一轮）。
     """
+    msgs = update.get("messages") or []
+    # 找本轮边界：最后一条 HumanMessage 之后才是本轮新消息
+    start = len(msgs)
+    for i in range(len(msgs) - 1, -1, -1):
+        if msgs[i].type == "human":
+            start = i + 1
+            break
     calls: dict[str, dict] = {}  # tool_call_id -> {name, args, result}
-    for m in update.get("messages") or []:
+    for m in msgs[start:]:
         if m.type == "ai":
             for tc in m.tool_calls or []:
                 calls[tc["id"]] = {"name": tc["name"], "args": tc["args"], "result": None}
@@ -226,8 +264,13 @@ async def chat(
             image_url=req.image_url,
         )
     )
-    conv.updated_at = datetime.now()
+    conv.updated_at = datetime.now(timezone.utc)
     db.commit()
+
+    # 首条消息给会话起语义化标题（如"早餐分析"），后续消息不再更新
+    if conv.title == "新会话":
+        conv.title = await _generate_title(req.content)
+        db.commit()
 
     # user_id 双写：state 里是 AgentState 的字段（str），configurable 里是
     # 工具层 ensure_config() 的取值来源（int）—— 两套消费者各取所需
