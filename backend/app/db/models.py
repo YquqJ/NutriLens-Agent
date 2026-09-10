@@ -19,7 +19,7 @@ ORM 模型（SQLAlchemy 2.0 风格：Mapped + mapped_column）。
   保证历史记录不随公式/模型升级而漂移。
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -38,6 +38,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.session import Base
 
 
+def utcnow() -> datetime:
+    """时区感知的当前 UTC 时间。所有 timestamptz 列必须写 aware datetime：
+    裸 datetime.now() 是 naive 本地时间，插入 timestamptz 时被 Postgres 按
+    会话时区(UTC)重解读，本地时刻被整体当成 UTC 偏移 +8h（症状：当天新建的
+    会话在侧栏显示成第二天，如 9/10 显示 9/11）。"""
+    return datetime.now(timezone.utc)
+
+
 class User(Base):
     """用户账号。密码只存 bcrypt 哈希。"""
 
@@ -47,7 +55,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.now, nullable=False
+        DateTime(timezone=True), default=utcnow, nullable=False
     )
 
     profile: Mapped["UserProfile | None"] = relationship(back_populates="user")
@@ -81,7 +89,7 @@ class UserProfile(Base):
     tdee: Mapped[float | None] = mapped_column(Float)
     calorie_target: Mapped[float | None] = mapped_column(Float)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.now, onupdate=datetime.now
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
     user: Mapped[User] = relationship(back_populates="profile")
@@ -102,10 +110,10 @@ class Conversation(Base):
     )
     title: Mapped[str] = mapped_column(String(128), default="新会话")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.now
+        DateTime(timezone=True), default=utcnow
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.now, onupdate=datetime.now
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
 
     messages: Mapped[list["Message"]] = relationship(
@@ -136,7 +144,7 @@ class Message(Base):
     agent_name: Mapped[str | None] = mapped_column(String(32))
     tool_trace: Mapped[str | None] = mapped_column(Text)  # JSON 数组：[{name, args, result}]
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.now
+        DateTime(timezone=True), default=utcnow
     )
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
@@ -165,7 +173,7 @@ class DietRecord(Base):
     total_fat: Mapped[float] = mapped_column(Float, default=0)
     total_carbs: Mapped[float] = mapped_column(Float, default=0)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.now
+        DateTime(timezone=True), default=utcnow
     )
 
     items: Mapped[list["DietRecordItem"]] = relationship(
@@ -218,7 +226,7 @@ class ExerciseRecord(Base):
     calories_burned: Mapped[float] = mapped_column(Float, nullable=False)
     source: Mapped[str] = mapped_column(String(16), default="manual")  # manual/text
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.now
+        DateTime(timezone=True), default=utcnow
     )
 
     __table_args__ = (Index("ix_exercise_records_user_date", "user_id", "record_date"),)
