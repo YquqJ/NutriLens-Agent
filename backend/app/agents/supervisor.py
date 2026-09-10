@@ -114,18 +114,35 @@ def make_supervisor_node(
             )
 
         # ---- 2. 路由决策（qwen-plus 结构化输出）----
-        decision: RouteDecision = router.invoke(
-            [
-                (
-                    "system",
-                    SUPERVISOR_SYSTEM_PROMPT.format(
-                        duties="\n".join(f"- {k}：{v}" for k, v in AGENT_DUTIES.items()),
-                        today=date.today().isoformat(),
-                    ),
+        routing_msgs = [
+            (
+                "system",
+                SUPERVISOR_SYSTEM_PROMPT.format(
+                    duties="\n".join(f"- {k}：{v}" for k, v in AGENT_DUTIES.items()),
+                    today=date.today().isoformat(),
                 ),
-                *state["messages"],
-            ]
-        )
+            )
+        ]
+        # 摘要记忆：长会话被压缩后，旧消息已从 messages 删掉，路由可能缺跨轮上下文
+        # （"昨天那顿"）。把 summary 作为第二条系统消息注入，保证指代消解仍可做。
+        summary = state.get("summary")
+        if summary:
+            routing_msgs.append(("system", f"【历史对话摘要，供指代消解参考】\n{summary}"))
+        # 图片感知：本条消息带图时，图片里的食物对 supervisor 是未知的（文本路由
+        # 看不到图）。不点破，指代消解会拿历史里最近记录的食物（如"香肠"）去填
+        # "晚饭"，产出"把香肠改成晚餐"这类错误 task，盖过 diet_agent 的识别指令。
+        recognized = state.get("recognized_foods") or []
+        if recognized:
+            foods = "、".join(f"{f['food_name']}({f['estimated_grams']}g)" for f in recognized)
+            routing_msgs.append(
+                ("system", f"用户本轮消息附带照片，已识别出食物：{foods}。改写 task 时以这些食物为准，严禁替换成历史对话里的其他食物。")
+            )
+        elif state.get("image_url"):
+            routing_msgs.append(
+                ("system", "用户本轮消息附带照片但图片食物尚未识别，改写 task 时严禁依据历史臆测食物，应表述为'识别并记录这顿饭'。")
+            )
+        routing_msgs.extend(state["messages"])
+        decision: RouteDecision = router.invoke(routing_msgs)
 
         # ---- 3. 硬兜底：同一轮内不允许同一 agent 连续路由两次 ----
         # 规则 3 是 prompt 软约束，qwen-plus 可能不遵守（qa_agent 答完又被派一遍，

@@ -3,8 +3,12 @@ Supervisor 图组装 —— 多 Agent 系统的总装车间（M3.6）。
 
 图结构（星型拓扑，supervisor 是唯一调度中枢）：
 
-    START → supervisor ⇄ diet_agent / exercise_agent / qa_agent / plan_agent
+    START → turn_reset → analyze_image → summarize → supervisor ⇄ diet_agent / exercise_agent / qa_agent / plan_agent
 
+- analyze_image 在路由前把带图消息里的食物确定性识别出来（感知与决策分离，
+  见 diet_agent.make_analyze_image_node），结果写 recognized_foods 供下游共用；
+- summarize 在 supervisor 路由前把超长历史折叠成摘要、裁剪 messages（防上下文
+  无限累积，见 memory.py）；短对话时是 no-op 不增延迟；
 - worker 干完活固定回到 supervisor 汇报（add_edge(worker, "supervisor")），
   由 supervisor 看结果决定继续路由还是 FINISH —— 全图的流转控制权
   集中在一处，worker 之间不存在直连边（不允许互相踢皮球）；
@@ -27,8 +31,9 @@ from langgraph.graph import START, StateGraph
 from langgraph.types import Send
 from psycopg.rows import dict_row
 
-from app.agents.diet_agent import make_diet_agent
+from app.agents.diet_agent import make_analyze_image_node, make_diet_agent
 from app.agents.exercise_agent import make_exercise_agent
+from app.agents.memory import make_summarize_node
 from app.agents.plan_agent import make_plan_agent
 from app.agents.qa_agent import make_qa_agent
 from app.agents.state import AgentState
@@ -55,6 +60,7 @@ def _turn_reset(state: AgentState) -> dict:
 def build_graph(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     supervisor_node: Optional[callable] = None,
+    summarize_node: Optional[callable] = None,
 ):
     """
     组装并编译 supervisor 图。
@@ -63,6 +69,7 @@ def build_graph(
     测试传 MemorySaver；不传则无持久化（图仍可单轮运行）。
     参数 supervisor_node：测试注入桩 supervisor（伪造路由决策）用，
     生产默认 qwen-plus 路由。
+    参数 summarize_node：测试注入桩摘要器用，生产默认 qwen-plus 非流式。
     """
     builder = StateGraph(AgentState)
 
@@ -74,8 +81,14 @@ def build_graph(
 
     # 星型接线：supervisor 是唯一入口；每个 worker 完成后回到 supervisor
     builder.add_node("turn_reset", _turn_reset)
+    # 图片感知：带图时先确定性识别食物（感知与决策分离），结果写 recognized_foods
+    builder.add_node("analyze_image", make_analyze_image_node())
+    # 摘要压缩：在 supervisor 路由之前把超长历史折叠成摘要、裁剪 messages
+    builder.add_node("summarize", summarize_node or make_summarize_node())
     builder.add_edge(START, "turn_reset")
-    builder.add_edge("turn_reset", "supervisor")
+    builder.add_edge("turn_reset", "analyze_image")
+    builder.add_edge("analyze_image", "summarize")
+    builder.add_edge("summarize", "supervisor")
     for worker in WORKERS:
         builder.add_edge(worker, "supervisor")
 

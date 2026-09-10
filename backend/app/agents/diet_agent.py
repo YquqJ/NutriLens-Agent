@@ -93,11 +93,19 @@ def _diet_prompt(state: AgentState) -> list:
         f"【当前日期】{date.today().isoformat()}（回答涉及今天/昨天/明天时以此为准，不要臆测日期）。\n\n"
         f"【当前任务】{task}"
     )
+    recognized = state.get("recognized_foods") or []
     image_url = state.get("image_url")
-    if image_url:
-        # image_url 直接从这里注入（不依赖 supervisor 改写 task）：supervisor
-        # 是文本路由，只看 messages、不知道图片字段，若靠它把 URL 写进 task，
-        # 图片识别链路会静默断掉（M6.4 起就是这个断法）。
+    if recognized:
+        foods = "、".join(f"{f['food_name']} 约{f['estimated_grams']}g" for f in recognized)
+        # 图片已在 analyze_image 前置节点识别好（感知与决策分离），这里只把结果
+        # 作为事实注入，agent 无需也不应重复调 analyze_food_image。
+        system_text += (
+            f"\n\n【图片识别结果】本条消息的照片已识别出食物：{foods}。"
+            "请直接对上述每种食物 search_food 匹配营养、按克数换算后 create_diet_record 落库；"
+            "不要重复调用 analyze_food_image，也不要替换成其他食物。"
+        )
+    elif image_url:
+        # 识别尚未完成/失败时的兜底：仍把 URL 交给 agent 走工具识别
         system_text += (
             f"\n\n【图片】本条用户消息携带食物图片，URL：{image_url}。"
             "必须先调用 analyze_food_image(image_url=该URL) 识别图中食物，"
@@ -105,6 +113,42 @@ def _diet_prompt(state: AgentState) -> list:
         )
     system = SystemMessage(content=system_text)
     return [system] + state["messages"]
+
+
+def make_analyze_image_node(recognizer: Optional[callable] = None) -> callable:
+    """图片感知前置节点：本条消息带图时，确定性地先识别图片里的食物，结果写
+    state["recognized_foods"]，供 supervisor 与 diet_agent 共用。
+
+    为什么这么做（面试重点）：识别本来靠 react agent 自主调 analyze_food_image
+    工具，但这耦合了「感知」与「决策」——agent 受历史上下文干扰时会漏调视觉工具、
+    改去幻觉食物（实测：记完"香肠"后再发"这是我的晚饭"+图，被误判成"把香肠改成晚餐"）。
+    把感知剥离成图里的确定性前置节点后，图像识别只发生一次、结果作为事实注入下游，
+    agent 不再需要"记得"去看图。recognizer 可注入（测试用桩）。
+    """
+    if recognizer is None:
+        def recognizer(url: str) -> list[dict]:
+            return (analyze_food_image.invoke({"image_url": url}) or {}).get("items") or []
+
+    def analyze_image(state: AgentState) -> dict:
+        url = state.get("image_url")
+        if not url:
+            return {"recognized_foods": None}
+        try:
+            items = recognizer(url)
+        except Exception:
+            items = []  # 识别失败不卡死链路：留给 diet_agent 走文本兜底
+        return {
+            "recognized_foods": [
+                {
+                    "food_name": it["food_name"],
+                    "estimated_grams": it["estimated_grams"],
+                    "visual_description": it.get("visual_description", ""),
+                }
+                for it in items
+            ] or None
+        }
+
+    return analyze_image
 
 
 def make_diet_agent(checkpointer: Optional[BaseCheckpointSaver] = None):

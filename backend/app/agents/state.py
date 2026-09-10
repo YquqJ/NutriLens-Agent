@@ -44,9 +44,13 @@ class AgentState(TypedDict):
     # ---- 对话消息（短期记忆，append-only） ----
     messages: Annotated[list, add_messages]
 
+    # ---- 摘要记忆：messages 超出阈值时，旧消息被折叠成滚动摘要（见 memory.py） ----
+    summary: str
+
     # ---- 请求上下文（每次 invoke 由 API 层注入） ----
     user_id: str
     image_url: Optional[str]  # 本条用户消息携带的食物图片（OSS URL）
+    recognized_foods: Optional[list[dict]]  # 图片识别结果（analyze_image 节点预置，供 supervisor/diet_agent 共用）
 
     # ---- supervisor 路由决策结果 ----
     next_agent: str
