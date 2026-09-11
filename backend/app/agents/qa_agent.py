@@ -25,18 +25,25 @@ from pydantic import BaseModel, Field
 from app.agents.llm import get_text_llm
 from app.agents.state import AgentState
 from app.db.session import SessionLocal
-from app.rag.citations import citation_catalog, citation_label, citation_payloads
+from app.rag.citations import (
+    citation_catalog,
+    citation_label,
+    citation_payloads,
+    sanitize_citation_markers,
+)
 from app.rag.retriever import retrieve
 
 QA_SYSTEM_PROMPT = """你是营养与运动知识顾问，基于检索到的知识库切片回答问题。
 
 工作纪律：
-1. 回答依据优先来自下方【知识库切片】，引用处标注编号如 [1][2]，不得编造编号；
+1. 回答依据优先来自下方【知识库切片】，引用处标注编号如 [1][2]；编号只能使用本轮
+   "可用引用编号"中列出的值，不得将页码、片段号或其他数字写成 [n]；
 2. 切片未覆盖的部分可以用可靠的通用知识补充，但不要标注编号；
 3. 只讲营养/饮食/运动领域的通用知识，不查询、不臆测用户本人的记录数据
    （用户问"我今天吃了多少"不归你管，那需要查库）；
 4. 涉及医疗诊断、用药的问题，提醒用户咨询医生，不给出诊疗结论；
-5. 回答控制在三五句话内，先给结论再给依据。"""
+5. 回答控制在三五句话内，先给结论再给依据；不要自行输出“参考来源”列表，
+   系统会在回答后追加可核验的来源目录。"""
 
 _SELF_CHECK_PROMPT = """你是检索质量审查员。判断下方知识库切片是否足以回答用户问题：
 - 充分：切片包含与问题直接相关的具体信息（数值、方法、结论）；
@@ -141,9 +148,15 @@ def make_qa_agent():
                 results = results[:6]
 
             # ---- 带来源生成 ----
+            citations = citation_payloads(results)
+            available_indexes = "、".join(
+                f"[{citation['index']}]" for citation in citations
+            ) or "（本轮没有可用引用编号）"
             system = SystemMessage(
                 content=f"{QA_SYSTEM_PROMPT}\n\n【当前任务】{question}"
                 f"\n\n【知识库切片】\n{_context_block(results)}"
+                f"\n\n【可用引用编号】{available_indexes}"
+                f"\n这些编号是本轮唯一有效的引用编号；不能使用其他 [n]。"
                 f"\n\n【可用来源列表】"
                 + "、".join(
                     f"[{i}]{citation_label(r)}"
@@ -154,18 +167,20 @@ def make_qa_agent():
         finally:
             db.close()
 
-        # 由程序追加编号对照表；即使模型只写 [1]，用户也能核验具体章节和页码。
+        # 模型可能把页码、片段号或臆测序号写成 [n]；出站前只保留本轮
+        # citations 里存在的编号，避免正文与可点击证据列表脱节。
+        # 再由程序追加编号对照表；即使模型只写 [1]，用户也能核验具体章节和页码。
         if isinstance(response.content, str):
             references = citation_catalog(results)
+            content = sanitize_citation_markers(response.content.rstrip(), citations)
             if references:
-                response = response.model_copy(
-                    update={"content": f"{response.content.rstrip()}\n\n{references}"}
-                )
+                content = f"{content}\n\n{references}"
+            response = response.model_copy(update={"content": content})
 
         return {
             "messages": [response],
             "tool_calls": trace,
-            "citations": citation_payloads(results),
+            "citations": citations,
         }
 
     return qa_agent
