@@ -32,6 +32,10 @@ def _client() -> OpenAI:
     return OpenAI(
         api_key=settings.dashscope_api_key,
         base_url=settings.dashscope_base_url,
+        # 检索入口也会调用 embedding；若这里无限等待，即使 ChatOpenAI
+        # 有超时，qa_agent 仍会在生成前卡住。
+        timeout=settings.llm_timeout_seconds,
+        max_retries=2,
     )
 
 

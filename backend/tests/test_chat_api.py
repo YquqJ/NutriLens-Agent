@@ -14,12 +14,14 @@ SSE 解析：TestClient 流式响应按行读，按 W3C 格式配对 event/data 
 import json
 import uuid
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from openai import APITimeoutError
 
-from app.api.chat import _extract_tool_calls
+from app.api.chat import _extract_tool_calls, _run_graph_and_stream
 from app.core.config import settings
 from app.core.security import create_access_token, hash_password
 from app.db.models import Conversation, DietRecord, Message, User
@@ -96,6 +98,30 @@ def test_resume_without_pending_interrupt_returns_400(auth_headers):
         url, json={"value": False}, headers=auth_headers["headers"]
     )
     assert r.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        APITimeoutError(httpx.Request("POST", "https://example.test")),
+        httpx.ReadTimeout("读取模型响应超时"),
+    ],
+)
+def test_chat_stream_returns_friendly_sse_error_when_llm_times_out(monkeypatch, error):
+    """模型超时必须结束 SSE，而不是让前端和 LangSmith 一直显示运行中。"""
+    class TimeoutGraph:
+        def stream(self, *_args, **_kwargs):
+            raise error
+            yield  # pragma: no cover - 仅令其保持 generator 形态
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: TimeoutGraph())
+
+    frames = list(_run_graph_and_stream({}, {}, "test-conversation"))
+
+    assert len(frames) == 1
+    assert 'event: error' in frames[0]
+    assert '"code": "llm_timeout"' in frames[0]
+    assert "AI 服务响应超时，请稍后重试。" in frames[0]
 
 
 @pytest.mark.skipif(not settings.dashscope_api_key, reason="未配置 DASHSCOPE_API_KEY")

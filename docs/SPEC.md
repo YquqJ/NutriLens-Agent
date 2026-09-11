@@ -67,7 +67,7 @@ worker 分工：
       验收：各自域内指令正确落库/出计划 ✅（E2E：慢跑落库无 HITL + 计划引用档案数字与过敏偏好）
 - [x] **M3.6** `agents/graph.py`：Supervisor 图组装 + PostgresSaver checkpointer 接线
       验收：同一 thread_id 二次 invoke 能续上历史 ✅（tests/test_supervisor_graph.py：E2E 真实 LLM+PostgresSaver 二轮 invoke，第二轮基于第一轮落库记录回答追问；全图 HITL interrupt→resume→落库 也已覆盖。附带：qa_agent 占位形态接入图；turn_reset 入口节点修 hop_count 跨轮累积；NutriLensPostgresSaver 补丁修 pending_sends JSONB 往返 —— 细节见 DESIGN_NOTES）
-- [x] **M3.7** `api/chat.py`：SSE 流式端点（token/agent_trace/tool_calls/interrupt 四类事件分帧）+ `Command(resume=...)` 恢复端点 + 消息落库 messages 表
+- [x] **M3.7** `api/chat.py`：SSE 流式端点（token/agent_trace/tool_calls/interrupt 四类事件分帧）+ `Command(resume=...)` 恢复端点 + 消息落库 messages 表；LLM 调用统一 60 秒超时，超时以 `llm_timeout` SSE 错误结束，避免前端与 LangSmith Trace 无限运行
       验收：curl 联调——发消息→收到 interrupt→确认→落库→看板可见 ✅（tests/test_chat_api.py E2E：SSE 收到 agent_trace/interrupt→resume 确认→DietRecord 落库→messages 表 user/assistant 各一条、assistant 带 agent_name 与 tool_trace；另含无挂起中断 resume 返回 400 的守卫用例。SSE 验证方式为 TestClient 流式断言，等价于 curl 链路）
 - [x] **M3.8** 食物库 seed 脚本：导入中国食物成分表数据 ~800-1000 条（含 alias）
       验收：search_food("西红柿") 命中并带别名"番茄" ✅（foods_data.py 整理 789 条（17 大类：主食/面点/餐食/肉类/水产/豆类/蔬菜/菌藻/水果/坚果/奶类/饮品/零食/调味/菜肴等），seed_foods.py 幂等导入（按 name 去重不覆盖）；tests/test_food_seed.py 覆盖幂等性 + 别名双向命中 + 规模断言。附带修复：search_foods 元组排序平局时比较 Food 对象的 TypeError——全量 seed 后平局常见才暴露）
@@ -92,7 +92,7 @@ worker 分工：
 
 - [x] **M6.1** 项目脚手架：Vue3 + Vite + TS + Element Plus + Pinia + axios 拦截器（JWT）
 - [x] **M6.2** 登录/注册 + 身体档案表单
-- [x] **M6.3** 对话页：SSE 渲染（打字机 + agent 徽章 + 工具轨迹折叠面板）+ HITL 确认卡片（可编辑克数）+ RAG 引用标记 `[n]` 可点击，右侧抽屉展示章节/页码/片段与完整切片正文（多证据纵向滚动）；回答出站前按本轮结构化 citations 校验编号，剔除模型臆造的 `[n]`，保证正文与来源目录一一对应
+- [x] **M6.3** 对话页：SSE 渲染（打字机 + agent 徽章 + 工具轨迹折叠面板）+ HITL 确认卡片（可编辑克数）+ RAG 引用标记 `[n]` 可点击，右侧抽屉展示章节/页码/片段与完整切片正文（多证据纵向滚动）；回答出站前按本轮结构化 citations 校验编号、移除模型自行生成的来源目录，并过滤未被正文使用的召回候选后重编连续编号，再由程序唯一追加目录，保证正文、目录与抽屉一一对应
 - [x] **M6.4** 拍照记录：图片上传 → 触发对话消息携带 image_url（后端图片→识别→落库链路已 E2E 验证 + 回归测试 tests/test_image_flow.py；采用感知/决策分离——analyze_image 前置节点确定性识别，见 DESIGN_NOTES「图片识别被 supervisor 指代消解幻觉覆盖」）
 - [x] **M6.5** 看板页：ECharts 热量收支 + 宏量营养素环图 + 7 日趋势折线
 - [x] **M6.6** 记录管理：饮食/运动记录列表、编辑、删除

@@ -28,6 +28,10 @@ def get_text_llm(streaming: bool = True) -> ChatOpenAI:
         streaming=streaming,
         temperature=0.3,  # 健康建议需要一点表达多样性，但事实类回答不宜太发散
         max_retries=2,
+        # timeout 传给 OpenAI 兼容客户端的 request_timeout；stream_chunk_timeout
+        # 额外限制流式响应相邻 chunk 的等待，防止上游连接半开后永久卡住。
+        timeout=settings.llm_timeout_seconds,
+        stream_chunk_timeout=settings.llm_timeout_seconds,
     )
 
 
@@ -40,4 +44,5 @@ def get_vision_llm() -> ChatOpenAI:
         base_url=settings.dashscope_base_url,
         temperature=0,  # 识别任务要确定性，不做创造性发挥
         max_retries=2,
+        timeout=settings.llm_timeout_seconds,
     )

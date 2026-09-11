@@ -38,8 +38,10 @@ from typing import Any, Iterator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from httpx import TimeoutException
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.types import Command
+from openai import APITimeoutError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -234,6 +236,16 @@ def _run_graph_and_stream(
                 # 前端收到 done 后用 content 替换累积的 token 文本，保证最终消息干净
                 "content": content,
                 "citations": citations,
+            },
+        )
+    except (APITimeoutError, TimeoutException):
+        # 上游模型连接在 LLM_TIMEOUT_SECONDS 内没有返回。图执行以异常结束，
+        # LangSmith 能收到失败状态；同时 SSE 给用户可行动的、非技术化提示。
+        yield _sse(
+            "error",
+            {
+                "code": "llm_timeout",
+                "message": "AI 服务响应超时，请稍后重试。",
             },
         )
     except Exception as e:

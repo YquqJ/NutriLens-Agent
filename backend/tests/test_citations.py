@@ -2,9 +2,12 @@
 
 from app.rag.citations import (
     citation_catalog,
+    citation_catalog_from_payloads,
     citation_label,
+    normalize_answer_citations,
     citation_payloads,
     sanitize_citation_markers,
+    strip_model_reference_catalog,
 )
 
 
@@ -89,3 +92,38 @@ def test_sanitize_citation_markers_keeps_only_current_round_indexes():
     assert sanitize_citation_markers(answer, citations) == (
         "力量训练更高效[4]；规律进食[2]；避免把片段号写成引用。"
     )
+
+
+def test_strip_model_reference_catalog_keeps_answer_but_removes_tail_catalog():
+    """来源目录只能由程序追加一次，不能与模型生成的目录叠加。"""
+    answer = (
+        "建议每周进行 4–5 次中等强度有氧运动[1]。\n\n"
+        "### 参考来源：\n"
+        "[1] 《知识库》· 第四章 · 第 4 页 · 片段 20\n"
+        "[2] 《知识库》· 第十章 · 第 8 页 · 片段 48"
+    )
+
+    assert strip_model_reference_catalog(answer) == "建议每周进行 4–5 次中等强度有氧运动[1]。"
+
+
+def test_normalize_answer_citations_excludes_unused_candidates_and_reindexes():
+    """用户可见目录只应含正文实际使用的证据，且编号连续可点击。"""
+    candidates = citation_payloads(
+        [
+            {"source_title": "知识库", "section": "手掌法则", "content": "证据一"},
+            {"source_title": "知识库", "section": "未被引用", "content": "证据二"},
+            {"source_title": "知识库", "section": "低碳饮食", "content": "证据三"},
+            {"source_title": "知识库", "section": "力量训练", "content": "证据四"},
+        ]
+    )
+
+    content, used = normalize_answer_citations(
+        "手掌法则[1]；同一来源可重复引用[1]；饮食建议[3]；运动建议[4]；幻觉[9]。",
+        candidates,
+    )
+
+    assert content == "手掌法则[1]；同一来源可重复引用[1]；饮食建议[2]；运动建议[3]；幻觉。"
+    assert [citation["section"] for citation in used] == ["手掌法则", "低碳饮食", "力量训练"]
+    catalog = citation_catalog_from_payloads(used)
+    assert "[1]" in catalog and "[2]" in catalog and "[3]" in catalog
+    assert "未被引用" not in catalog

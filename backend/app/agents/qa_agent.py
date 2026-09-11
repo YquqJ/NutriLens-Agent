@@ -26,10 +26,11 @@ from app.agents.llm import get_text_llm
 from app.agents.state import AgentState
 from app.db.session import SessionLocal
 from app.rag.citations import (
-    citation_catalog,
+    citation_catalog_from_payloads,
     citation_label,
     citation_payloads,
-    sanitize_citation_markers,
+    normalize_answer_citations,
+    strip_model_reference_catalog,
 )
 from app.rag.retriever import retrieve
 
@@ -167,12 +168,15 @@ def make_qa_agent():
         finally:
             db.close()
 
-        # 模型可能把页码、片段号或臆测序号写成 [n]；出站前只保留本轮
-        # citations 里存在的编号，避免正文与可点击证据列表脱节。
-        # 再由程序追加编号对照表；即使模型只写 [1]，用户也能核验具体章节和页码。
+        # 模型输出是不可信文本：它可能把页码、片段号或臆测序号写成 [n]，
+        # 也可能无视提示自行附一份“参考来源”。出站前统一清理，并且只保留
+        # 正文实际引用的证据；目录、SSE 载荷、历史消息和前端抽屉共享同一份
+        # 重编后的 citations，避免把“召回候选”误展示为“回答依据”。
         if isinstance(response.content, str):
-            references = citation_catalog(results)
-            content = sanitize_citation_markers(response.content.rstrip(), citations)
+            content, citations = normalize_answer_citations(
+                strip_model_reference_catalog(response.content), citations
+            )
+            references = citation_catalog_from_payloads(citations)
             if references:
                 content = f"{content}\n\n{references}"
             response = response.model_copy(update={"content": content})

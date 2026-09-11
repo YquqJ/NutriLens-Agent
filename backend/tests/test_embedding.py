@@ -5,7 +5,7 @@ Embedding 客户端测试（M4.1）。E2E：真实 DashScope 调用。
 import pytest
 
 from app.core.config import settings
-from app.rag.embedding import embed_query, embed_texts
+from app.rag.embedding import _client, embed_query, embed_texts
 
 
 @pytest.mark.skipif(not settings.dashscope_api_key, reason="未配置 DASHSCOPE_API_KEY")
@@ -13,6 +13,16 @@ def test_embed_single_and_dimensions():
     vec = embed_query("减脂期每天需要多少蛋白质")
     assert len(vec) == 1024  # 与 KnowledgeChunk.embedding 列对齐
     assert any(abs(v) > 1e-6 for v in vec)  # 非全零
+
+
+def test_embedding_client_has_finite_timeout():
+    """RAG 在生成回答前先请求 embedding，也必须有超时边界。"""
+    _client.cache_clear()
+    try:
+        client = _client()
+        assert client.timeout == settings.llm_timeout_seconds
+    finally:
+        _client.cache_clear()
 
 
 @pytest.mark.skipif(not settings.dashscope_api_key, reason="未配置 DASHSCOPE_API_KEY")

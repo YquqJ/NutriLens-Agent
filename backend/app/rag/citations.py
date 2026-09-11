@@ -27,15 +27,19 @@ def citation_label(result: dict) -> str:
     return f"《{title}》· " + " · ".join(locator)
 
 
-def citation_catalog(results: list[dict]) -> str:
-    """生成与回答中 [1][2] 一一对应的确定性引用对照表。"""
-    citations = citation_payloads(results)
+def citation_catalog_from_payloads(citations: list[dict]) -> str:
+    """根据已实际引用的结构化证据生成唯一来源目录。"""
     if not citations:
         return ""
     lines = [
         f"[{citation['index']}] {citation['label']}" for citation in citations
     ]
     return "参考来源：\n" + "\n".join(lines)
+
+
+def citation_catalog(results: list[dict]) -> str:
+    """根据检索结果生成目录（兼容旧调用；QA 出站应使用已引用证据）。"""
+    return citation_catalog_from_payloads(citation_payloads(results))
 
 
 def citation_payloads(results: list[dict]) -> list[dict]:
@@ -67,3 +71,44 @@ def sanitize_citation_markers(answer: str, citations: list[dict]) -> str:
         return match.group(0) if int(match.group(1)) in valid_indexes else ""
 
     return re.sub(r"\[(\d+)\]", replace, answer)
+
+
+def normalize_answer_citations(answer: str, citations: list[dict]) -> tuple[str, list[dict]]:
+    """仅保留正文实际使用的证据，并按首次出现顺序重编连续编号。
+
+    检索阶段的 top-k 是“候选证据”，不是“最终引用”。若直接把所有候选
+    渲染到来源目录，会出现正文只有 [1][3][4]、目录却还有 [2][5][6] 的
+    错位。此函数以正文中真实的引用标记为准：同一证据重复出现仍共享编号，
+    未使用的候选不进入 SSE、数据库和前端抽屉。
+    """
+    by_index = {citation["index"]: citation for citation in citations}
+    remapped_indexes: dict[int, int] = {}
+    used_citations: list[dict] = []
+
+    def replace(match: re.Match[str]) -> str:
+        original_index = int(match.group(1))
+        source = by_index.get(original_index)
+        if source is None:
+            return ""
+        if original_index not in remapped_indexes:
+            new_index = len(used_citations) + 1
+            remapped_indexes[original_index] = new_index
+            used_citations.append({**source, "index": new_index})
+        return f"[{remapped_indexes[original_index]}]"
+
+    return re.sub(r"\[(\d+)\]", replace, answer), used_citations
+
+
+def strip_model_reference_catalog(answer: str) -> str:
+    """移除模型自行输出在回答末尾的“参考来源”目录。
+
+    目录必须由 ``citation_catalog`` 基于本轮检索结果唯一生成。若保留模型
+    生成的目录，模型即使正确复述了来源，也会与程序追加的目录重复；若它
+    复述错误，则会产生两套相互矛盾的引用。仅移除位于末尾的 Markdown
+    标题或纯文本“参考来源：”段，不影响正文中的普通“来源”表述。
+    """
+    return re.sub(
+        r"(?:\n\s*)+(?:#{1,6}\s*)?参考来源\s*[:：][\s\S]*\Z",
+        "",
+        answer,
+    ).rstrip()

@@ -11,6 +11,7 @@ import logging
 import os
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,9 @@ class Settings(BaseSettings):
     vision_model: str = "qwen-vl-max"   # 食物图片识别（多模态）
     embedding_model: str = "text-embedding-v3"  # RAG 向量检索
     rerank_model: str = "gte-rerank-v2"         # 混合召回后的精排
+    # 单次模型 HTTP 请求的最长等待时间。必须设上限：外部模型服务无响应时，
+    # 不能让 SSE、LangGraph 与 LangSmith Trace 一直处于运行中。
+    llm_timeout_seconds: float = Field(default=60.0, gt=0)
 
     # ---- JWT ----
     jwt_secret: str = "change-me"
