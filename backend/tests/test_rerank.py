@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from app.core.config import settings
-from app.db.models import KnowledgeChunk
+from app.db.models import KnowledgeChunk, KnowledgeDocument
 from app.db.session import SessionLocal
 from app.rag.embedding import embed_texts
 from app.rag.rerank import rerank
@@ -38,11 +38,26 @@ def test_retrieve_pipeline_with_rerank():
     db = SessionLocal()
     vectors = embed_texts(_DOCS)
     try:
+        document = KnowledgeDocument(
+            source_key=f"test_rerank_{uuid.uuid4().hex}",
+            source_title="重排测试文档",
+            source_path="tests://rerank",
+            source_type="test",
+            content_hash=uuid.uuid4().hex + uuid.uuid4().hex,
+            parser_version="test",
+            page_count=1,
+        )
+        db.add(document)
+        db.flush()
         chunks = [
             KnowledgeChunk(
+                document_id=document.id,
                 content=c,
-                source_title=f"测试文档_{i}",
                 topic=f"test_{uuid.uuid4().hex[:8]}",
+                page_number=1,
+                section=f"测试章节_{i}",
+                chunk_index=i,
+                content_hash=uuid.uuid4().hex + uuid.uuid4().hex,
                 embedding=v,
             )
             for i, (c, v) in enumerate(zip(_DOCS, vectors))
@@ -59,5 +74,6 @@ def test_retrieve_pipeline_with_rerank():
         db.query(KnowledgeChunk).filter(
             KnowledgeChunk.id.in_([c.id for c in chunks])
         ).delete(synchronize_session=False)
+        db.delete(document)
         db.commit()
         db.close()

@@ -25,12 +25,13 @@ from pydantic import BaseModel, Field
 from app.agents.llm import get_text_llm
 from app.agents.state import AgentState
 from app.db.session import SessionLocal
+from app.rag.citations import citation_catalog, citation_label, citation_payloads
 from app.rag.retriever import retrieve
 
 QA_SYSTEM_PROMPT = """你是营养与运动知识顾问，基于检索到的知识库切片回答问题。
 
 工作纪律：
-1. 回答依据优先来自下方【知识库切片】，引用处标注编号如 [1][2]；
+1. 回答依据优先来自下方【知识库切片】，引用处标注编号如 [1][2]，不得编造编号；
 2. 切片未覆盖的部分可以用可靠的通用知识补充，但不要标注编号；
 3. 只讲营养/饮食/运动领域的通用知识，不查询、不臆测用户本人的记录数据
    （用户问"我今天吃了多少"不归你管，那需要查库）；
@@ -69,7 +70,7 @@ def _question_from(state: AgentState) -> str:
 def _trace_entry(query: str, round_no: int, results: list[dict], reason: str) -> dict:
     """一条检索轨迹（SSE / 前端折叠面板渲染的格式，与 react 工具轨迹同构）。"""
     tops = "；".join(
-        f"[{i}] {r['source_title']}" for i, r in enumerate(results[:3], start=1)
+        f"[{i}] {citation_label(r)}" for i, r in enumerate(results[:3], start=1)
     )
     return {
         "name": "retrieve_knowledge",
@@ -84,7 +85,7 @@ def _context_block(results: list[dict]) -> str:
     if not results:
         return "（本次未检索到相关切片，请用可靠的通用知识回答并说明）"
     lines = [
-        f"[{i}] 来源《{r['source_title']}》：{r['content']}"
+        f"[{i}] 证据定位：{citation_label(r)}\n正文：{r['content']}"
         for i, r in enumerate(results, start=1)
     ]
     return "\n".join(lines)
@@ -145,7 +146,7 @@ def make_qa_agent():
                 f"\n\n【知识库切片】\n{_context_block(results)}"
                 f"\n\n【可用来源列表】"
                 + "、".join(
-                    f"[{i}]《{r['source_title']}》"
+                    f"[{i}]{citation_label(r)}"
                     for i, r in enumerate(results, start=1)
                 )
             )
@@ -153,6 +154,18 @@ def make_qa_agent():
         finally:
             db.close()
 
-        return {"messages": [response], "tool_calls": trace}
+        # 由程序追加编号对照表；即使模型只写 [1]，用户也能核验具体章节和页码。
+        if isinstance(response.content, str):
+            references = citation_catalog(results)
+            if references:
+                response = response.model_copy(
+                    update={"content": f"{response.content.rstrip()}\n\n{references}"}
+                )
+
+        return {
+            "messages": [response],
+            "tool_calls": trace,
+            "citations": citation_payloads(results),
+        }
 
     return qa_agent

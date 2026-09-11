@@ -18,7 +18,7 @@ BM25 索引每次查询时全量重建：知识库千级切片重建 <10ms，不
 """
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import KnowledgeChunk
 from app.rag.embedding import embed_query
@@ -35,14 +35,22 @@ def _tokenize(text: str) -> list[str]:
 def vector_search(db: Session, query_vec: list[float], k: int) -> list[KnowledgeChunk]:
     """向量路：pgvector 余弦距离最近邻（HNSW 索引生效）。"""
     dist = KnowledgeChunk.embedding.cosine_distance(query_vec)
-    return list(db.scalars(select(KnowledgeChunk).order_by(dist).limit(k)).all())
+    stmt = (
+        select(KnowledgeChunk)
+        .options(joinedload(KnowledgeChunk.document))
+        .order_by(dist)
+        .limit(k)
+    )
+    return list(db.scalars(stmt).all())
 
 
 def keyword_search(db: Session, query: str, k: int) -> list[KnowledgeChunk]:
     """关键词路：全量加载切片 → 内存 BM25 打分 → 取 top-k。"""
     from rank_bm25 import BM25Okapi
 
-    chunks = list(db.scalars(select(KnowledgeChunk)).all())
+    chunks = list(
+        db.scalars(select(KnowledgeChunk).options(joinedload(KnowledgeChunk.document))).all()
+    )
     if not chunks:
         return []
     bm25 = BM25Okapi([_tokenize(c.content) for c in chunks])
@@ -78,9 +86,13 @@ def hybrid_search(db: Session, query: str, top_k: int = 5) -> list[dict]:
     return [
         {
             "id": e["chunk"].id,
+            "document_id": e["chunk"].document_id,
             "content": e["chunk"].content,
-            "source_title": e["chunk"].source_title,
+            "source_title": e["chunk"].document.source_title,
             "topic": e["chunk"].topic,
+            "page_number": e["chunk"].page_number,
+            "section": e["chunk"].section,
+            "chunk_index": e["chunk"].chunk_index,
             "rrf_score": round(e["score"], 6),
             "ranked_by": e["ranked_by"],  # 调试/轨迹用：该切片被哪几路召回
         }

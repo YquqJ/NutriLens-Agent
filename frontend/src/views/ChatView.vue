@@ -9,9 +9,11 @@ import { listConversations, createConversation, getMessages, deleteConversation 
 import { uploadImage } from '@/api/uploads'
 import { getErrorMessage } from '@/utils/error'
 import ChatMessage from '@/components/ChatMessage.vue'
+import CitationDrawer from '@/components/CitationDrawer.vue'
 import HitlCard from '@/components/HitlCard.vue'
 import type {
   ChatMessage as ChatMsg,
+  Citation,
   Conversation,
   DietDraftItem,
   Message,
@@ -29,6 +31,9 @@ const listEl = ref<HTMLElement | null>(null)
 const imageUrl = ref<string | null>(null)
 const uploading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+const citationDrawerVisible = ref(false)
+const drawerCitations = ref<Citation[]>([])
+const activeCitationIndex = ref<number | null>(null)
 
 const busy = computed(() => streaming.value || !!pendingMsg.value)
 const canSend = computed(() => !busy.value && (!!input.value.trim() || !!imageUrl.value))
@@ -41,11 +46,19 @@ const uid = () => `t${Date.now()}_${seq++}`
 
 function toChatMessage(m: Message): ChatMsg {
   let toolTrace: ToolTraceEntry[] = []
+  let citations: Citation[] = []
   if (m.tool_trace) {
     try {
       toolTrace = JSON.parse(m.tool_trace)
     } catch {
       toolTrace = []
+    }
+  }
+  if (m.citations) {
+    try {
+      citations = JSON.parse(m.citations)
+    } catch {
+      citations = []
     }
   }
   return {
@@ -55,6 +68,7 @@ function toChatMessage(m: Message): ChatMsg {
     imageUrl: m.image_url,
     agentName: m.agent_name,
     toolTrace,
+    citations,
     streaming: false,
     interrupt: null,
     createdAt: m.created_at,
@@ -108,6 +122,9 @@ async function streamRequest(
       case 'tool_calls':
         live.toolTrace.push(e.entry)
         break
+      case 'citations':
+        live.citations = e.items
+        break
       case 'interrupt':
         live.interrupt = e.payload
         live.streaming = false
@@ -120,6 +137,7 @@ async function streamRequest(
           // 用后端权威终稿替换流式累积的 token 文本：token 流可能混入
           // react agent 的工具间叙述（"现在我将…"），终稿才是干净的最终回答
           if (e.content) live.content = e.content
+          if (e.citations) live.citations = e.citations
         }
         break
       case 'error':
@@ -228,6 +246,12 @@ function clearImage() {
   imageUrl.value = null
 }
 
+function openCitation(citation: Citation, message: ChatMsg) {
+  drawerCitations.value = message.citations
+  activeCitationIndex.value = citation.index
+  citationDrawerVisible.value = true
+}
+
 async function send(text?: string) {
   const typed = (text ?? input.value).trim()
   const img = imageUrl.value
@@ -239,14 +263,14 @@ async function send(text?: string) {
   const now = new Date().toISOString()
   messages.value.push({
     key: uid(), role: 'user', content, imageUrl: img,
-    agentName: null, toolTrace: [], streaming: false, interrupt: null,
+    agentName: null, toolTrace: [], citations: [], streaming: false, interrupt: null,
     createdAt: now,
   })
   // reactive 包装：SSE 事件流中会持续 mutate 此对象（token 追加/轨迹 push），
   // 普通对象 push 进 reactive 数组后，对原始引用的 mutate 不触发重渲染
   const live = reactive<ChatMsg>({
     key: uid(), role: 'assistant', content: '', imageUrl: null,
-    agentName: null, toolTrace: [], streaming: true, interrupt: null,
+    agentName: null, toolTrace: [], citations: [], streaming: true, interrupt: null,
     createdAt: now,
   })
   messages.value.push(live)
@@ -354,7 +378,7 @@ onMounted(loadConversations)
           </div>
 
           <template v-for="m in messages" :key="m.key">
-            <ChatMessage :message="m" />
+            <ChatMessage :message="m" @citation-click="openCitation($event, m)" />
             <div v-if="m.interrupt" class="hitl-slot">
               <HitlCard
                 :payload="m.interrupt"
@@ -414,6 +438,12 @@ onMounted(loadConversations)
         </div>
       </div>
     </section>
+
+    <CitationDrawer
+      v-model:visible="citationDrawerVisible"
+      :citations="drawerCitations"
+      :active-index="activeCitationIndex"
+    />
   </div>
 </template>
 

@@ -3,7 +3,7 @@
 
 职责：
 1. 把用户消息喂给图（thread_id = conversation_id），以 SSE 分帧推送
-   四类事件：token / agent_trace / tool_calls / interrupt；
+   五类事件：token / agent_trace / tool_calls / citations / interrupt；
 2. HITL 恢复：interrupt 挂起后前端调 resume 端点，传 Command(resume=value)；
 3. 消息落库 messages 表：user 消息在流开始前落，assistant 汇报在流结束后落
    （含 agent_name 与 tool_trace JSON，供 /messages 历史回放渲染）。
@@ -138,6 +138,7 @@ def _run_graph_and_stream(
     graph = get_graph()
     token_buffer: list[str] = []  # 兜底文本（正常取最终 state 的最后一条 AI 消息）
     tool_trace: list[dict] = []  # 本轮全部工具调用（落 messages.tool_trace）
+    citations: list[dict] = []  # QA 结构化证据（落 messages.citations，供前端抽屉回放）
     seen_calls: set[str] = set()  # 已发过的工具调用内容键（resume 后 react 子图会重放相同差量）
     current_agent: Optional[str] = None  # 产出最终回复的 agent（落 agent_name）
     interrupted = False
@@ -174,6 +175,9 @@ def _run_graph_and_stream(
             for node, update in chunk.items():
                 if node in WORKERS and isinstance(update, dict):
                     current_agent = node  # resume 路径没有 supervisor 决策事件，从这里兜住
+                    if update.get("citations"):
+                        citations = list(update["citations"])
+                        yield _sse("citations", {"items": citations})
                     # 工具轨迹两个来源：react worker 从 messages 差量配对提取；
                     # qa_agent 是普通节点，轨迹由节点 update 的 tool_calls 直接带回
                     new_calls = _extract_tool_calls(update) + list(
@@ -214,6 +218,7 @@ def _run_graph_and_stream(
                         content=content,
                         agent_name=current_agent,
                         tool_trace=json.dumps(tool_trace, ensure_ascii=False),
+                        citations=json.dumps(citations, ensure_ascii=False) if citations else None,
                     )
                 )
                 db.commit()
@@ -228,6 +233,7 @@ def _run_graph_and_stream(
                 # 权威终稿：流式 token 可能混入 react agent 的工具间叙述（"现在我将…"），
                 # 前端收到 done 后用 content 替换累积的 token 文本，保证最终消息干净
                 "content": content,
+                "citations": citations,
             },
         )
     except Exception as e:

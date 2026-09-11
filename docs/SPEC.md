@@ -74,12 +74,12 @@ worker 分工：
 - [x] **M3.9** `agents/memory.py`：摘要压缩记忆 —— messages 超阈值(24)时把最旧 KEEP_TAIL(8) 之前的消息折叠成滚动摘要（summary 字段）并用 RemoveMessage 裁剪，防上下文无限累积；supervisor 路由注入摘要做跨轮指代消解
       验收：单测 5 用例全过 ✅（tests/test_memory.py，注入桩 LLM：节点级超阈值/未超阈值、图级 RemoveMessage 真瘦身、supervisor 注入、整图接线流向；不依赖真实模型）
 
-## M4 Agentic RAG `[ ]`
+## M4 Agentic RAG `[x]`
 
 - [x] **M4.1** `rag/embedding.py`：text-embedding-v3 客户端 + 批量入库
 - [x] **M4.2** `rag/retriever.py`：混合检索（pgvector 余弦 + rank_bm25 内存索引）→ RRF 融合
 - [x] **M4.3** `rag/rerank.py`：gte-rerank 重排（DashScope 原生 API，非 OpenAI 兼容模式）
-- [x] **M4.4** 知识库 seed：营养/健身知识文档切片入库
+- [x] **M4.4** 知识库 PDF 导入：`backend/data/通用营养与运动科学常识知识库.pdf` → 文本提取 → 页码/章节切片 → SHA-256 幂等向量化入库；文档标题只存 document 表，切片通过 `document_id + section + page_number + chunk_index` 生成可核验引用；旧手工常量 seed 切片按 `document_id IS NULL` 精确清理，保留用户业务数据
 - [x] **M4.5** `agents/qa_agent.py`：迭代自检（检索结果不足 → 改写 query 重检，≤2 轮）
       验收：问"减脂期每天吃多少蛋白质"，回答带来源且检索轨迹可见
 
@@ -92,7 +92,7 @@ worker 分工：
 
 - [x] **M6.1** 项目脚手架：Vue3 + Vite + TS + Element Plus + Pinia + axios 拦截器（JWT）
 - [x] **M6.2** 登录/注册 + 身体档案表单
-- [x] **M6.3** 对话页：SSE 渲染（打字机 + agent 徽章 + 工具轨迹折叠面板）+ HITL 确认卡片（可编辑克数）
+- [x] **M6.3** 对话页：SSE 渲染（打字机 + agent 徽章 + 工具轨迹折叠面板）+ HITL 确认卡片（可编辑克数）+ RAG 引用标记 `[n]` 可点击，右侧抽屉展示章节/页码/片段与完整切片正文（多证据纵向滚动）
 - [x] **M6.4** 拍照记录：图片上传 → 触发对话消息携带 image_url（后端图片→识别→落库链路已 E2E 验证 + 回归测试 tests/test_image_flow.py；采用感知/决策分离——analyze_image 前置节点确定性识别，见 DESIGN_NOTES「图片识别被 supervisor 指代消解幻觉覆盖」）
 - [x] **M6.5** 看板页：ECharts 热量收支 + 宏量营养素环图 + 7 日趋势折线
 - [x] **M6.6** 记录管理：饮食/运动记录列表、编辑、删除

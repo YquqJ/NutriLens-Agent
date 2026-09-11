@@ -143,6 +143,7 @@ class Message(Base):
     image_url: Mapped[str | None] = mapped_column(Text)  # 该消息携带的食物图片（OSS URL）
     agent_name: Mapped[str | None] = mapped_column(String(32))
     tool_trace: Mapped[str | None] = mapped_column(Text)  # JSON 数组：[{name, args, result}]
+    citations: Mapped[str | None] = mapped_column(Text)  # JSON 数组：QA 证据定位与切片正文
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
@@ -258,6 +259,36 @@ class Food(Base):
     )
 
 
+class KnowledgeDocument(Base):
+    """知识文档的导入清单。
+
+    原始文件与切片分表：文档表记录来源、文件哈希和解析版本，切片表只保存
+    检索所需的最小内容。这样同一文件重复导入可幂等跳过；源文件变更时也能
+    精确删除旧切片再重建，而不是把整个知识库清空。
+    """
+
+    __tablename__ = "knowledge_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    source_title: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_path: Mapped[str] = mapped_column(String(256), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(16), nullable=False)  # pdf / markdown
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    page_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    chunks: Mapped[list["KnowledgeChunk"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+
+
 class KnowledgeChunk(Base):
     """
     RAG 知识库切片。embedding 为 pgvector 向量列（text-embedding-v3，1024 维）。
@@ -270,7 +301,23 @@ class KnowledgeChunk(Base):
     __tablename__ = "knowledge_chunks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # 文档是来源真相；切片不再重复存 source_title，避免同一字段两处失同步。
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("knowledge_documents.id", ondelete="CASCADE"), nullable=False
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)  # 切片正文
-    source_title: Mapped[str] = mapped_column(String(128), nullable=False)  # 来源文档标题（溯源展示）
     topic: Mapped[str] = mapped_column(String(32), default="general")  # 主题分类（过滤用）
+    page_number: Mapped[int | None] = mapped_column(Integer)
+    section: Mapped[str | None] = mapped_column(String(256))
+    chunk_index: Mapped[int | None] = mapped_column(Integer)
+    content_hash: Mapped[str | None] = mapped_column(String(64))
     embedding = mapped_column(Vector(1024))  # pgvector 向量，HNSW 索引在 DDL 后建
+
+    document: Mapped[KnowledgeDocument] = relationship(back_populates="chunks")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "document_id", "content_hash", name="uq_knowledge_chunks_document_hash"
+        ),
+        Index("ix_knowledge_chunks_document", "document_id"),
+    )

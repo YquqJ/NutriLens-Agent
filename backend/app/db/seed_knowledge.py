@@ -1,50 +1,107 @@
-"""
-知识库 seed 脚本（M4.4）。
+"""知识文档导入脚本。
 
 用法：uv run python -m app.db.seed_knowledge
 
-流程：knowledge_data.KNOWLEDGE → embed_texts 批量向量化 → 入
-knowledge_chunks 表。幂等：按 content 精确去重，已存在的跳过
-（改内容属于数据修订，走删除重灌，不静默覆盖）。
+流程：PDF 文本提取 → 按页码/章节切片 → 批量向量化 → 入库。导入以源文件
+SHA-256 为幂等键：文件未变直接跳过；文件更新时，仅删除该文档的旧切片并重建。
+首次运行还会清除没有 document_id 的历史手工 seed 切片，不影响业务表。
 """
 
-from sqlalchemy import select
+from pathlib import Path
 
-from app.db.models import KnowledgeChunk
+from sqlalchemy import delete, func, select
+
+from app.db.models import KnowledgeChunk, KnowledgeDocument
 from app.db.session import SessionLocal
 from app.rag.embedding import embed_texts
-from app.rag.knowledge_data import KNOWLEDGE
+from app.rag.document_loader import (
+    PARSER_VERSION,
+    PDF_SOURCE_KEY,
+    PDF_SOURCE_PATH,
+    PDF_SOURCE_TITLE,
+    extract_pdf_chunks,
+    file_sha256,
+)
 
 
-def seed_knowledge() -> int:
-    """把知识切片向量化并入库，返回本次新增条数。"""
+def _repository_relative_path(path: Path) -> str:
+    """避免把开发机绝对路径写入数据库，保证换机器后的元数据可复现。"""
+    backend_dir = Path(__file__).resolve().parents[2]
+    return str(path.resolve().relative_to(backend_dir.parent.resolve())).replace("\\", "/")
+
+
+def seed_knowledge(source_path: Path = PDF_SOURCE_PATH) -> int:
+    """导入知识 PDF，返回本次实际新建的切片数量。"""
+    source_path = source_path.resolve()
+    page_count, extracted_chunks = extract_pdf_chunks(source_path)
+    source_hash = file_sha256(source_path)
+    source_path_text = _repository_relative_path(source_path)
+
     db = SessionLocal()
     try:
-        existing = set(db.scalars(select(KnowledgeChunk.content)).all())
-        pending = [
-            (source, topic, content)
-            for source, topic, content in KNOWLEDGE
-            if content not in existing
-        ]
-        if not pending:
-            return 0
+        document = db.scalar(
+            select(KnowledgeDocument).where(KnowledgeDocument.source_key == PDF_SOURCE_KEY)
+        )
+        # 只在首次切换来源时清理历史手工常量 seed。之后不再碰无归属切片，
+        # 为将来的私有文档/测试数据保留独立的生命周期。
+        if document is None:
+            db.execute(delete(KnowledgeChunk).where(KnowledgeChunk.document_id.is_(None)))
+        if document and document.content_hash == source_hash:
+            current_count = db.scalar(
+                select(func.count())
+                .select_from(KnowledgeChunk)
+                .where(KnowledgeChunk.document_id == document.id)
+            )
+            if current_count:
+                db.commit()
+                return 0
 
-        vectors = embed_texts([c for _, _, c in pending])
+        if document is None:
+            document = KnowledgeDocument(
+                source_key=PDF_SOURCE_KEY,
+                source_title=PDF_SOURCE_TITLE,
+                source_path=source_path_text,
+                source_type="pdf",
+                content_hash=source_hash,
+                parser_version=PARSER_VERSION,
+                page_count=page_count,
+            )
+            db.add(document)
+            db.flush()
+        else:
+            db.execute(
+                delete(KnowledgeChunk).where(KnowledgeChunk.document_id == document.id)
+            )
+            document.source_title = PDF_SOURCE_TITLE
+            document.source_path = source_path_text
+            document.source_type = "pdf"
+            document.content_hash = source_hash
+            document.parser_version = PARSER_VERSION
+            document.page_count = page_count
+
+        vectors = embed_texts([chunk.content for chunk in extracted_chunks])
+        if len(vectors) != len(extracted_chunks):
+            raise RuntimeError("embedding 返回数量与知识切片数量不一致")
+
         db.add_all(
             KnowledgeChunk(
-                content=content,
-                source_title=source,
-                topic=topic,
-                embedding=vec,
+                document_id=document.id,
+                content=chunk.content,
+                topic=chunk.section.split(" / ", 1)[0][:32],
+                page_number=chunk.page_number,
+                section=chunk.section,
+                chunk_index=chunk.chunk_index,
+                content_hash=chunk.content_hash,
+                embedding=vector,
             )
-            for (source, topic, content), vec in zip(pending, vectors)
+            for chunk, vector in zip(extracted_chunks, vectors)
         )
         db.commit()
-        return len(pending)
+        return len(extracted_chunks)
     finally:
         db.close()
 
 
 if __name__ == "__main__":
     added = seed_knowledge()
-    print(f"知识库 seed 完成：本次新增 {added} 条（已存在的跳过）")
+    print(f"知识库 PDF 导入完成：本次新增 {added} 条（文件未变化则跳过）")

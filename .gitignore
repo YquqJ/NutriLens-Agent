@@ -16,7 +16,6 @@ backend/.env
 frontend/.env.local
 
 # ---- 本地数据 ----
-backend/data/
 *.db
 
 # ---- 个人文档（不入库）----

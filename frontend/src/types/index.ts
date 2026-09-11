@@ -94,6 +94,7 @@ export interface Message {
   image_url: string | null
   agent_name: string | null
   tool_trace: string | null // JSON 字符串，前端解析
+  citations: string | null // JSON 字符串，QA 证据定位与切片正文
   created_at: string
 }
 
@@ -103,6 +104,17 @@ export interface ToolTraceEntry {
   args: Record<string, unknown>
   result: string
   reason?: string
+}
+
+// ---- RAG 引用证据（后端确定性生成，前端据此渲染可点击 [n] 与抽屉）----
+export interface Citation {
+  index: number
+  label: string
+  source_title: string
+  section: string
+  page_number: number | null
+  chunk_index: number | null
+  content: string
 }
 
 // ---- HITL 确认卡片（diet_agent 的 create_diet_record 中断载荷）----
@@ -130,6 +142,7 @@ export interface ChatMessage {
   imageUrl: string | null
   agentName: string | null
   toolTrace: ToolTraceEntry[]
+  citations: Citation[]
   streaming: boolean
   interrupt: DietConfirmPayload | null
   createdAt?: string | null // 历史消息时间戳；流式新消息由前端补
@@ -142,6 +155,7 @@ export type SseEvent =
   | { type: 'token'; content: string }
   | { type: 'agent_trace'; to: string; task: string }
   | { type: 'tool_calls'; entry: ToolTraceEntry }
+  | { type: 'citations'; items: Citation[] }
   | { type: 'interrupt'; payload: DietConfirmPayload }
-  | { type: 'done'; interrupted: boolean; agent_name?: string; persisted?: boolean; content?: string }
+  | { type: 'done'; interrupted: boolean; agent_name?: string; persisted?: boolean; content?: string; citations?: Citation[] }
   | { type: 'error'; message: string }

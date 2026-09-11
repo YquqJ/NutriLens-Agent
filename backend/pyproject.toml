@@ -34,6 +34,7 @@ dependencies = [
     "langchain-core>=0.3",
     "langchain-openai>=0.3",            # ChatOpenAI 配 DashScope base_url 调 Qwen
     "rank-bm25>=0.2",                   # BM25 关键词检索（混合检索的其中一路）
+    "pypdf>=5.0",                       # PDF 文本层提取（知识文档导入）
 ]
 
 [dependency-groups]

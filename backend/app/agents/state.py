@@ -71,3 +71,4 @@ class AgentState(TypedDict):
     # ---- 供前端渲染的元数据 ----
     agent_trace: list[str]  # 本轮参与的 agent 序列，如 ["diet_agent"]
     tool_calls: list[dict]  # 本轮工具调用轨迹 [{name, args, result}]（SSE 也用）
+    citations: list[dict]  # QA 检索证据 [{index, label, section, page_number, content}]（SSE / 历史回放）

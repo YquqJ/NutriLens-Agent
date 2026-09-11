@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from app.core.config import settings
-from app.db.models import KnowledgeChunk
+from app.db.models import KnowledgeChunk, KnowledgeDocument
 from app.db.session import SessionLocal
 from app.rag.embedding import embed_texts
 from app.rag.retriever import hybrid_search, keyword_search, vector_search
@@ -30,14 +30,29 @@ def seeded_chunks():
     contents = [c for c, _ in _CHUNKS]
     vectors = embed_texts(contents)  # 未配 key 时这里会失败——整个文件都有 skipif 守卫
     try:
+        document = KnowledgeDocument(
+            source_key=f"test_retriever_{uuid.uuid4().hex}",
+            source_title="检索测试文档",
+            source_path="tests://retriever",
+            source_type="test",
+            content_hash=uuid.uuid4().hex + uuid.uuid4().hex,
+            parser_version="test",
+            page_count=1,
+        )
+        db.add(document)
+        db.flush()
         chunks = [
             KnowledgeChunk(
+                document_id=document.id,
                 content=content,
-                source_title=source,
                 topic=f"test_{uuid.uuid4().hex[:8]}",
+                page_number=1,
+                section=source,
+                chunk_index=index,
+                content_hash=uuid.uuid4().hex + uuid.uuid4().hex,
                 embedding=vec,
             )
-            for (content, source), vec in zip(_CHUNKS, vectors)
+            for index, ((content, source), vec) in enumerate(zip(_CHUNKS, vectors))
         ]
         db.add_all(chunks)
         db.commit()
@@ -47,6 +62,7 @@ def seeded_chunks():
         db.query(KnowledgeChunk).filter(KnowledgeChunk.id.in_(ids)).delete(
             synchronize_session=False
         )
+        db.delete(document)
         db.commit()
         db.close()
 
@@ -59,7 +75,7 @@ def test_vector_path_semantic_recall(seeded_chunks):
         from app.rag.embedding import embed_query
 
         hits = vector_search(db, embed_query("怎么才能瘦下来"), 3)
-        assert any("热量缺口" in h.content or "减脂" in h.source_title for h in hits)
+        assert any("热量缺口" in h.content or "减脂" in h.document.source_title for h in hits)
     finally:
         db.close()
 
@@ -86,5 +102,6 @@ def test_hybrid_fusion(seeded_chunks):
         # 融合元数据完整（qa_agent 检索轨迹与调试依赖）
         assert results[0]["rrf_score"] > 0
         assert results[0]["ranked_by"]
+        assert results[0]["section"] and results[0]["chunk_index"] is not None
     finally:
         db.close()

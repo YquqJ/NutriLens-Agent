@@ -76,6 +76,7 @@ def get_messages(
             "image_url": m.image_url,
             "agent_name": m.agent_name,
             "tool_trace": m.tool_trace,
+            "citations": m.citations,
             "created_at": m.created_at.isoformat(),
         }
         for m in conv.messages

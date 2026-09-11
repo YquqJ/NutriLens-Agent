@@ -38,6 +38,7 @@ cd backend
 cp ../.env.example .env          # 填入 DASHSCOPE_API_KEY / OSS 配置
 uv sync                          # 首次安装依赖（固定 Python 3.12）
 uv run python -m app.db.init_db  # 建表 + 向量索引
+uv run python -m app.db.seed_knowledge # 导入 backend/data 下的营养运动知识 PDF
 uv run uvicorn app.main:app --reload
 
 # 3. 前端（M6 后提供）

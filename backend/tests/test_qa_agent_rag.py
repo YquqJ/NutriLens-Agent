@@ -33,14 +33,17 @@ def test_qa_agent_answers_with_sources_and_trace():
     answer = result["messages"][-1].content
     # 1. 数值正确（知识库里是 1.6-2.2 克/公斤）
     assert any(x in answer for x in ("1.6", "2.2", "2.0")), answer
-    # 2. 来源标注可见（编号引用或来源列表）
-    assert ("[1]" in answer) or ("来源" in answer), answer
+    # 2. 来源标注既可见又可定位：不是重复文档名，而是章节、页码、片段对照表。
+    assert "参考来源：" in answer, answer
+    assert "[1]" in answer and "第 " in answer and "片段 " in answer, answer
     # 3. 检索轨迹可见：retrieve_knowledge 与 self_check 各至少一条
     names = [tc["name"] for tc in result["tool_calls"]]
     assert "retrieve_knowledge" in names
     assert "self_check" in names
     retrieve_trace = next(tc for tc in result["tool_calls"] if tc["name"] == "retrieve_knowledge")
     assert retrieve_trace["result"], "检索轨迹应带召回摘要"
+    assert result["citations"], "QA 节点应返回供前端抽屉展示的结构化证据"
+    assert result["citations"][0]["content"] and result["citations"][0]["label"]
 
 
 @pytest.mark.skipif(not settings.dashscope_api_key, reason="未配置 DASHSCOPE_API_KEY")
