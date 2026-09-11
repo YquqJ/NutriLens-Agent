@@ -23,12 +23,34 @@ def test_analyze_image_node_injects_recognized_foods():
     ])
     out = node({"image_url": "https://x/y.jpg"})
     assert out["recognized_foods"][0]["food_name"] == "白切鸡"
+    assert out["image_analysis_status"] == "recognized"
+    assert out["image_analysis_error"] is None
 
 
 def test_analyze_image_node_noop_without_image():
     node = make_analyze_image_node(recognizer=lambda url: [])
     out = node({"image_url": None})
     assert out["recognized_foods"] is None
+    assert out["image_analysis_status"] == "no_image"
+
+
+def test_analyze_image_node_marks_no_food_detected():
+    node = make_analyze_image_node(recognizer=lambda url: [])
+    out = node({"image_url": "https://x/y.jpg"})
+    assert out["recognized_foods"] is None
+    assert out["image_analysis_status"] == "no_food_detected"
+    assert out["image_analysis_error"] is None
+
+
+def test_analyze_image_node_marks_failure_without_hiding_it():
+    def _raise(_url):
+        raise ConnectionError("vision unavailable")
+
+    node = make_analyze_image_node(recognizer=_raise)
+    out = node({"image_url": "https://x/y.jpg"})
+    assert out["recognized_foods"] is None
+    assert out["image_analysis_status"] == "failed"
+    assert out["image_analysis_error"] == "ConnectionError"
 
 
 def test_supervisor_injects_recognized_foods():
@@ -63,6 +85,73 @@ def test_supervisor_injects_recognized_foods():
     )
 
 
+def test_supervisor_injects_no_food_result():
+    captured = {}
+
+    class _StubRouter:
+        def invoke(self, msgs):
+            captured["msgs"] = msgs
+
+            class _D:
+                next_agent = "diet_agent"
+                task = "反馈图片识别结果"
+
+            return _D()
+
+    node = make_supervisor_node(router=_StubRouter())
+    node(
+        {
+            "messages": [HumanMessage(content="这是我的晚饭")],
+            "image_url": "https://x/y.jpg",
+            "recognized_foods": None,
+            "image_analysis_status": "no_food_detected",
+            "hop_count": 0,
+            "agent_trace": [],
+        }
+    )
+    assert any(
+        isinstance(m, tuple)
+        and m[0] == "system"
+        and "未检测到可记录的食物" in m[1]
+        and "不得臆测食物" in m[1]
+        for m in captured["msgs"]
+    )
+
+
+def test_supervisor_injects_image_failure_result():
+    captured = {}
+
+    class _StubRouter:
+        def invoke(self, msgs):
+            captured["msgs"] = msgs
+
+            class _D:
+                next_agent = "diet_agent"
+                task = "反馈图片识别失败"
+
+            return _D()
+
+    node = make_supervisor_node(router=_StubRouter())
+    node(
+        {
+            "messages": [HumanMessage(content="这是我的晚饭")],
+            "image_url": "https://x/y.jpg",
+            "recognized_foods": None,
+            "image_analysis_status": "failed",
+            "image_analysis_error": "ConnectionError",
+            "hop_count": 0,
+            "agent_trace": [],
+        }
+    )
+    assert any(
+        isinstance(m, tuple)
+        and m[0] == "system"
+        and "图片分析失败" in m[1]
+        and "不得臆测食物" in m[1]
+        for m in captured["msgs"]
+    )
+
+
 def test_diet_prompt_uses_recognized_foods():
     state = {
         "messages": [HumanMessage(content="这是我的晚饭")],
@@ -74,3 +163,32 @@ def test_diet_prompt_uses_recognized_foods():
     assert "图片识别结果" in system
     assert "白切鸡" in system
     assert "不要重复调用 analyze_food_image" in system
+
+
+def test_diet_prompt_propagates_no_food_result_without_retrying_image_analysis():
+    system = _diet_prompt(
+        {
+            "messages": [HumanMessage(content="这是我的晚饭")],
+            "image_url": "https://x/y.jpg",
+            "recognized_foods": None,
+            "image_analysis_status": "no_food_detected",
+            "task": "根据图片记录晚餐",
+        }
+    )[0].content
+    assert "未检测到可记录的食物" in system
+    assert "不要调用任何图片识别" in system
+
+
+def test_diet_prompt_propagates_image_failure_without_guessing_food():
+    system = _diet_prompt(
+        {
+            "messages": [HumanMessage(content="这是我的晚饭")],
+            "image_url": "https://x/y.jpg",
+            "recognized_foods": None,
+            "image_analysis_status": "failed",
+            "image_analysis_error": "ConnectionError",
+            "task": "根据图片记录晚餐",
+        }
+    )[0].content
+    assert "未能完成识别" in system
+    assert "不要猜测图片内容" in system

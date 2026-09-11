@@ -18,7 +18,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from app.agents.diet_agent import _diet_prompt, make_diet_agent
+from app.agents.diet_agent import DIET_TOOLS, _diet_prompt, make_diet_agent
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.models import User
@@ -41,19 +41,17 @@ def test_user():
 
 
 # ---- 纯函数单元测试（不依赖 LLM/DB）----
-def test_diet_prompt_injects_image_url():
-    """image_url 必须进入模型上下文，否则 analyze_food_image 永远不会被调用。
-
-    回归背景：M6.4 起 image_url 只写进 state，没有任何代码把它送进
-    diet_agent 的模型提示词，图片识别链路从未接通。
-    """
+def test_diet_prompt_does_not_retry_image_analysis_when_status_is_missing():
+    """图片分析只属于前置节点；worker 不应获得 URL 后自行二次识图。"""
     state = {
         "messages": [HumanMessage("这是我昨天吃的午饭")],
         "task": "记录昨日午餐",
         "image_url": "https://example.com/food.jpg",
     }
     system = _diet_prompt(state)[0].content
-    assert "https://example.com/food.jpg" in system
+    assert "https://example.com/food.jpg" not in system
+    assert "图片分析状态缺失" in system
+    assert "analyze_food_image" not in [tool.name for tool in DIET_TOOLS]
 
 
 def test_diet_prompt_omits_image_when_absent():

@@ -137,6 +137,14 @@ def make_supervisor_node(
             routing_msgs.append(
                 ("system", f"用户本轮消息附带照片，已识别出食物：{foods}。改写 task 时以这些食物为准，严禁替换成历史对话里的其他食物。")
             )
+        elif state.get("image_analysis_status") == "no_food_detected":
+            routing_msgs.append(
+                ("system", "用户本轮图片已成功分析，但未检测到可记录的食物。若用户意图是通过此图片记录饮食，路由到 diet_agent，并在 task 中明确要求反馈该结论；不得臆测食物或要求再次识图。")
+            )
+        elif state.get("image_analysis_status") == "failed":
+            routing_msgs.append(
+                ("system", "用户本轮图片分析失败。若用户意图依赖该图片，路由到 diet_agent，并在 task 中明确要求告知图片暂时无法读取或识别；不得臆测食物或要求再次识图。")
+            )
         elif state.get("image_url"):
             routing_msgs.append(
                 ("system", "用户本轮消息附带照片但图片食物尚未识别，改写 task 时严禁依据历史臆测食物，应表述为'识别并记录这顿饭'。")

@@ -25,6 +25,10 @@ MealType = Literal["breakfast", "lunch", "dinner", "snack"]
 #   llm_estimate 库未命中，LLM 估算
 Confidence = Literal["db_exact", "db_fuzzy", "llm_estimate"]
 
+# 图片分析的终态。recognized_foods=None 本身无法区分“没有食物”和“识图失败”，
+# 因此必须由状态字段保留前置感知节点的结论，供路由和 worker 做不同处理。
+ImageAnalysisStatus = Literal["no_image", "recognized", "no_food_detected", "failed"]
+
 
 class DietItemDraft(TypedDict):
     """HITL 确认卡片上的一个食物条目（interrupt 挂起时的草稿）。"""
@@ -51,6 +55,8 @@ class AgentState(TypedDict):
     user_id: str
     image_url: Optional[str]  # 本条用户消息携带的食物图片（OSS URL）
     recognized_foods: Optional[list[dict]]  # 图片识别结果（analyze_image 节点预置，供 supervisor/diet_agent 共用）
+    image_analysis_status: Optional[ImageAnalysisStatus]
+    image_analysis_error: Optional[str]  # 仅记录异常类型，避免把底层服务细节暴露给用户
 
     # ---- supervisor 路由决策结果 ----
     next_agent: str

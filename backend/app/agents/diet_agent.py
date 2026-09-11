@@ -47,7 +47,6 @@ class DietAgentState(AgentState):
     remaining_steps: int
 
 DIET_TOOLS = [
-    analyze_food_image,
     search_food,
     create_diet_record,
     get_diet_records,
@@ -64,8 +63,8 @@ DIET_SYSTEM_PROMPT = """你是饮食记录员，负责用户饮食的记录与�
    必须立即改用常识估算并继续流程（调 create_diet_record 落库）——
    换参数重查同一食物是错误行为，会导致死循环；
 2. 写入记录必须用 create_diet_record（系统会请求用户确认，无需你额外确认）；
-3. 用户消息带图片时（图片 URL 会在系统提示的【图片】里给出），先用 analyze_food_image 识别，
-   再逐项 search_food 匹配营养；
+3. 图片只会由上游图片分析节点识别一次；收到图片分析结论后，再逐项 search_food 匹配营养。
+   不要自行尝试重新读取或识别图片；
 4. 餐次判定：早餐/午餐/晚餐/加餐；未说明日期默认今天；
 5. 完成后用一两句话汇报结果（记了什么、合计多少千卡、数据置信度如何）。
    【汇报纪律】克数与营养值必须以 create_diet_record 的返回结果（items/total_calories）
@@ -95,6 +94,7 @@ def _diet_prompt(state: AgentState) -> list:
     )
     recognized = state.get("recognized_foods") or []
     image_url = state.get("image_url")
+    image_status = state.get("image_analysis_status")
     if recognized:
         foods = "、".join(f"{f['food_name']} 约{f['estimated_grams']}g" for f in recognized)
         # 图片已在 analyze_image 前置节点识别好（感知与决策分离），这里只把结果
@@ -104,14 +104,28 @@ def _diet_prompt(state: AgentState) -> list:
             "请直接对上述每种食物 search_food 匹配营养、按克数换算后 create_diet_record 落库；"
             "不要重复调用 analyze_food_image，也不要替换成其他食物。"
         )
-    elif image_url:
-        # 识别尚未完成/失败时的兜底：仍把 URL 交给 agent 走工具识别
+    elif image_status == "no_food_detected":
         system_text += (
-            f"\n\n【图片】本条用户消息携带食物图片，URL：{image_url}。"
-            "必须先调用 analyze_food_image(image_url=该URL) 识别图中食物，"
-            "再逐项 search_food 匹配营养、create_diet_record 落库。"
+            "\n\n【图片分析结论】已成功读取本条图片，但未检测到可记录的食物。"
+            "不要调用任何图片识别、食物检索或写入工具；直接告知用户未识别到有效食物，"
+            "请其上传一张更清晰、食物主体更完整的照片，或改用文字描述。"
+        )
+    elif image_status == "failed":
+        system_text += (
+            "\n\n【图片分析结论】本条图片未能完成识别，原因是图片访问或识别服务调用失败。"
+            "不要调用任何图片识别、食物检索或写入工具，也不要猜测图片内容；"
+            "直接告知用户图片暂时无法读取或识别，请其重新上传图片或用文字描述食物。"
+        )
+    elif image_url:
+        # 兼容独立调用子图的旧状态；生产主图一定会先写入图片分析状态。
+        system_text += (
+            "\n\n【图片分析状态缺失】本条用户消息带有图片，但没有可用的前置识图结论。"
+            "不要猜测图片内容或写入饮食记录；请用户重新发送图片。"
         )
     system = SystemMessage(content=system_text)
+    print("*" * 40)
+    print([system] + state["messages"])
+    print("*" * 40)
     return [system] + state["messages"]
 
 
@@ -132,20 +146,33 @@ def make_analyze_image_node(recognizer: Optional[callable] = None) -> callable:
     def analyze_image(state: AgentState) -> dict:
         url = state.get("image_url")
         if not url:
-            return {"recognized_foods": None}
+            return {
+                "recognized_foods": None,
+                "image_analysis_status": "no_image",
+                "image_analysis_error": None,
+            }
         try:
             items = recognizer(url)
-        except Exception:
-            items = []  # 识别失败不卡死链路：留给 diet_agent 走文本兜底
+        except Exception as exc:
+            return {
+                "recognized_foods": None,
+                "image_analysis_status": "failed",
+                "image_analysis_error": type(exc).__name__,
+            }
+        recognized_foods = [
+            {
+                "food_name": it["food_name"],
+                "estimated_grams": it["estimated_grams"],
+                "visual_description": it.get("visual_description", ""),
+            }
+            for it in items
+        ]
         return {
-            "recognized_foods": [
-                {
-                    "food_name": it["food_name"],
-                    "estimated_grams": it["estimated_grams"],
-                    "visual_description": it.get("visual_description", ""),
-                }
-                for it in items
-            ] or None
+            "recognized_foods": recognized_foods or None,
+            "image_analysis_status": (
+                "recognized" if recognized_foods else "no_food_detected"
+            ),
+            "image_analysis_error": None,
         }
 
     return analyze_image
