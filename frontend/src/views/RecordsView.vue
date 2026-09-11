@@ -8,10 +8,11 @@ import {
   listExerciseRecords, deleteExerciseRecord, updateExerciseRecord,
 } from '@/api/records'
 import { getErrorMessage } from '@/utils/error'
+import { todayISO } from '@/utils/date'
 import { confidenceLabel, mealLabel } from '@/utils/labels'
 import type { DietRecord, ExerciseRecord } from '@/types'
 
-const date = ref(new Date().toISOString().slice(0, 10))
+const date = ref(todayISO())
 const tab = ref('diet')
 const loading = ref(false)
 
@@ -23,6 +24,17 @@ const editingDiet = ref<number | null>(null)
 const dietDraft = ref<DietRecord | null>(null)
 const editingEx = ref<number | null>(null)
 const exDraft = ref<number | null>(null)
+
+const fmt = (n: number) => Math.round(n).toLocaleString('zh-CN')
+
+// 餐次颜色（单一来源，映射到 CSS 变量 --mc 供颜色混合）
+const MEAL_COLORS: Record<string, string> = {
+  breakfast: '#16a34a',
+  lunch: '#c8861f',
+  dinner: '#3a6b8f',
+  snack: '#8a8e88',
+}
+const mealColor = (m: string) => MEAL_COLORS[m] || '#8a8e88'
 
 async function load() {
   loading.value = true
@@ -114,29 +126,39 @@ onMounted(load)
 <template>
   <div v-loading="loading">
     <div class="page-head">
-      <h1>记录</h1>
-      <p>按日期查看、编辑或删除饮食与运动记录。</p>
-      <el-date-picker
-        v-model="date"
-        type="date"
-        value-format="YYYY-MM-DD"
-        :clearable="false"
-        size="small"
-        class="date-pick"
-        @change="load"
-      />
+      <div>
+        <h1>记录</h1>
+        <p>按日期查看、编辑或删除饮食与运动记录。</p>
+      </div>
+      <div class="date-control">
+        <span class="date-label">日期</span>
+        <el-date-picker
+          v-model="date"
+          type="date"
+          value-format="YYYY-MM-DD"
+          :clearable="false"
+          class="date-pick"
+          @change="load"
+        />
+      </div>
     </div>
 
     <el-tabs v-model="tab">
       <!-- 饮食记录 -->
       <el-tab-pane label="饮食" name="diet">
-        <div v-if="!dietRecords.length" class="empty">当日暂无饮食记录</div>
+        <div v-if="!dietRecords.length" class="empty-state">
+          <el-icon class="es-icon"><Dish /></el-icon>
+          <span class="es-title">当日暂无饮食记录</span>
+          <span class="es-hint">去「对话」页说一句"我吃了什么"，记录会自动落到这里</span>
+        </div>
 
         <div v-for="r in dietRecords" :key="r.id" class="panel rec">
           <div class="rec-head">
-            <span class="meal">{{ mealLabel(r.meal_type) }}</span>
+            <span class="meal" :style="{ '--mc': mealColor(r.meal_type) }">
+              <i class="meal-dot" />{{ mealLabel(r.meal_type) }}
+            </span>
             <span class="source">{{ r.source === 'agent' ? '对话录入' : '手动录入' }}</span>
-            <span class="total num">{{ Math.round(r.totals.calories) }} 千卡</span>
+            <span class="total num">{{ fmt(r.totals.calories) }} 千卡</span>
             <div class="ops">
               <template v-if="editingDiet === r.id">
                 <el-button size="small" type="primary" @click="saveDiet(r)">保存</el-button>
@@ -163,7 +185,7 @@ onMounted(load)
             </thead>
             <tbody>
               <tr v-for="it in (editingDiet === r.id ? dietDraft!.items : r.items)" :key="it.id">
-                <td>{{ it.food_name }}</td>
+                <td class="food">{{ it.food_name }}</td>
                 <td class="grams">
                   <template v-if="editingDiet === r.id">
                     <el-input-number
@@ -191,23 +213,26 @@ onMounted(load)
 
       <!-- 运动记录 -->
       <el-tab-pane label="运动" name="exercise">
-        <div v-if="!exerciseRecords.length" class="empty">当日暂无运动记录</div>
+        <div v-if="!exerciseRecords.length" class="empty-state">
+          <el-icon class="es-icon"><Bicycle /></el-icon>
+          <span class="es-title">当日暂无运动记录</span>
+          <span class="es-hint">去「对话」页说一句"我跑了 30 分钟"，记录会自动落到这里</span>
+        </div>
 
         <div v-for="r in exerciseRecords" :key="r.id" class="panel rec ex">
-          <div class="ex-main">
-            <span class="ex-name">{{ r.exercise_type }}</span>
-            <template v-if="editingEx === r.id">
-              <el-input-number
-                v-model="exDraft" :min="1" :max="1440" :precision="0" size="small"
-                controls-position="right" style="width: 100px"
-              />
-              <span class="unit">分钟</span>
-            </template>
-            <template v-else>
-              <span class="ex-dur num">{{ r.duration_minutes }} 分钟</span>
-            </template>
-            <span class="ex-kcal num">{{ Math.round(r.calories_burned) }} 千卡</span>
-          </div>
+          <span class="ex-icon"><el-icon><Bicycle /></el-icon></span>
+          <span class="ex-name">{{ r.exercise_type }}</span>
+          <template v-if="editingEx === r.id">
+            <el-input-number
+              v-model="exDraft" :min="1" :max="1440" :precision="0" size="small"
+              controls-position="right" style="width: 100px"
+            />
+            <span class="unit">分钟</span>
+          </template>
+          <template v-else>
+            <span class="ex-dur num">{{ r.duration_minutes }} 分钟</span>
+          </template>
+          <span class="ex-kcal num">{{ fmt(r.calories_burned) }} 千卡</span>
           <div class="ops">
             <template v-if="editingEx === r.id">
               <el-button size="small" type="primary" @click="saveEx(r)">保存</el-button>
@@ -226,18 +251,26 @@ onMounted(load)
 
 <style scoped>
 .page-head {
-  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.date-control {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.date-label {
+  font-size: 13px;
+  color: var(--ink-3);
 }
 .date-pick {
-  position: absolute;
-  right: 0;
-  top: 0;
+  width: 168px;
 }
-.empty {
-  padding: 40px 0;
-  text-align: center;
-  color: var(--ink-3);
-  font-size: 13px;
+.date-pick :deep(.el-input__wrapper) {
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 1px var(--line-strong) inset;
 }
 
 .rec {
@@ -250,9 +283,27 @@ onMounted(load)
   gap: 12px;
   margin-bottom: 12px;
 }
+
+/* 餐次 chip：颜色来自 --mc（脚本按 meal_type 映射），底/描边用 color-mix 淡出 */
 .meal {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 11px 3px 9px;
+  border-radius: 999px;
+  font-size: 13px;
   font-weight: 600;
+  color: var(--mc);
+  background: color-mix(in srgb, var(--mc) 10%, #fff);
+  border: 1px solid color-mix(in srgb, var(--mc) 24%, #fff);
 }
+.meal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mc);
+}
+
 .source {
   font-size: 12px;
   color: var(--ink-3);
@@ -262,7 +313,8 @@ onMounted(load)
 }
 .total {
   margin-left: auto;
-  font-weight: 600;
+  font-weight: 650;
+  font-size: 15px;
   color: var(--primary-deep);
 }
 .ops {
@@ -288,26 +340,43 @@ onMounted(load)
   text-align: right;
 }
 .items td {
-  padding: 8px 10px;
+  padding: 9px 10px;
   border-bottom: 1px solid var(--line);
+}
+.items tbody tr {
+  transition: background 0.1s;
+}
+.items tbody tr:hover {
+  background: var(--bg);
 }
 .items tr:last-child td {
   border-bottom: none;
+}
+.items .food {
+  font-weight: 500;
+  color: var(--ink);
 }
 .grams {
   white-space: nowrap;
 }
 
+/* ---- 运动记录 ---- */
 .ex {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 18px 20px;
+  gap: 14px;
+  padding: 16px 20px;
 }
-.ex-main {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+.ex-icon {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 17px;
+  color: var(--viz-burned);
+  background: color-mix(in srgb, var(--viz-burned) 12%, #fff);
 }
 .ex-name {
   font-weight: 600;
@@ -317,11 +386,15 @@ onMounted(load)
   color: var(--ink-2);
 }
 .ex-kcal {
-  font-weight: 600;
+  margin-left: auto;
+  font-weight: 650;
   color: var(--primary-deep);
 }
 .unit {
   color: var(--ink-3);
   font-size: 13px;
+}
+.ex .ops {
+  margin-left: 0;
 }
 </style>

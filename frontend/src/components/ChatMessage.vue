@@ -226,7 +226,7 @@ function formatTime(iso: string | null | undefined) {
   padding: 0 1px;
   border: none;
   background: none;
-  color: #2563eb;
+  color: #60a5fa;
   font: inherit;
   font-weight: 650;
   cursor: pointer;
@@ -234,7 +234,7 @@ function formatTime(iso: string | null | undefined) {
   text-decoration-color: #bfdbfe;
   text-underline-offset: 2px;
 }
-.citation-link:hover { color: #1d4ed8; text-decoration-color: currentColor; }
+.citation-link:hover { color: #3b82f6; text-decoration-color: currentColor; }
 .citation-link:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; border-radius: 3px; }
 .typing {
   display: inline-flex;

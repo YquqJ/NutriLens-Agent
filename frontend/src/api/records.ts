@@ -1,7 +1,8 @@
 import http from './http'
+import { todayISO } from '@/utils/date'
 import type { DietRecord, ExerciseRecord } from '@/types'
 
-const d = () => new Date().toISOString().slice(0, 10)
+const d = () => todayISO()
 
 export const listDietRecords = (date?: string) =>
   http.get<DietRecord[]>('/diet/records', { params: { date: date ?? d() } }).then((r) => r.data)
