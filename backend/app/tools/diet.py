@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from app.agents.llm import get_vision_llm
 from app.services import diet as diet_service
+from app.services.allergy import assess_user_food_allergy_risks
 from app.tools.context import get_current_user_id, get_session
 
 
@@ -127,6 +128,23 @@ def create_diet_record(
     # ---- 1. 组装确认草稿（纯计算，可重复执行，无副作用） ----
     draft = [i.model_dump() for i in items]
 
+    # 过敏判断必须在工具层确定性执行，不能依赖模型是否读到了历史 get_profile。
+    # 风险只用于提示和确认，不阻止用户记录已经发生的饮食。
+    user_id = get_current_user_id()
+    with get_session() as db:
+        allergy_risks = assess_user_food_allergy_risks(
+            db, user_id, (item["food_name"] for item in draft)
+        )
+
+    interrupt_payload = {
+        "type": "diet_confirm",
+        "meal_type": meal_type,
+        "record_date": record_date or date.today().isoformat(),
+        "items": draft,
+        "allergy_risks": allergy_risks,
+        "requires_allergy_confirmation": bool(allergy_risks),
+    }
+
     # ---- 2. HITL：请求用户确认/编辑 ----
     # interrupt() 第一次执行时抛出 GraphInterrupt 挂起整张图，
     # 草稿通过 SSE interrupt 事件推给前端渲染确认卡片；
@@ -134,23 +152,49 @@ def create_diet_record(
     # 恢复时本工具从头重跑，interrupt() 直接返回 resume 值：
     #   - dict（可能被用户编辑过的条目）→ 继续落库
     #   - False（用户点了取消）→ 不写库
-    confirmed = interrupt(
-        {
-            "type": "diet_confirm",
-            "meal_type": meal_type,
-            "record_date": record_date or date.today().isoformat(),
-            "items": draft,
-        }
-    )
+    confirmed = interrupt(interrupt_payload)
 
     if confirmed is False:
         return {"status": "cancelled", "message": "用户取消了本次记录"}
 
+    # 有风险时要求前端明确传回知悉标记。兼容旧客户端/恶意调用时，
+    # 再挂起一次同样的确认卡片，而不是静默写入或让模型自行决定。
+    allergy_acknowledged = (
+        isinstance(confirmed, dict)
+        and confirmed.get("allergy_acknowledged") is True
+    )
+    if allergy_risks and not allergy_acknowledged:
+        confirmed = interrupt(
+            {
+                **interrupt_payload,
+                "confirmation_error": "请先勾选“我已知悉过敏风险，仍要记录”。",
+            }
+        )
+        if confirmed is False:
+            return {"status": "cancelled", "message": "用户取消了本次记录"}
+        allergy_acknowledged = (
+            isinstance(confirmed, dict)
+            and confirmed.get("allergy_acknowledged") is True
+        )
+
     # 用户可能编辑过克数/删除条目 —— 以确认结果为准
     final_items = confirmed["items"] if isinstance(confirmed, dict) else draft
 
+    # 用户可能在确认卡片中删除了风险食物；以最终条目重新评估，避免初始草稿
+    # 有风险但用户已删除后仍要求无意义的确认标记。
+    with get_session() as db:
+        final_allergy_risks = assess_user_food_allergy_risks(
+            db, user_id, (item["food_name"] for item in final_items)
+        )
+    if final_allergy_risks and not allergy_acknowledged:
+        # 理论上只会在非标准客户端绕过第二次 interrupt 时触发，作为写入前硬兜底。
+        return {
+            "status": "blocked",
+            "message": "检测到档案中的过敏风险，需用户明确确认后才能写入。",
+            "allergy_risks": final_allergy_risks,
+        }
+
     # ---- 3. 落库 ----
-    user_id = get_current_user_id()
     with get_session() as db:
         result = diet_service.create_diet_record(
             db,
@@ -159,6 +203,7 @@ def create_diet_record(
             items=final_items,
             record_date=date.fromisoformat(record_date) if record_date else None,
             source="agent",
+            allergy_acknowledged=allergy_acknowledged,
         )
     # 结果带上确认后的条目明细：用户可能在 HITL 卡片改过克数，
     # 模型只看 {record_id, total_calories} 会照抄自己草稿里的原估算值汇报

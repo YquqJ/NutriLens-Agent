@@ -132,6 +132,16 @@ export interface DietConfirmPayload {
   meal_type: string
   record_date: string
   items: DietDraftItem[]
+  allergy_risks?: AllergyRisk[]
+  requires_allergy_confirmation?: boolean
+  confirmation_error?: string
+}
+
+export interface AllergyRisk {
+  allergen: string
+  profile_terms: string[]
+  foods: string[]
+  message: string
 }
 
 // ---- 对话页本地消息（历史 + 流式实时合一的 UI 结构）----

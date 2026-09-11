@@ -63,6 +63,8 @@ DIET_SYSTEM_PROMPT = """你是饮食记录员，负责用户饮食的记录与�
    必须立即改用常识估算并继续流程（调 create_diet_record 落库）——
    换参数重查同一食物是错误行为，会导致死循环；
 2. 写入记录必须用 create_diet_record（系统会请求用户确认，无需你额外确认）；
+2a. 用户明确说已经吃过/喝过某食物时，必须继续记录流程，不能因为历史档案里有过敏信息而自行拒绝。
+   过敏风险由系统在确认卡片中确定性检测并提示；你的职责是调用工具，不要用记忆替代工具判断。
 3. 图片只会由上游图片分析节点识别一次；收到图片分析结论后，再逐项 search_food 匹配营养。
    不要自行尝试重新读取或识别图片；
 4. 餐次判定：早餐/午餐/晚餐/加餐；未说明日期默认今天；
@@ -123,10 +125,19 @@ def _diet_prompt(state: AgentState) -> list:
             "不要猜测图片内容或写入饮食记录；请用户重新发送图片。"
         )
     system = SystemMessage(content=system_text)
-    print("*" * 40)
-    print([system] + state["messages"])
-    print("*" * 40)
-    return [system] + state["messages"]
+    # print("*" * 40)
+    # print([system] + state["messages"])
+    # print("*" * 40)
+    # supervisor 已经把指代消解后的 task 写入 state。diet_agent 只需要当前轮及
+    # interrupt 恢复所需的工具消息；过滤更早轮次，避免历史 plan_agent 的
+    # get_profile 结果（例如“海鲜过敏”）干扰本轮“已经吃了，请记录”的执行。
+    messages = state.get("messages") or []
+    current_turn_start = 0
+    for i in range(len(messages) - 1, -1, -1):
+        if getattr(messages[i], "type", None) == "human":
+            current_turn_start = i
+            break
+    return [system] + messages[current_turn_start:]
 
 
 def make_analyze_image_node(recognizer: Optional[callable] = None) -> callable:

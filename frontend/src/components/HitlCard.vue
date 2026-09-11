@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // HITL 确认卡片：饮食记录写库前的人工确认（可编辑克数）。
 // 编辑克数时按比例线性重算营养值（营养值 = 每克 × 克数，原条目已含绝对营养值）。
-import { reactive, computed } from 'vue'
+import { reactive, computed, ref } from 'vue'
 import { confidenceLabel, mealLabel } from '@/utils/labels'
 import type { DietConfirmPayload, DietDraftItem } from '@/types'
 
 const props = defineProps<{ payload: DietConfirmPayload }>()
 const emit = defineEmits<{
-  (e: 'confirm', items: DietDraftItem[]): void
+  (e: 'confirm', items: DietDraftItem[], allergyAcknowledged: boolean): void
   (e: 'cancel'): void
 }>()
 
@@ -22,12 +22,15 @@ const items = reactive<EditableItem[]>(
 const totalCalories = computed(() =>
   items.reduce((s, it) => s + it.calories * (it.grams / it._origGrams), 0),
 )
+const allergyRisks = computed(() => props.payload.allergy_risks ?? [])
+const allergyAcknowledged = ref(false)
 
 function confidenceType(c: string) {
   return c === 'llm_estimate' ? 'warning' : c === 'db_exact' ? 'success' : 'info'
 }
 
 function confirm() {
+  if (allergyRisks.value.length > 0 && !allergyAcknowledged.value) return
   emit(
     'confirm',
     items.map((it) => {
@@ -43,6 +46,7 @@ function confirm() {
         confidence: it.confidence,
       }
     }),
+    allergyAcknowledged.value,
   )
 }
 </script>
@@ -88,13 +92,31 @@ function confirm() {
       </tbody>
     </table>
 
+    <div v-if="allergyRisks.length" class="allergy-warning">
+      <div class="warning-title">⚠️ 检测到档案中的过敏风险</div>
+      <div v-for="risk in allergyRisks" :key="risk.allergen" class="warning-item">
+        {{ risk.message }}
+      </div>
+      <el-checkbox v-model="allergyAcknowledged" class="warning-check">
+        我已知悉上述风险，仍要记录已发生的饮食
+      </el-checkbox>
+      <div v-if="payload.confirmation_error" class="warning-error">
+        {{ payload.confirmation_error }}
+      </div>
+    </div>
+
     <div class="foot">
       <div class="sum">
         合计 <span class="num strong">{{ Math.round(totalCalories) }}</span> 千卡
       </div>
       <div class="actions">
         <el-button size="small" @click="emit('cancel')">取消</el-button>
-        <el-button size="small" type="primary" @click="confirm">确认写入</el-button>
+        <el-button
+          size="small"
+          type="primary"
+          :disabled="allergyRisks.length > 0 && !allergyAcknowledged"
+          @click="confirm"
+        >确认写入</el-button>
       </div>
     </div>
   </div>
@@ -175,5 +197,30 @@ function confirm() {
 .actions {
   display: flex;
   gap: 8px;
+}
+.allergy-warning {
+  margin: 10px 14px 0;
+  padding: 10px 12px;
+  border: 1px solid #f3c46b;
+  border-radius: var(--radius-sm);
+  background: #fff8e6;
+  color: #7a4d00;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.warning-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.warning-item {
+  margin-top: 2px;
+}
+.warning-check {
+  margin-top: 6px;
+  color: #7a4d00;
+}
+.warning-error {
+  margin-top: 4px;
+  color: #c45656;
 }
 </style>

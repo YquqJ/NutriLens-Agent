@@ -299,7 +299,7 @@ async function send(text?: string) {
   if (!live.interrupt) await refreshList()
 }
 
-async function confirmDiet(items: DietDraftItem[]) {
+async function confirmDiet(items: DietDraftItem[], allergyAcknowledged: boolean) {
   const live = pendingMsg.value
   if (!live || !activeId.value) return
   live.interrupt = null
@@ -307,7 +307,11 @@ async function confirmDiet(items: DietDraftItem[]) {
   pendingMsg.value = null
   streaming.value = true
   try {
-    await streamRequest(`/api/conversations/${activeId.value}/chat/resume`, { value: { items } }, live)
+    await streamRequest(
+      `/api/conversations/${activeId.value}/chat/resume`,
+      { value: { items, allergy_acknowledged: allergyAcknowledged } },
+      live,
+    )
   } catch (e) {
     live.content += `\n[请求失败] ${getErrorMessage(e)}`
     live.streaming = false

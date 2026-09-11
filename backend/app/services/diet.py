@@ -12,6 +12,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import DietRecord, DietRecordItem, ExerciseRecord, Food, UserProfile
+from app.services.allergy import assess_user_food_allergy_risks
+
+
+class AllergyConfirmationRequired(ValueError):
+    """写入含档案过敏风险的饮食前必须有用户明确确认。"""
+
+    def __init__(self, risks: list[dict]):
+        self.risks = risks
+        super().__init__("diet record contains food matching the user's allergy profile")
 
 
 # ----------------------------------------------------------------------
@@ -89,13 +98,25 @@ def create_diet_record(
     items: list[dict],
     record_date: date | None = None,
     source: str = "manual",
+    allergy_acknowledged: bool = False,
 ) -> dict:
     """
     写入一条饮食记录。
 
     items 元素结构：{food_name, grams, calories, protein, fat, carbs, confidence}
-    （营养值由调用方算好传入 —— Agent 工具层负责查库换算，本层只管落库）
+    （营养值由调用方算好传入 —— Agent 工具层负责查库换算，本层只管落库）。
+    source="agent" 时，若条目命中档案过敏风险，必须显式传入
+    allergy_acknowledged=True。
     """
+    # 服务层是所有写入路径的最后一道防线。Agent 工具会先展示风险确认卡片，
+    # 但即使调用方绕过工具，也不能在未确认时把高风险条目写入 agent 记录。
+    if source == "agent":
+        risks = assess_user_food_allergy_risks(
+            db, user_id, (item.get("food_name", "") for item in items)
+        )
+        if risks and not allergy_acknowledged:
+            raise AllergyConfirmationRequired(risks)
+
     rec = DietRecord(
         user_id=user_id,
         record_date=record_date or date.today(),

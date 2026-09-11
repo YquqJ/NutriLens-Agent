@@ -91,7 +91,8 @@ class ChatRequest(BaseModel):
 
 class ResumeRequest(BaseModel):
     """恢复挂起的 interrupt。value 即 resume 值：
-    饮食确认场景为 {"items": [...]}（可能被用户编辑过）或 False（取消）。"""
+    饮食确认场景为 {"items": [...], "allergy_acknowledged": bool}
+    （条目可能被用户编辑过）或 False（取消）。"""
 
     value: Any
 
