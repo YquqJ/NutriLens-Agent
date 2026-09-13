@@ -12,6 +12,53 @@ from app.core.config import settings
 from app.db.seed_knowledge import seed_knowledge
 
 
+def test_qa_agent_abstains_when_knowledge_base_has_no_answer(monkeypatch):
+    """严格 RAG：无相关切片时不得调用生成模型补充通用知识。"""
+    class FakeChecker:
+        def with_structured_output(self, _schema):
+            return self
+
+        def invoke(self, _messages):
+            from app.agents.qa_agent import QaSelfCheck
+
+            return QaSelfCheck(
+                sufficient=False,
+                rewritten_query="",
+                reason="知识库没有相关切片",
+            )
+
+    class FakeGenerator:
+        def __init__(self):
+            self.called = False
+
+        def invoke(self, _messages):
+            self.called = True
+            raise AssertionError("无证据时不应调用回答生成模型")
+
+    generator = FakeGenerator()
+    checker = FakeChecker()
+
+    def fake_get_text_llm(*, streaming=True):
+        return generator if streaming else checker
+
+    class FakeDb:
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.agents.qa_agent.get_text_llm", fake_get_text_llm)
+    monkeypatch.setattr("app.agents.qa_agent.SessionLocal", lambda: FakeDb())
+    monkeypatch.setattr("app.agents.qa_agent.retrieve", lambda *_args, **_kwargs: [])
+
+    result = make_qa_agent()(
+        {"messages": [HumanMessage("量子计算机的纠错率是多少")], "task": ""}
+    )
+
+    assert result["messages"][-1].content == (
+        "知识库中未找到与该问题直接相关的信息，暂时无法可靠回答。"
+    )
+    assert generator.called is False
+
+
 @pytest.fixture(scope="module", autouse=True)
 def knowledge_ready():
     """保证知识库已 seed（幂等）。"""

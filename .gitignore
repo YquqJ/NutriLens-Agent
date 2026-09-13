@@ -21,6 +21,7 @@ frontend/.env.local
 # ---- 个人文档（不入库）----
 docs/INTERVIEW_CASES.md
 docs/RAG_REVIEW.md
+docs/learning/
 
 # ---- IDE / 系统 ----
 .idea/
