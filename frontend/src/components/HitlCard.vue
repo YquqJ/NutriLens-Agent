@@ -83,7 +83,7 @@ function confirm() {
             <span class="unit">克</span>
           </td>
           <td class="r num">{{ Math.round(it.calories * (it.grams / it._origGrams)) }}</td>
-          <td>
+          <td style="display: flex;">
             <el-tag :type="confidenceType(it.confidence)" size="small" effect="plain">
               {{ confidenceLabel(it.confidence) }}
             </el-tag>

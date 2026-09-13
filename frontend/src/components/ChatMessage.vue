@@ -80,7 +80,7 @@ function formatTime(iso: string | null | undefined) {
       <div class="body">
         <span v-if="message.agentName" class="agent" :class="toneClass(message.agentName)">{{ agentLabel(message.agentName) }}</span>
 
-        <div class="bubble assistant-bubble">
+        <div v-if="message.content || message.streaming" class="bubble assistant-bubble">
           <template v-if="message.content">
             <template v-for="(part, index) in contentParts" :key="index">
               <button
@@ -93,7 +93,7 @@ function formatTime(iso: string | null | undefined) {
               <template v-else>{{ part.value }}</template>
             </template>
           </template>
-          <span v-else-if="message.streaming" class="typing">
+          <span v-else class="typing">
             <svg class="spin" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M21 12a9 9 0 1 1-6.2-8.56" />
             </svg>

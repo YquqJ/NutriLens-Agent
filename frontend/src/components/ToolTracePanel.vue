@@ -1,10 +1,41 @@
 <script setup lang="ts">
 // 工具轨迹折叠面板（对齐 CookHero thinking block）：灰底圆角卡片头，流式中显示 spinner，展开列出各工具调用。
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { toolLabel } from '@/utils/labels'
 import type { ToolTraceEntry } from '@/types'
 
-defineProps<{ entries: ToolTraceEntry[]; streaming?: boolean }>()
+const props = defineProps<{ entries: ToolTraceEntry[]; streaming?: boolean }>()
+
+type DisplayEntry = {
+  entry: ToolTraceEntry
+  children?: ToolTraceEntry[]
+}
+
+// 图片识别后的饮食流程会为每种食物各查一次营养库。保留后端逐项调用，
+// 仅在展示层把连续 search_food 合并，避免用户看到一串重复的“检索食物”。
+const displayEntries = computed<DisplayEntry[]>(() => {
+  const groups: DisplayEntry[] = []
+  for (const entry of props.entries) {
+    const previous = groups[groups.length - 1]
+    if (entry.name === 'search_food' && previous?.entry.name === 'search_food_batch') {
+      previous.children?.push(entry)
+      continue
+    }
+    if (entry.name === 'search_food') {
+      groups.push({
+        entry: {
+          name: 'search_food_batch',
+          args: {},
+          result: '',
+        },
+        children: [entry],
+      })
+      continue
+    }
+    groups.push({ entry })
+  }
+  return groups
+})
 
 const open = ref(false)
 </script>
@@ -23,7 +54,7 @@ const open = ref(false)
           <path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" />
         </svg>
         <span class="title">执行过程</span>
-        <span v-if="entries.length" class="count">{{ entries.length }}</span>
+        <span v-if="displayEntries.length" class="count">{{ displayEntries.length }}</span>
       </span>
       <svg class="chev" :class="{ rot: open }" viewBox="0 0 24 24" aria-hidden="true">
         <path d="m6 9 6 6 6-6" />
@@ -31,15 +62,26 @@ const open = ref(false)
     </button>
 
     <div v-show="open" class="trace-body">
-      <div v-for="(e, i) in entries" :key="i" class="entry">
+      <div v-for="(group, i) in displayEntries" :key="i" class="entry">
         <div class="entry-head">
           <span class="idx">{{ i + 1 }}</span>
-          <span class="name">{{ toolLabel(e.name) }}</span>
+          <span class="name">{{ toolLabel(group.entry.name) }}</span>
+          <span v-if="group.children" class="group-count">{{ group.children.length }} 项</span>
         </div>
-        <div v-if="e.result" class="result">{{ e.result }}</div>
-        <div v-if="e.reason" class="reason">{{ e.reason }}</div>
-        <div v-if="e.args && Object.keys(e.args).length" class="args">
-          {{ JSON.stringify(e.args) }}
+        <div v-if="group.entry.result" class="result">{{ group.entry.result }}</div>
+        <div v-if="group.entry.reason" class="reason">{{ group.entry.reason }}</div>
+        <div v-if="group.entry.args && Object.keys(group.entry.args).length" class="args">
+          {{ JSON.stringify(group.entry.args) }}
+        </div>
+        <div v-if="group.children" class="children">
+          <div v-for="(child, childIndex) in group.children" :key="childIndex" class="child">
+            <div class="child-head">
+              <span class="child-index">{{ childIndex + 1 }}</span>
+              <span class="child-query">{{ child.args?.query || '食物' }}</span>
+            </div>
+            <div v-if="child.result" class="child-result">{{ child.result }}</div>
+            <div v-if="child.reason" class="reason">{{ child.reason }}</div>
+          </div>
         </div>
       </div>
       <div v-if="streaming && !entries.length" class="pending">等待工具调用…</div>
@@ -157,6 +199,12 @@ const open = ref(false)
   font-weight: 600;
   color: var(--text);
 }
+.group-count {
+  margin-left: 2px;
+  color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 400;
+}
 .result {
   margin-top: 4px;
   font-size: 13px;
@@ -179,5 +227,39 @@ const open = ref(false)
   color: var(--muted);
   white-space: pre-wrap;
   word-break: break-all;
+}
+.children {
+  margin-top: 6px;
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+}
+.child {
+  padding: 5px 0;
+  border-top: 1px solid var(--surface-hover);
+}
+.child:first-child {
+  border-top: none;
+}
+.child-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.child-index {
+  color: var(--muted-2);
+  font-size: 11px;
+  font-family: var(--font-num);
+}
+.child-query {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+.child-result {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>

@@ -25,7 +25,12 @@ router = APIRouter(prefix="/api", tags=["records"])
 
 def _parse_date(s: str | None) -> date:
     """Query 参数日期解析（YYYY-MM-DD），缺省今天。"""
-    return date.fromisoformat(s) if s else date.today()
+    if not s:
+        return date.today()
+    try:
+        return date.fromisoformat(s)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="日期格式应为 YYYY-MM-DD") from exc
 
 
 # ----------------------------------------------------------------------

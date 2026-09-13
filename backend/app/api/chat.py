@@ -65,6 +65,50 @@ _TITLE_SYSTEM = (
 _TITLE_FALLBACK_LEN = 12
 
 
+def _normalize_assistant_content(content: str) -> str:
+    """把误泄漏到助手正文的图片识别 JSON 转成用户可读摘要。
+
+    图片识别结果是内部协议，不应直接展示给用户。正常的自然语言回复
+    原样返回；只有形如 ``{"items": [{"food_name": ..., ...}]}`` 的结果
+    才做确定性转换，避免误伤普通回答。
+    """
+    if not content:
+        return content
+
+    candidate = content.strip()
+    if candidate.startswith("```") and candidate.endswith("```"):
+        lines = candidate.splitlines()
+        candidate = "\n".join(lines[1:-1]).strip()
+        if candidate.lower().startswith("json\n"):
+            candidate = candidate[5:].lstrip()
+
+    try:
+        payload = json.loads(candidate)
+    except (TypeError, json.JSONDecodeError):
+        return content
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+        return content
+
+    items: list[str] = []
+    for item in payload["items"]:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("food_name")
+        grams = item.get("estimated_grams")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        if isinstance(grams, (int, float)) and not isinstance(grams, bool):
+            grams_text = f"{grams:g}"
+            items.append(f"{name.strip()}约{grams_text}克")
+        else:
+            items.append(name.strip())
+
+    if not items:
+        return content
+    return f"我识别到这顿饭包括：{'、'.join(items)}。请确认是否记录。"
+
+
 async def _generate_title(content: str) -> str:
     """根据会话首条消息生成语义标题；LLM 失败时退回截取首条前 N 字。"""
     try:
@@ -145,6 +189,9 @@ def _run_graph_and_stream(
     seen_calls: set[str] = set()  # 已发过的工具调用内容键（resume 后 react 子图会重放相同差量）
     current_agent: Optional[str] = None  # 产出最终回复的 agent（落 agent_name）
     interrupted = False
+    # 首轮带图请求可能先收到视觉模型的结构化 JSON。先暂存 token，
+    # 避免 JSON 在确认卡片出现前闪现给用户；完成/中断时统一走正文规范化。
+    hold_tokens = isinstance(graph_input, dict) and bool(graph_input.get("image_url"))
 
     try:
         for mode, chunk in graph.stream(
@@ -155,7 +202,8 @@ def _run_graph_and_stream(
                 # 只推文本增量：content 为空的分片是 tool_call 编码，跳过
                 if msg.type == "AIMessageChunk" and isinstance(msg.content, str) and msg.content:
                     token_buffer.append(msg.content)
-                    yield _sse("token", {"content": msg.content})
+                    if not hold_tokens:
+                        yield _sse("token", {"content": msg.content})
                 continue
 
             # ---- updates：节点级状态差量 ----
@@ -200,7 +248,13 @@ def _run_graph_and_stream(
         if interrupted:
             # 挂起等用户：不落 assistant 消息（草稿在 interrupt 事件里，
             # resume 完成后由下一轮流统一落库），也不结束会话
-            yield _sse("done", {"interrupted": True})
+            yield _sse(
+                "done",
+                {
+                    "interrupted": True,
+                    "content": _normalize_assistant_content("".join(token_buffer)),
+                },
+            )
             return
 
         # ---- 流结束：取最终 state 里最后一条 AI 消息作为 assistant 汇报 ----
@@ -209,7 +263,7 @@ def _run_graph_and_stream(
             if m.type == "ai":
                 content = m.content if isinstance(m.content, str) else ""
                 break
-        content = content or "".join(token_buffer)
+        content = _normalize_assistant_content(content or "".join(token_buffer))
 
         if content:
             db = SessionLocal()
