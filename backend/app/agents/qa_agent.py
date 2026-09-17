@@ -19,7 +19,7 @@ qa_agent —— 知识问答专职 worker（M4.5：Agentic RAG 形态）。
 
 from typing import Optional
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from app.agents.llm import get_text_llm
@@ -39,12 +39,14 @@ QA_SYSTEM_PROMPT = """你是营养与运动知识顾问，基于检索到的知�
 工作纪律：
 1. 回答依据优先来自下方【知识库切片】，引用处标注编号如 [1][2]；编号只能使用本轮
    "可用引用编号"中列出的值，不得将页码、片段号或其他数字写成 [n]；
-2. 切片未覆盖的部分可以用可靠的通用知识补充，但不要标注编号；
+2. 回答中的事实必须能被知识库切片直接支持；如果切片未覆盖问题，必须明确说明知识库未找到可靠信息，禁止用通用知识补充；
 3. 只讲营养/饮食/运动领域的通用知识，不查询、不臆测用户本人的记录数据
    （用户问"我今天吃了多少"不归你管，那需要查库）；
 4. 涉及医疗诊断、用药的问题，提醒用户咨询医生，不给出诊疗结论；
 5. 回答控制在三五句话内，先给结论再给依据；不要自行输出“参考来源”列表，
    系统会在回答后追加可核验的来源目录。"""
+
+_NO_EVIDENCE_REPLY = "知识库中未找到与该问题直接相关的信息，暂时无法可靠回答。"
 
 _SELF_CHECK_PROMPT = """你是检索质量审查员。判断下方知识库切片是否足以回答用户问题：
 - 充分：切片包含与问题直接相关的具体信息（数值、方法、结论）；
@@ -91,7 +93,7 @@ def _trace_entry(query: str, round_no: int, results: list[dict], reason: str) ->
 def _context_block(results: list[dict]) -> str:
     """检索切片格式化为带编号的上下文块（引用编号与来源列表共用）。"""
     if not results:
-        return "（本次未检索到相关切片，请用可靠的通用知识回答并说明）"
+        return "（本次未检索到相关知识库切片）"
     lines = [
         f"[{i}] 证据定位：{citation_label(r)}\n正文：{r['content']}"
         for i, r in enumerate(results, start=1)
@@ -110,6 +112,25 @@ def make_qa_agent():
         question = _question_from(state)
         trace: list[dict] = []
 
+        def run_self_check(results_to_check: list[dict], round_no: int) -> QaSelfCheck:
+            check = check_llm.invoke(
+                [
+                    ("system", _SELF_CHECK_PROMPT),
+                    (
+                        "user",
+                        f"用户问题：{question}\n\n知识库切片：\n{_context_block(results_to_check)}",
+                    ),
+                ]
+            )
+            trace.append(
+                {
+                    "name": "self_check",
+                    "args": {"query": question, "round": round_no},
+                    "result": f"sufficient={check.sufficient}（{check.reason}）",
+                }
+            )
+            return check
+
         db = SessionLocal()  # 知识库是全局的，不涉用户数据，无需 user_id
         try:
             # ---- 第 1 轮检索 ----
@@ -117,22 +138,7 @@ def make_qa_agent():
             trace.append(_trace_entry(question, 1, results, reason="初检"))
 
             # ---- 自检：不足则改写重检（≤2 轮）----
-            check: Optional[QaSelfCheck] = check_llm.invoke(
-                [
-                    ("system", _SELF_CHECK_PROMPT),
-                    (
-                        "user",
-                        f"用户问题：{question}\n\n知识库切片：\n{_context_block(results)}",
-                    ),
-                ]
-            )
-            trace.append(
-                {
-                    "name": "self_check",
-                    "args": {"query": question, "round": 1},
-                    "result": f"sufficient={check.sufficient}（{check.reason}）",
-                }
-            )
+            check: Optional[QaSelfCheck] = run_self_check(results, 1)
             if not check.sufficient and check.rewritten_query:
                 results2 = retrieve(db, check.rewritten_query, top_k=4)
                 trace.append(
@@ -147,6 +153,15 @@ def make_qa_agent():
                 seen = {r["id"] for r in results2}
                 results = results2 + [r for r in results if r["id"] not in seen]
                 results = results[:6]
+                # 重写检索后重新审查最终证据，不能沿用第一轮“不足”的结论。
+                check = run_self_check(results, 2)
+
+            if not check.sufficient:
+                return {
+                    "messages": [AIMessage(content=_NO_EVIDENCE_REPLY)],
+                    "tool_calls": trace,
+                    "citations": [],
+                }
 
             # ---- 带来源生成 ----
             citations = citation_payloads(results)

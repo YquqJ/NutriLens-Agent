@@ -17,14 +17,18 @@ BM25 索引每次查询时全量重建：知识库千级切片重建 <10ms，不
 为省这点耗时引入增量索引的一致性复杂度——量级上来再换常驻缓存。
 """
 
+from typing import Literal
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import KnowledgeChunk
 from app.rag.embedding import embed_query
+from app.rag.rerank import rerank
 
 # RRF 常数（惯例 60）：越大两路排名差异对融合分影响越平缓
 RRF_K = 60
+RetrievalMode = Literal["vector", "bm25", "hybrid_rrf", "hybrid_rerank"]
 
 
 def _tokenize(text: str) -> list[str]:
@@ -88,6 +92,7 @@ def hybrid_search(db: Session, query: str, top_k: int = 5) -> list[dict]:
             "id": e["chunk"].id,
             "document_id": e["chunk"].document_id,
             "content": e["chunk"].content,
+            "source_key": e["chunk"].document.source_key,
             "source_title": e["chunk"].document.source_title,
             "topic": e["chunk"].topic,
             "page_number": e["chunk"].page_number,
@@ -100,6 +105,56 @@ def hybrid_search(db: Session, query: str, top_k: int = 5) -> list[dict]:
     ]
 
 
+def _chunk_to_result(chunk: KnowledgeChunk) -> dict:
+    """将向量/BM25 返回的 ORM 切片统一成评测和 QA 可消费的结构。"""
+    return {
+        "id": chunk.id,
+        "document_id": chunk.document_id,
+        "content": chunk.content,
+        "source_key": chunk.document.source_key,
+        "source_title": chunk.document.source_title,
+        "topic": chunk.topic,
+        "page_number": chunk.page_number,
+        "section": chunk.section,
+        "chunk_index": chunk.chunk_index,
+    }
+
+
+def _rerank_candidates(query: str, candidates: list[dict], top_k: int) -> list[dict]:
+    if not candidates:
+        return []
+    pairs = rerank(query, [candidate["content"] for candidate in candidates], top_n=top_k)
+    return [
+        {**candidates[index], "relevance_score": score}
+        for index, score in pairs
+    ]
+
+
+def retrieve_by_mode(
+    db: Session,
+    query: str,
+    top_k: int = 5,
+    mode: RetrievalMode = "hybrid_rerank",
+) -> list[dict]:
+    """按实验模式执行检索，并返回统一的候选结构。
+
+    该入口服务于离线消融评测；线上 QA 仍可继续调用 ``retrieve``。
+    """
+    if mode == "vector":
+        return [_chunk_to_result(chunk) for chunk in vector_search(db, embed_query(query), top_k)]
+    if mode == "bm25":
+        return [_chunk_to_result(chunk) for chunk in keyword_search(db, query, top_k)]
+    if mode == "hybrid_rrf":
+        return hybrid_search(db, query, top_k=top_k)
+    if mode == "hybrid_rerank":
+        candidates = hybrid_search(db, query, top_k=top_k * 2)
+        try:
+            return _rerank_candidates(query, candidates, top_k)
+        except Exception:
+            return candidates[:top_k]
+    raise ValueError(f"未知检索模式：{mode}")
+
+
 def retrieve(db: Session, query: str, top_k: int = 5) -> list[dict]:
     """
     完整检索管线（M4.3 接线）：混合召回（求全）→ rerank 精排（求准）。
@@ -108,18 +163,4 @@ def retrieve(db: Session, query: str, top_k: int = 5) -> list[dict]:
     粗排结果可用总比整条问答链路报错好，rerank 顺序是锦上添花而非
     正确性依赖。失败静默降级但把 rrf_score 保留在结果里可追溯。
     """
-    candidates = hybrid_search(db, query, top_k=top_k * 2)
-    if not candidates:
-        return []
-    try:
-        from app.rag.rerank import rerank
-
-        pairs = rerank(query, [c["content"] for c in candidates], top_n=top_k)
-        reranked = []
-        for idx, score in pairs:
-            item = dict(candidates[idx])
-            item["relevance_score"] = score
-            reranked.append(item)
-        return reranked
-    except Exception:
-        return candidates[:top_k]
+    return retrieve_by_mode(db, query, top_k=top_k, mode="hybrid_rerank")

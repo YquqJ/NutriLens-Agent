@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 import re
+from typing import Literal
 
 from pypdf import PdfReader
 
@@ -18,15 +19,52 @@ PDF_SOURCE_TITLE = "通用营养与运动科学常识知识库"
 PDF_SOURCE_PATH = (
     Path(__file__).resolve().parents[2]
     / "data"
+    / "knowledge"
     / "通用营养与运动科学常识知识库.pdf"
+)
+ADULT_DIET_SOURCE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "knowledge"
+    / "成年人膳食决策与体重管理实践手册.pdf"
+)
+EXERCISE_SAFETY_SOURCE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "knowledge"
+    / "运动处方、恢复与特殊人群安全手册.pdf"
 )
 PARSER_VERSION = "pdf-text-v1"
 
 _CHAPTER_RE = re.compile(r"^第[一二三四五六七八九十百]+章(?:\s+.*)?$")
+_TOP_LEVEL_RE = re.compile(r"^\d{1,2}\.\s+.*$")
 _SUBSECTION_RE = re.compile(r"^\d{1,2}\.\d{1,2}\s+.*$")
 _APPENDIX_RE = re.compile(r"^附录(?:\s*[A-Z])?.*$")
 _MAX_CHARS = 600
 _OVERLAP_CHARS = 80
+SplitMode = Literal["section_aware", "fixed"]
+
+
+@dataclass(frozen=True)
+class KnowledgeSource:
+    source_key: str
+    source_title: str
+    path: Path
+
+
+KNOWLEDGE_SOURCES = (
+    KnowledgeSource(PDF_SOURCE_KEY, PDF_SOURCE_TITLE, PDF_SOURCE_PATH),
+    KnowledgeSource(
+        "adult_diet_weight_management_pdf",
+        "成年人膳食决策与体重管理实践手册",
+        ADULT_DIET_SOURCE_PATH,
+    ),
+    KnowledgeSource(
+        "exercise_recovery_safety_pdf",
+        "运动处方、恢复与特殊人群安全手册",
+        EXERCISE_SAFETY_SOURCE_PATH,
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -62,6 +100,7 @@ def _normalize_text(text: str) -> str:
 def _is_heading(line: str) -> bool:
     return bool(
         _CHAPTER_RE.match(line)
+        or _TOP_LEVEL_RE.match(line)
         or _SUBSECTION_RE.match(line)
         or _APPENDIX_RE.match(line)
     )
@@ -101,12 +140,18 @@ def _split_text(text: str) -> list[str]:
     return chunks
 
 
-def extract_pdf_chunks(path: Path = PDF_SOURCE_PATH) -> tuple[int, list[ExtractedChunk]]:
+def extract_pdf_chunks(
+    path: Path = PDF_SOURCE_PATH,
+    *,
+    split_mode: SplitMode = "section_aware",
+) -> tuple[int, list[ExtractedChunk]]:
     """提取 PDF 文本层并按页码、章节切片。
 
     不做 OCR 兜底：当前资料是有文本层的 PDF；扫描件应在未来上传管线中进入
     独立 OCR 分支，不能把“提取为空”静默地当成可入库文档。
     """
+    if split_mode not in {"section_aware", "fixed"}:
+        raise ValueError(f"未知切分模式：{split_mode}")
     if not path.is_file():
         raise FileNotFoundError(f"知识文档不存在：{path}")
 
@@ -123,6 +168,18 @@ def extract_pdf_chunks(path: Path = PDF_SOURCE_PATH) -> tuple[int, list[Extracte
         if not text:
             raise ValueError(f"第 {page_number} 页未提取到文本；该文件需要 OCR 后再导入")
 
+        if split_mode == "fixed":
+            for content in _split_text(text):
+                chunks.append(
+                    ExtractedChunk(
+                        content=content,
+                        page_number=page_number,
+                        section=f"page:{page_number}",
+                        chunk_index=len(chunks),
+                    )
+                )
+            continue
+
         section_blocks: list[tuple[str, str]] = []
         lines: list[str] = []
 
@@ -137,7 +194,7 @@ def extract_pdf_chunks(path: Path = PDF_SOURCE_PATH) -> tuple[int, list[Extracte
                 continue
             if _is_heading(line):
                 flush_block()
-                if _CHAPTER_RE.match(line):
+                if _CHAPTER_RE.match(line) or _TOP_LEVEL_RE.match(line):
                     current_chapter = line
                     current_section = line
                 elif _SUBSECTION_RE.match(line):

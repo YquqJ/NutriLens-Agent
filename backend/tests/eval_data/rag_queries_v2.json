@@ -1,0 +1,310 @@
+{
+  "schema_version": "rag-eval-v2",
+  "evidence": {
+    "diet_weight_trend": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 2,
+      "text": "并结合至少连续两周的平均趋势进行判断"
+    },
+    "diet_red_flags": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 2,
+      "text": "出现持续胸痛、晕厥、严重乏力、反复低血糖"
+    },
+    "meal_four_parts": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 3,
+      "text": "一餐可以按“蔬菜、优质蛋白、主食、适量脂肪”四部分检查"
+    },
+    "palm_estimate": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 3,
+      "text": "一掌心熟制蛋白质、一拳主食、两拳非淀粉类蔬菜"
+    },
+    "protein_distribution": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 3,
+      "text": "蛋白质不仅影响总摄入量，也受全天分配影响"
+    },
+    "diet_carb_context": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 4,
+      "text": "需要管理的通常不是“能不能吃碳水”，而是来源、份量和食用场景"
+    },
+    "diet_gi": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 4,
+      "text": "血糖生成指数 GI 反映含碳水食物升高血糖的相对速度"
+    },
+    "diet_gl": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 4,
+      "text": "血糖负荷 GL 同时考虑 GI 和实际摄入的碳水克数"
+    },
+    "sodium_formula": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 5,
+      "text": "食盐克数 = 钠毫克数 × 2.5 ÷ 1000"
+    },
+    "label_basis": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 5,
+      "text": "先确认数据按“每100克”“每100毫升”还是“每份”标示"
+    },
+    "eating_out_sauce": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 6,
+      "text": "要求酱汁分开，避免把所有汤汁拌入主食"
+    },
+    "plateau_data": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 7,
+      "text": "是否使用周平均体重，而不是单日最低值"
+    },
+    "vegetarian_protein": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 8,
+      "text": "素食者可组合大豆及其制品、杂豆、全谷物、坚果和种子"
+    },
+    "diabetes_staple": {
+      "source_key": "adult_diet_weight_management_pdf",
+      "page_number": 8,
+      "text": "糖尿病膳食管理并不等于完全取消主食"
+    },
+    "exercise_red_flags": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 2,
+      "text": "运动中胸痛、胸闷、明显心悸或接近晕厥"
+    },
+    "weekly_activity": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 3,
+      "text": "每周进行 150-300 分钟中等强度有氧活动"
+    },
+    "strength_two_days": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 3,
+      "text": "每周至少两天进行覆盖主要肌群的力量训练"
+    },
+    "older_balance": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 3,
+      "text": "每周三天或更多天加入强调平衡与力量的多组分活动"
+    },
+    "talk_test": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 3,
+      "text": "中等强度时可以说完整句子但唱歌困难；高强度时通常只能说短句"
+    },
+    "fitt_new": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 4,
+      "text": "FITT由频率 Frequency、强度 Intensity、时间 Time 和类型 Type 组成"
+    },
+    "progressive_overload": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 4,
+      "text": "不应同时快速增加所有变量"
+    },
+    "tracker_calories": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 5,
+      "text": "更适合观察同一设备下的趋势，而不是作为精确的进食抵扣凭证"
+    },
+    "fat_burning_switch": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 5,
+      "text": "不存在统一的燃脂开关"
+    },
+    "exercise_preworkout": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 6,
+      "text": "运动前一到三小时可根据耐受情况摄入含碳水和适量蛋白质的餐食"
+    },
+    "fasted_exercise": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 6,
+      "text": "空腹运动并不会自动带来更大的长期减脂效果"
+    },
+    "postworkout_total": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 6,
+      "text": "运动后补充蛋白质有助于肌肉修复，碳水有助于恢复糖原"
+    },
+    "recovery_signs": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 7,
+      "text": "连续训练表现下降、静息心率异常升高、睡眠变差"
+    },
+    "exercise_diabetes": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 8,
+      "text": "不要在出现明显低血糖症状时继续训练"
+    },
+    "hypertension_breathing": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 8,
+      "text": "力量训练时应避免长时间屏气"
+    },
+    "low_impact_options": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 8,
+      "text": "可优先选择步行、骑行、游泳、椭圆机和坐姿力量训练"
+    },
+    "training_to_failure": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 9,
+      "text": "力竭是一种训练工具，不是每组必需条件"
+    }
+  },
+  "queries": [
+    {
+      "query": "减脂时为什么不能只看某一天的体重？",
+      "relevant_evidence_ids": ["diet_weight_trend"]
+    },
+    {
+      "query": "哪些情况不适合继续自己调整减脂方案？",
+      "relevant_evidence_ids": ["diet_red_flags"]
+    },
+    {
+      "query": "一餐应该检查哪四类食物？",
+      "relevant_evidence_ids": ["meal_four_parts"]
+    },
+    {
+      "query": "没有食物秤怎么粗略估算一餐份量？",
+      "relevant_evidence_ids": ["palm_estimate"]
+    },
+    {
+      "query": "蛋白质为什么适合分散到多餐摄入？",
+      "relevant_evidence_ids": ["protein_distribution"]
+    },
+    {
+      "query": "GI和GL分别考虑什么因素？",
+      "relevant_evidence_ids": ["diet_gi", "diet_gl"]
+    },
+    {
+      "query": "800毫克钠大约等于多少克盐，换算公式是什么？",
+      "relevant_evidence_ids": ["sodium_formula"]
+    },
+    {
+      "query": "阅读食品标签第一步应该确认什么？",
+      "relevant_evidence_ids": ["label_basis"]
+    },
+    {
+      "query": "外食怎样减少酱汁带来的热量误差？",
+      "relevant_evidence_ids": ["eating_out_sauce"]
+    },
+    {
+      "query": "判断减脂平台期前需要检查哪些体重记录问题？",
+      "relevant_evidence_ids": ["plateau_data"]
+    },
+    {
+      "query": "素食者可以使用哪些食物补充蛋白质？",
+      "relevant_evidence_ids": ["vegetarian_protein"]
+    },
+    {
+      "query": "糖尿病人群是不是必须完全不吃主食？",
+      "relevant_evidence_ids": ["diabetes_staple"]
+    },
+    {
+      "query": "日常管理碳水时主要应该关注什么？",
+      "relevant_evidence_ids": ["diet_carb_context"]
+    },
+    {
+      "query": "成年人每周需要多少中等强度有氧活动？",
+      "relevant_evidence_ids": ["weekly_activity"]
+    },
+    {
+      "query": "成年人每周至少应该练几天主要肌群力量？",
+      "relevant_evidence_ids": ["strength_two_days"]
+    },
+    {
+      "query": "老年人平衡与力量组合训练建议每周做几天？",
+      "relevant_evidence_ids": ["older_balance"]
+    },
+    {
+      "query": "如何用谈话测试区分中等和高强度运动？",
+      "relevant_evidence_ids": ["talk_test"]
+    },
+    {
+      "query": "FITT运动处方的四个要素是什么？",
+      "relevant_evidence_ids": ["fitt_new"]
+    },
+    {
+      "query": "渐进超负荷是不是应该同时增加重量次数和组数？",
+      "relevant_evidence_ids": ["progressive_overload"]
+    },
+    {
+      "query": "运动手表显示的热量能直接抵扣饮食吗？",
+      "relevant_evidence_ids": ["tracker_calories"]
+    },
+    {
+      "query": "必须运动三十分钟以后才开始燃脂吗？",
+      "relevant_evidence_ids": ["fat_burning_switch"]
+    },
+    {
+      "query": "空腹运动一定能获得更好的减脂效果吗？",
+      "relevant_evidence_ids": ["fasted_exercise"]
+    },
+    {
+      "query": "普通健身者运动后必须抢三十分钟窗口吗？",
+      "relevant_evidence_ids": ["postworkout_total"]
+    },
+    {
+      "query": "哪些迹象可能提示训练恢复不足？",
+      "relevant_evidence_ids": ["recovery_signs"]
+    },
+    {
+      "query": "出现明显低血糖症状时还能继续运动吗？",
+      "relevant_evidence_ids": ["exercise_diabetes"]
+    },
+    {
+      "query": "高血压人群力量训练为什么需要避免憋气？",
+      "relevant_evidence_ids": ["hypertension_breathing"]
+    },
+    {
+      "query": "体重较大或关节不适适合哪些低冲击运动？",
+      "relevant_evidence_ids": ["low_impact_options"]
+    },
+    {
+      "query": "每一组力量训练都必须做到力竭才有效吗？",
+      "relevant_evidence_ids": ["training_to_failure"]
+    },
+    {
+      "query": "日常控制碳水和运动前补充碳水的关注点有什么不同？",
+      "relevant_evidence_ids": ["diet_carb_context", "exercise_preworkout"]
+    },
+    {
+      "query": "减脂平台期为什么要同时检查体重记录和训练恢复？",
+      "relevant_evidence_ids": ["plateau_data", "recovery_signs"]
+    },
+    {
+      "query": "糖尿病人群在饮食主食和运动安全上分别要注意什么？",
+      "relevant_evidence_ids": ["diabetes_staple", "exercise_diabetes"]
+    },
+    {
+      "query": "减脂或运动时出现胸痛晕厥，Agent应该怎么处理？",
+      "relevant_evidence_ids": ["diet_red_flags", "exercise_red_flags"]
+    },
+    {
+      "query": "如何配置家用无线路由器？",
+      "relevant_evidence_ids": []
+    },
+    {
+      "query": "请预测下个月黄金价格走势",
+      "relevant_evidence_ids": []
+    },
+    {
+      "query": "劳动合同试用期最长能写多久？",
+      "relevant_evidence_ids": []
+    },
+    {
+      "query": "汽车发动机故障灯亮了怎么维修？",
+      "relevant_evidence_ids": []
+    },
+    {
+      "query": "帮我写一个Vue拖拽组件",
+      "relevant_evidence_ids": []
+    }
+  ]
+}

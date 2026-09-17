@@ -1,0 +1,4299 @@
+{
+  "schema_version": "rag-ablation-v1",
+  "top_k": 8,
+  "modes": [
+    "vector",
+    "bm25",
+    "hybrid_rrf",
+    "hybrid_rerank"
+  ],
+  "results": {
+    "vector": {
+      "mode": "vector",
+      "n_queries": 47,
+      "n_positive": 42,
+      "n_negative": 5,
+      "metrics": {
+        "recall@4": 0.9523809523809523,
+        "recall@8": 0.9761904761904762,
+        "mrr": 0.7930839002267573,
+        "ndcg@4": 0.8313454351190525
+      },
+      "positive_top1_score": 0.0,
+      "negative_top1_score": 0.0,
+      "per_query": [
+        {
+          "query": "减脂期每天制造多大的热量缺口比较安全？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.3333333333333333,
+            "ndcg@4": 0.5
+          },
+          "relevant_ids": [
+            800
+          ],
+          "retrieved_ids": [
+            799,
+            806,
+            800,
+            824,
+            820,
+            818,
+            801,
+            821
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "基础代谢率BMR是什么，占每天总消耗多少比例？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            798
+          ],
+          "retrieved_ids": [
+            798,
+            799,
+            824,
+            800,
+            801,
+            807,
+            804,
+            802
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "每天总能量消耗TDEE由哪几部分组成？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            799
+          ],
+          "retrieved_ids": [
+            799,
+            807,
+            800,
+            804,
+            798,
+            806,
+            803,
+            801
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "体重增加或下降是由什么决定的？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            798
+          ],
+          "retrieved_ids": [
+            798,
+            809,
+            799,
+            825,
+            808,
+            824,
+            807,
+            826
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "简单糖和复合碳水有什么区别？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            800
+          ],
+          "retrieved_ids": [
+            800,
+            801,
+            819,
+            828,
+            824,
+            821,
+            805,
+            808
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "减脂期每天至少要吃多少克碳水？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            804,
+            806,
+            821,
+            800,
+            813,
+            805,
+            820
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "蛋白质质量用什么指标评价？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            829,
+            828,
+            822,
+            802,
+            826,
+            800,
+            824
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "反式脂肪和饱和脂肪为什么应该限制？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            802
+          ],
+          "retrieved_ids": [
+            802,
+            818,
+            809,
+            824,
+            820,
+            811,
+            825,
+            823
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "维生素C有什么作用，吃什么能补？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            802
+          ],
+          "retrieved_ids": [
+            803,
+            802,
+            804,
+            829,
+            810,
+            801,
+            828,
+            821
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "减脂期容易缺乏哪些营养素？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            804
+          ],
+          "retrieved_ids": [
+            804,
+            802,
+            809,
+            814,
+            801,
+            808,
+            813,
+            820
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "人体有哪三大供能系统？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            804
+          ],
+          "retrieved_ids": [
+            804,
+            802,
+            803,
+            800,
+            807,
+            801,
+            809,
+            816
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "慢跑一小时大概能消耗多少热量？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            805
+          ],
+          "retrieved_ids": [
+            805,
+            799,
+            824,
+            798,
+            821,
+            828,
+            806,
+            800
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "运动处方的FITT原则指什么？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            806
+          ],
+          "retrieved_ids": [
+            806,
+            810,
+            811,
+            815,
+            821,
+            805,
+            817,
+            824
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "16比8断食法具体怎么做？",
+          "metrics": {
+            "recall@4": 0.0,
+            "recall@8": 1.0,
+            "mrr": 0.14285714285714285,
+            "ndcg@4": 0.0
+          },
+          "relevant_ids": [
+            806
+          ],
+          "retrieved_ids": [
+            807,
+            820,
+            808,
+            813,
+            818,
+            824,
+            806,
+            821
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "怎样用手掌法则控制每餐份量？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            807
+          ],
+          "retrieved_ids": [
+            807,
+            825,
+            813,
+            798,
+            818,
+            806,
+            824,
+            820
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "减脂遇到平台期体重一直不降怎么办？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            808,
+            824,
+            820,
+            813,
+            809,
+            818,
+            825,
+            815
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "什么是溜溜球效应，有什么危害？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            819,
+            808,
+            817,
+            816,
+            811,
+            800,
+            824,
+            821
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "胰岛素抵抗为什么会让人更容易长胖？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            809,
+            808,
+            800,
+            799,
+            824,
+            815,
+            801,
+            817
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "为什么减脂后特别容易饿？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            813,
+            820,
+            808,
+            818,
+            824,
+            821,
+            804
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "长期压力大会导致肥胖吗？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            817,
+            820,
+            816,
+            808,
+            824,
+            825,
+            815
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "睡眠不足为什么会让人变胖？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            817,
+            820,
+            823,
+            821,
+            818,
+            799,
+            824
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "运动后什么时候补充营养最好？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            810
+          ],
+          "retrieved_ids": [
+            810,
+            804,
+            821,
+            815,
+            827,
+            814,
+            802,
+            816
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "蛋白粉和肌酸分别有什么作用？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            810
+          ],
+          "retrieved_ids": [
+            810,
+            821,
+            822,
+            802,
+            829,
+            801,
+            814,
+            823
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "减脂设定目标用SMART原则是什么意思？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.3333333333333333,
+            "ndcg@4": 0.5
+          },
+          "relevant_ids": [
+            811
+          ],
+          "retrieved_ids": [
+            806,
+            798,
+            811,
+            824,
+            825,
+            820,
+            813,
+            808
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "中老年人减脂蛋白质需求是多少？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            814
+          ],
+          "retrieved_ids": [
+            814,
+            801,
+            799,
+            822,
+            802,
+            804,
+            806,
+            828
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "2型糖尿病患者运动需要注意什么？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            816
+          ],
+          "retrieved_ids": [
+            815,
+            816,
+            806,
+            817,
+            810,
+            804,
+            805,
+            814
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "久坐办公有什么健康风险怎么缓解？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            817
+          ],
+          "retrieved_ids": [
+            817,
+            815,
+            816,
+            814,
+            803,
+            821,
+            805,
+            818
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "晚上吃东西真的更容易发胖吗？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.3333333333333333,
+            "ndcg@4": 0.5
+          },
+          "relevant_ids": [
+            817
+          ],
+          "retrieved_ids": [
+            809,
+            820,
+            817,
+            818,
+            824,
+            823,
+            821,
+            799
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "BMI怎么计算多少算肥胖？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.3333333333333333,
+            "ndcg@4": 0.5
+          },
+          "relevant_ids": [
+            824
+          ],
+          "retrieved_ids": [
+            825,
+            799,
+            824,
+            798,
+            826,
+            828,
+            800,
+            809
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "阅读食品营养标签钠含量多少算高？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            826
+          ],
+          "retrieved_ids": [
+            826,
+            828,
+            800,
+            801,
+            824,
+            802,
+            803,
+            807
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "平台期体重一直卡着不动了，怎么突破？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            808,
+            817,
+            815,
+            824,
+            820,
+            813,
+            825,
+            826
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "为什么明明吃得很少体重还是不掉？",
+          "metrics": {
+            "recall@4": 0.0,
+            "recall@8": 0.0,
+            "mrr": 0.0,
+            "ndcg@4": 0.0
+          },
+          "relevant_ids": [
+            807
+          ],
+          "retrieved_ids": [
+            809,
+            820,
+            818,
+            808,
+            824,
+            813,
+            823,
+            798
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "女生练力量会变成金刚芭比吗？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            823
+          ],
+          "retrieved_ids": [
+            822,
+            823,
+            815,
+            799,
+            817,
+            821,
+            814,
+            816
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "跑步要跑多久才开始燃烧脂肪？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            824
+          ],
+          "retrieved_ids": [
+            805,
+            824,
+            806,
+            799,
+            821,
+            810,
+            823,
+            818
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "老想暴食、总馋高热量零食是怎么回事？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.3333333333333333,
+            "ndcg@4": 0.5
+          },
+          "relevant_ids": [
+            813
+          ],
+          "retrieved_ids": [
+            809,
+            824,
+            813,
+            800,
+            826,
+            820,
+            819,
+            828
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "DIAAS 和 PDCAAS 这两个指标有什么区别？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            800,
+            824,
+            805,
+            811,
+            807,
+            828,
+            799
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "VO2max 是什么，怎么测量？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            826
+          ],
+          "retrieved_ids": [
+            826,
+            824,
+            825,
+            816,
+            799,
+            798,
+            807,
+            815
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "皮褶厚度法测体脂准不准？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            824
+          ],
+          "retrieved_ids": [
+            825,
+            824,
+            826,
+            799,
+            823,
+            820,
+            818,
+            821
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "GL 和 GI 有什么区别，减脂该看哪个？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            800,
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            800,
+            805,
+            824,
+            809,
+            820,
+            799,
+            808
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "减脂期碳水和蛋白质分别该怎么吃？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            804,
+            821,
+            806,
+            810,
+            808,
+            814,
+            802
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "有哪些激素会影响体重和食欲？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808,
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            808,
+            802,
+            813,
+            801,
+            811,
+            798,
+            799
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "减脂期容易缺哪些营养素，从什么食物补充？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            804
+          ],
+          "retrieved_ids": [
+            804,
+            802,
+            814,
+            801,
+            809,
+            813,
+            808,
+            810
+          ],
+          "top1_score": 0.0
+        }
+      ],
+      "negatives": [
+        {
+          "query": "最近买什么股票比较好？",
+          "top1_score": 0.0,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:13",
+              "score": 0.0
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:2",
+              "score": 0.0
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:2",
+              "score": 0.0
+            }
+          ]
+        },
+        {
+          "query": "怎么给汽车换机油？",
+          "top1_score": 0.0,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:9",
+              "score": 0.0
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:11",
+              "score": 0.0
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:6",
+              "score": 0.0
+            }
+          ]
+        },
+        {
+          "query": "Python 里怎么画折线图？",
+          "top1_score": 0.0,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:4",
+              "score": 0.0
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:6",
+              "score": 0.0
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:4",
+              "score": 0.0
+            }
+          ]
+        },
+        {
+          "query": "跑步鞋应该怎么挑选？",
+          "top1_score": 0.0,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:12",
+              "score": 0.0
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:10",
+              "score": 0.0
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:8",
+              "score": 0.0
+            }
+          ]
+        },
+        {
+          "query": "感冒了应该吃什么药？",
+          "top1_score": 0.0,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:2",
+              "score": 0.0
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:6",
+              "score": 0.0
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:2",
+              "score": 0.0
+            }
+          ]
+        }
+      ]
+    },
+    "bm25": {
+      "mode": "bm25",
+      "n_queries": 47,
+      "n_positive": 42,
+      "n_negative": 5,
+      "metrics": {
+        "recall@4": 0.9285714285714286,
+        "recall@8": 0.9761904761904762,
+        "mrr": 0.808531746031746,
+        "ndcg@4": 0.8325514004219011
+      },
+      "positive_top1_score": 0.0,
+      "negative_top1_score": 0.0,
+      "per_query": [
+        {
+          "query": "减脂期每天制造多大的热量缺口比较安全？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            800
+          ],
+          "retrieved_ids": [
+            820,
+            800,
+            818,
+            823,
+            815,
+            810,
+            799,
+            806
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "基础代谢率BMR是什么，占每天总消耗多少比例？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            798
+          ],
+          "retrieved_ids": [
+            798,
+            799,
+            805,
+            823,
+            820,
+            814,
+            821,
+            818
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "每天总能量消耗TDEE由哪几部分组成？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            799
+          ],
+          "retrieved_ids": [
+            799,
+            798,
+            807,
+            806,
+            823,
+            818,
+            808,
+            817
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "体重增加或下降是由什么决定的？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            798
+          ],
+          "retrieved_ids": [
+            798,
+            815,
+            805,
+            817,
+            820,
+            818,
+            799,
+            804
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "简单糖和复合碳水有什么区别？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            800
+          ],
+          "retrieved_ids": [
+            800,
+            817,
+            805,
+            804,
+            810,
+            801,
+            806,
+            813
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "减脂期每天至少要吃多少克碳水？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.3333333333333333,
+            "ndcg@4": 0.5
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            813,
+            804,
+            801,
+            815,
+            806,
+            809,
+            810,
+            823
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "蛋白质质量用什么指标评价？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            810,
+            827,
+            821,
+            820,
+            818,
+            828,
+            822
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "反式脂肪和饱和脂肪为什么应该限制？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            802
+          ],
+          "retrieved_ids": [
+            816,
+            802,
+            826,
+            824,
+            823,
+            820,
+            818,
+            800
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "维生素C有什么作用，吃什么能补？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            802
+          ],
+          "retrieved_ids": [
+            802,
+            803,
+            804,
+            814,
+            821,
+            815,
+            818,
+            810
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "减脂期容易缺乏哪些营养素？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            804
+          ],
+          "retrieved_ids": [
+            804,
+            813,
+            801,
+            815,
+            802,
+            810,
+            809,
+            819
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "人体有哪三大供能系统？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            804
+          ],
+          "retrieved_ids": [
+            804,
+            805,
+            826,
+            806,
+            802,
+            827,
+            811,
+            800
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "慢跑一小时大概能消耗多少热量？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            805
+          ],
+          "retrieved_ids": [
+            805,
+            821,
+            799,
+            810,
+            807,
+            817,
+            806,
+            798
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "运动处方的FITT原则指什么？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            806
+          ],
+          "retrieved_ids": [
+            806,
+            805,
+            823,
+            811,
+            821,
+            813,
+            824,
+            810
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "16比8断食法具体怎么做？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            806
+          ],
+          "retrieved_ids": [
+            806,
+            811,
+            829,
+            798,
+            821
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "怎样用手掌法则控制每餐份量？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            807
+          ],
+          "retrieved_ids": [
+            807,
+            813,
+            806,
+            817,
+            815,
+            820,
+            818,
+            802
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "减脂遇到平台期体重一直不降怎么办？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            808,
+            799,
+            807,
+            805,
+            815,
+            820,
+            801,
+            798
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "什么是溜溜球效应，有什么危害？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            808,
+            806,
+            819,
+            811,
+            816,
+            810,
+            826,
+            805
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "胰岛素抵抗为什么会让人更容易长胖？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.3333333333333333,
+            "ndcg@4": 0.5
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            815,
+            809,
+            808,
+            813,
+            805,
+            806,
+            801
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "为什么减脂后特别容易饿？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            809
+          ],
+          "retrieved_ids": [
+            813,
+            809,
+            820,
+            815,
+            804,
+            808,
+            805,
+            818
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "长期压力大会导致肥胖吗？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            820,
+            802,
+            825,
+            824,
+            800,
+            808,
+            805
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "睡眠不足为什么会让人变胖？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            827,
+            815,
+            804
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "运动后什么时候补充营养最好？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            810
+          ],
+          "retrieved_ids": [
+            821,
+            810,
+            820,
+            804,
+            815,
+            805,
+            826,
+            814
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "蛋白粉和肌酸分别有什么作用？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            810
+          ],
+          "retrieved_ids": [
+            810,
+            821,
+            801,
+            802,
+            828,
+            822,
+            814,
+            807
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "减脂设定目标用SMART原则是什么意思？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            811
+          ],
+          "retrieved_ids": [
+            811,
+            806,
+            807,
+            813,
+            805,
+            808,
+            800,
+            821
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "中老年人减脂蛋白质需求是多少？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            814
+          ],
+          "retrieved_ids": [
+            814,
+            801,
+            822,
+            816,
+            810,
+            807,
+            813,
+            828
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "2型糖尿病患者运动需要注意什么？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            816
+          ],
+          "retrieved_ids": [
+            815,
+            816,
+            827,
+            804,
+            814,
+            821,
+            810,
+            805
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "久坐办公有什么健康风险怎么缓解？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            817
+          ],
+          "retrieved_ids": [
+            817,
+            815,
+            808,
+            805,
+            825,
+            800,
+            802,
+            814
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "晚上吃东西真的更容易发胖吗？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            817
+          ],
+          "retrieved_ids": [
+            817,
+            815,
+            820,
+            813
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "BMI怎么计算多少算肥胖？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            824
+          ],
+          "retrieved_ids": [
+            824,
+            825,
+            798,
+            809,
+            821,
+            799,
+            807,
+            805
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "阅读食品营养标签钠含量多少算高？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            826
+          ],
+          "retrieved_ids": [
+            826,
+            818,
+            814,
+            804,
+            805,
+            827,
+            798,
+            810
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "平台期体重一直卡着不动了，怎么突破？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            799,
+            808,
+            807,
+            805,
+            815,
+            798,
+            820,
+            827
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "为什么明明吃得很少体重还是不掉？",
+          "metrics": {
+            "recall@4": 0.0,
+            "recall@8": 0.0,
+            "mrr": 0.0,
+            "ndcg@4": 0.0
+          },
+          "relevant_ids": [
+            807
+          ],
+          "retrieved_ids": [
+            798,
+            820,
+            827,
+            801,
+            822,
+            808,
+            799,
+            813
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "女生练力量会变成金刚芭比吗？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            823
+          ],
+          "retrieved_ids": [
+            822,
+            823,
+            816,
+            814,
+            805,
+            806,
+            820,
+            808
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "跑步要跑多久才开始燃烧脂肪？",
+          "metrics": {
+            "recall@4": 0.0,
+            "recall@8": 1.0,
+            "mrr": 0.125,
+            "ndcg@4": 0.0
+          },
+          "relevant_ids": [
+            824
+          ],
+          "retrieved_ids": [
+            823,
+            818,
+            817,
+            820,
+            802,
+            816,
+            809,
+            824
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "老想暴食、总馋高热量零食是怎么回事？",
+          "metrics": {
+            "recall@4": 0.0,
+            "recall@8": 1.0,
+            "mrr": 0.16666666666666666,
+            "ndcg@4": 0.0
+          },
+          "relevant_ids": [
+            813
+          ],
+          "retrieved_ids": [
+            817,
+            808,
+            820,
+            826,
+            807,
+            813,
+            827,
+            818
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "DIAAS 和 PDCAAS 这两个指标有什么区别？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            810,
+            811,
+            807,
+            824,
+            809,
+            821,
+            820
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "VO2max 是什么，怎么测量？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            826
+          ],
+          "retrieved_ids": [
+            826,
+            824,
+            808
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "皮褶厚度法测体脂准不准？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            824
+          ],
+          "retrieved_ids": [
+            824,
+            825,
+            820,
+            818
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "GL 和 GI 有什么区别，减脂该看哪个？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            800,
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            800,
+            808,
+            805,
+            815,
+            804,
+            807,
+            817
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "减脂期碳水和蛋白质分别该怎么吃？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            810,
+            801,
+            807,
+            814,
+            809,
+            804,
+            798,
+            813
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "有哪些激素会影响体重和食欲？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 0.9197207891481876
+          },
+          "relevant_ids": [
+            808,
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            820,
+            808,
+            799,
+            811,
+            821,
+            802,
+            798
+          ],
+          "top1_score": 0.0
+        },
+        {
+          "query": "减脂期容易缺哪些营养素，从什么食物补充？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            804
+          ],
+          "retrieved_ids": [
+            804,
+            810,
+            815,
+            813,
+            801,
+            818,
+            805,
+            808
+          ],
+          "top1_score": 0.0
+        }
+      ],
+      "negatives": [
+        {
+          "query": "最近买什么股票比较好？",
+          "top1_score": 0.0,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:8",
+              "score": 0.0
+            }
+          ]
+        },
+        {
+          "query": "怎么给汽车换机油？",
+          "top1_score": 0.0,
+          "top_titles": []
+        },
+        {
+          "query": "Python 里怎么画折线图？",
+          "top1_score": 0.0,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:6",
+              "score": 0.0
+            }
+          ]
+        },
+        {
+          "query": "跑步鞋应该怎么挑选？",
+          "top1_score": 0.0,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:9",
+              "score": 0.0
+            }
+          ]
+        },
+        {
+          "query": "感冒了应该吃什么药？",
+          "top1_score": 0.0,
+          "top_titles": []
+        }
+      ]
+    },
+    "hybrid_rrf": {
+      "mode": "hybrid_rrf",
+      "n_queries": 47,
+      "n_positive": 42,
+      "n_negative": 5,
+      "metrics": {
+        "recall@4": 0.9761904761904762,
+        "recall@8": 0.9761904761904762,
+        "mrr": 0.8809523809523809,
+        "ndcg@4": 0.9058913816326586
+      },
+      "positive_top1_score": 0.03254964285714285,
+      "negative_top1_score": 0.0225032,
+      "per_query": [
+        {
+          "query": "减脂期每天制造多大的热量缺口比较安全？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            800
+          ],
+          "retrieved_ids": [
+            800,
+            820,
+            799,
+            818,
+            806,
+            823,
+            821,
+            801
+          ],
+          "top1_score": 0.032002
+        },
+        {
+          "query": "基础代谢率BMR是什么，占每天总消耗多少比例？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            798
+          ],
+          "retrieved_ids": [
+            798,
+            799,
+            824,
+            805,
+            807,
+            804,
+            806,
+            802
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "每天总能量消耗TDEE由哪几部分组成？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            799
+          ],
+          "retrieved_ids": [
+            799,
+            807,
+            798,
+            806,
+            800,
+            801,
+            808,
+            805
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "体重增加或下降是由什么决定的？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            798
+          ],
+          "retrieved_ids": [
+            798,
+            799,
+            809,
+            820,
+            815,
+            808,
+            801,
+            807
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "简单糖和复合碳水有什么区别？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            800
+          ],
+          "retrieved_ids": [
+            800,
+            801,
+            805,
+            810,
+            817,
+            828,
+            821,
+            806
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "减脂期每天至少要吃多少克碳水？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            804,
+            813,
+            806,
+            821,
+            810,
+            805,
+            799
+          ],
+          "top1_score": 0.032266
+        },
+        {
+          "query": "蛋白质质量用什么指标评价？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            828,
+            827,
+            822,
+            810,
+            829,
+            821,
+            824
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "反式脂肪和饱和脂肪为什么应该限制？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            802
+          ],
+          "retrieved_ids": [
+            802,
+            824,
+            818,
+            820,
+            823,
+            816,
+            809,
+            826
+          ],
+          "top1_score": 0.032522
+        },
+        {
+          "query": "维生素C有什么作用，吃什么能补？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            802
+          ],
+          "retrieved_ids": [
+            803,
+            802,
+            804,
+            810,
+            821,
+            814,
+            829,
+            801
+          ],
+          "top1_score": 0.032522
+        },
+        {
+          "query": "减脂期容易缺乏哪些营养素？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            804
+          ],
+          "retrieved_ids": [
+            804,
+            802,
+            801,
+            813,
+            809,
+            814,
+            815,
+            810
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "人体有哪三大供能系统？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            804
+          ],
+          "retrieved_ids": [
+            804,
+            802,
+            805,
+            800,
+            824,
+            798,
+            803,
+            826
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "慢跑一小时大概能消耗多少热量？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            805
+          ],
+          "retrieved_ids": [
+            805,
+            799,
+            821,
+            798,
+            806,
+            810,
+            817,
+            820
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "运动处方的FITT原则指什么？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            806
+          ],
+          "retrieved_ids": [
+            806,
+            811,
+            805,
+            810,
+            821,
+            823,
+            815,
+            824
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "16比8断食法具体怎么做？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            806
+          ],
+          "retrieved_ids": [
+            806,
+            811,
+            821,
+            798,
+            807,
+            820,
+            808,
+            829
+          ],
+          "top1_score": 0.031319
+        },
+        {
+          "query": "怎样用手掌法则控制每餐份量？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            807
+          ],
+          "retrieved_ids": [
+            807,
+            813,
+            806,
+            818,
+            820,
+            817,
+            802,
+            825
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "减脂遇到平台期体重一直不降怎么办？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            808,
+            820,
+            813,
+            815,
+            799,
+            818,
+            805,
+            811
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "什么是溜溜球效应，有什么危害？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            808,
+            819,
+            816,
+            811,
+            810,
+            806,
+            817,
+            800
+          ],
+          "top1_score": 0.032522
+        },
+        {
+          "query": "胰岛素抵抗为什么会让人更容易长胖？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            809,
+            808,
+            815,
+            801,
+            813,
+            800,
+            799,
+            824
+          ],
+          "top1_score": 0.032522
+        },
+        {
+          "query": "为什么减脂后特别容易饿？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            813,
+            820,
+            808,
+            818,
+            804,
+            805,
+            799
+          ],
+          "top1_score": 0.032522
+        },
+        {
+          "query": "长期压力大会导致肥胖吗？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            820,
+            817,
+            825,
+            824,
+            808,
+            815,
+            813
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "睡眠不足为什么会让人变胖？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            815,
+            804,
+            817,
+            827,
+            820,
+            823,
+            821
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "运动后什么时候补充营养最好？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            810
+          ],
+          "retrieved_ids": [
+            810,
+            821,
+            804,
+            815,
+            827,
+            814,
+            820,
+            817
+          ],
+          "top1_score": 0.032522
+        },
+        {
+          "query": "蛋白粉和肌酸分别有什么作用？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            810
+          ],
+          "retrieved_ids": [
+            810,
+            821,
+            802,
+            822,
+            801,
+            829,
+            828,
+            814
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "减脂设定目标用SMART原则是什么意思？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            811
+          ],
+          "retrieved_ids": [
+            806,
+            811,
+            813,
+            808,
+            807,
+            805,
+            820,
+            821
+          ],
+          "top1_score": 0.032522
+        },
+        {
+          "query": "中老年人减脂蛋白质需求是多少？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            814
+          ],
+          "retrieved_ids": [
+            814,
+            801,
+            822,
+            799,
+            828,
+            807,
+            810,
+            821
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "2型糖尿病患者运动需要注意什么？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            816
+          ],
+          "retrieved_ids": [
+            815,
+            816,
+            804,
+            810,
+            817,
+            814,
+            805,
+            821
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "久坐办公有什么健康风险怎么缓解？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            817
+          ],
+          "retrieved_ids": [
+            817,
+            815,
+            805,
+            814,
+            821,
+            808,
+            807,
+            822
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "晚上吃东西真的更容易发胖吗？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            817
+          ],
+          "retrieved_ids": [
+            817,
+            820,
+            813,
+            809,
+            815,
+            818,
+            824,
+            823
+          ],
+          "top1_score": 0.032266
+        },
+        {
+          "query": "BMI怎么计算多少算肥胖？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            824
+          ],
+          "retrieved_ids": [
+            825,
+            824,
+            798,
+            799,
+            809,
+            807,
+            826,
+            821
+          ],
+          "top1_score": 0.032522
+        },
+        {
+          "query": "阅读食品营养标签钠含量多少算高？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            826
+          ],
+          "retrieved_ids": [
+            826,
+            800,
+            804,
+            802,
+            818,
+            801,
+            807,
+            810
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "平台期体重一直卡着不动了，怎么突破？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            808,
+            815,
+            820,
+            817,
+            798,
+            813,
+            827,
+            807
+          ],
+          "top1_score": 0.032522
+        },
+        {
+          "query": "为什么明明吃得很少体重还是不掉？",
+          "metrics": {
+            "recall@4": 0.0,
+            "recall@8": 0.0,
+            "mrr": 0.0,
+            "ndcg@4": 0.0
+          },
+          "relevant_ids": [
+            807
+          ],
+          "retrieved_ids": [
+            820,
+            798,
+            808,
+            813,
+            799,
+            801,
+            824,
+            821
+          ],
+          "top1_score": 0.032258
+        },
+        {
+          "query": "女生练力量会变成金刚芭比吗？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            823
+          ],
+          "retrieved_ids": [
+            822,
+            823,
+            816,
+            814,
+            815,
+            817,
+            820,
+            821
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "跑步要跑多久才开始燃烧脂肪？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            824
+          ],
+          "retrieved_ids": [
+            823,
+            824,
+            818,
+            805,
+            820,
+            799,
+            821,
+            826
+          ],
+          "top1_score": 0.031319
+        },
+        {
+          "query": "老想暴食、总馋高热量零食是怎么回事？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            813
+          ],
+          "retrieved_ids": [
+            813,
+            820,
+            826,
+            817,
+            808,
+            807,
+            818,
+            799
+          ],
+          "top1_score": 0.031025
+        },
+        {
+          "query": "DIAAS 和 PDCAAS 这两个指标有什么区别？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            824,
+            811,
+            807,
+            810,
+            800,
+            805,
+            809
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "VO2max 是什么，怎么测量？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            826
+          ],
+          "retrieved_ids": [
+            826,
+            824,
+            825,
+            808,
+            816,
+            799,
+            798,
+            807
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "皮褶厚度法测体脂准不准？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            824
+          ],
+          "retrieved_ids": [
+            825,
+            824,
+            820,
+            818,
+            826,
+            799,
+            823,
+            821
+          ],
+          "top1_score": 0.032522
+        },
+        {
+          "query": "GL 和 GI 有什么区别，减脂该看哪个？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            800,
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            800,
+            805,
+            808,
+            824,
+            809,
+            820,
+            804
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "减脂期碳水和蛋白质分别该怎么吃？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            810,
+            804,
+            814,
+            821,
+            813,
+            828,
+            805
+          ],
+          "top1_score": 0.032522
+        },
+        {
+          "query": "有哪些激素会影响体重和食欲？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808,
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            808,
+            802,
+            811,
+            799,
+            798,
+            820,
+            801
+          ],
+          "top1_score": 0.032787
+        },
+        {
+          "query": "减脂期容易缺哪些营养素，从什么食物补充？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            804
+          ],
+          "retrieved_ids": [
+            804,
+            801,
+            810,
+            813,
+            809,
+            815,
+            808,
+            818
+          ],
+          "top1_score": 0.032787
+        }
+      ],
+      "negatives": [
+        {
+          "query": "最近买什么股票比较好？",
+          "top1_score": 0.016393,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:13",
+              "score": 0.016393
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:8",
+              "score": 0.016393
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:2",
+              "score": 0.016129
+            }
+          ]
+        },
+        {
+          "query": "怎么给汽车换机油？",
+          "top1_score": 0.016393,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:9",
+              "score": 0.016393
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:11",
+              "score": 0.016129
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:6",
+              "score": 0.015873
+            }
+          ]
+        },
+        {
+          "query": "Python 里怎么画折线图？",
+          "top1_score": 0.031319,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:6",
+              "score": 0.031319
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:4",
+              "score": 0.016393
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:6",
+              "score": 0.016129
+            }
+          ]
+        },
+        {
+          "query": "跑步鞋应该怎么挑选？",
+          "top1_score": 0.032018,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:9",
+              "score": 0.032018
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:12",
+              "score": 0.016393
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:10",
+              "score": 0.016129
+            }
+          ]
+        },
+        {
+          "query": "感冒了应该吃什么药？",
+          "top1_score": 0.016393,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:2",
+              "score": 0.016393
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:6",
+              "score": 0.016129
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:2",
+              "score": 0.015873
+            }
+          ]
+        }
+      ]
+    },
+    "hybrid_rerank": {
+      "mode": "hybrid_rerank",
+      "n_queries": 47,
+      "n_positive": 42,
+      "n_negative": 5,
+      "metrics": {
+        "recall@4": 0.9761904761904762,
+        "recall@8": 0.9761904761904762,
+        "mrr": 0.9027777777777777,
+        "ndcg@4": 0.9212508586956264
+      },
+      "positive_top1_score": 0.2937876076846484,
+      "negative_top1_score": 0.0387378199405217,
+      "per_query": [
+        {
+          "query": "减脂期每天制造多大的热量缺口比较安全？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.25,
+            "ndcg@4": 0.43067655807339306
+          },
+          "relevant_ids": [
+            800
+          ],
+          "retrieved_ids": [
+            820,
+            799,
+            818,
+            800,
+            808,
+            801,
+            804,
+            823
+          ],
+          "top1_score": 0.1909474199937887
+        },
+        {
+          "query": "基础代谢率BMR是什么，占每天总消耗多少比例？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            798
+          ],
+          "retrieved_ids": [
+            798,
+            799,
+            805,
+            820,
+            814,
+            823,
+            807,
+            821
+          ],
+          "top1_score": 0.5508695987422517
+        },
+        {
+          "query": "每天总能量消耗TDEE由哪几部分组成？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            799
+          ],
+          "retrieved_ids": [
+            799,
+            807,
+            798,
+            806,
+            808,
+            804,
+            818,
+            800
+          ],
+          "top1_score": 0.37484039312453576
+        },
+        {
+          "query": "体重增加或下降是由什么决定的？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            798
+          ],
+          "retrieved_ids": [
+            798,
+            809,
+            817,
+            818,
+            799,
+            820,
+            824,
+            815
+          ],
+          "top1_score": 0.18447159405891017
+        },
+        {
+          "query": "简单糖和复合碳水有什么区别？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            800
+          ],
+          "retrieved_ids": [
+            800,
+            817,
+            808,
+            801,
+            828,
+            810,
+            821,
+            807
+          ],
+          "top1_score": 0.2258939806725524
+        },
+        {
+          "query": "减脂期每天至少要吃多少克碳水？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            809,
+            806,
+            808,
+            804,
+            813,
+            799,
+            821
+          ],
+          "top1_score": 0.1971624315869113
+        },
+        {
+          "query": "蛋白质质量用什么指标评价？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            822,
+            829,
+            828,
+            802,
+            810,
+            821,
+            807
+          ],
+          "top1_score": 0.14804760493849417
+        },
+        {
+          "query": "反式脂肪和饱和脂肪为什么应该限制？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            802
+          ],
+          "retrieved_ids": [
+            802,
+            816,
+            826,
+            818,
+            824,
+            820,
+            823,
+            813
+          ],
+          "top1_score": 0.18569748087401966
+        },
+        {
+          "query": "维生素C有什么作用，吃什么能补？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            802
+          ],
+          "retrieved_ids": [
+            802,
+            803,
+            804,
+            818,
+            829,
+            810,
+            814,
+            822
+          ],
+          "top1_score": 0.15838288936084186
+        },
+        {
+          "query": "减脂期容易缺乏哪些营养素？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            804
+          ],
+          "retrieved_ids": [
+            804,
+            802,
+            801,
+            809,
+            814,
+            803,
+            820,
+            808
+          ],
+          "top1_score": 0.555275546681402
+        },
+        {
+          "query": "人体有哪三大供能系统？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            804
+          ],
+          "retrieved_ids": [
+            804,
+            806,
+            805,
+            824,
+            823,
+            798,
+            803,
+            800
+          ],
+          "top1_score": 0.36324164447559326
+        },
+        {
+          "query": "慢跑一小时大概能消耗多少热量？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            805
+          ],
+          "retrieved_ids": [
+            805,
+            821,
+            798,
+            826,
+            806,
+            799,
+            827,
+            824
+          ],
+          "top1_score": 0.26205209707877875
+        },
+        {
+          "query": "运动处方的FITT原则指什么？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            806
+          ],
+          "retrieved_ids": [
+            806,
+            804,
+            823,
+            816,
+            798,
+            813,
+            814,
+            821
+          ],
+          "top1_score": 0.6266251120360048
+        },
+        {
+          "query": "16比8断食法具体怎么做？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            806
+          ],
+          "retrieved_ids": [
+            806,
+            820,
+            808,
+            813,
+            807,
+            819,
+            818,
+            824
+          ],
+          "top1_score": 0.17955996186715667
+        },
+        {
+          "query": "怎样用手掌法则控制每餐份量？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            807
+          ],
+          "retrieved_ids": [
+            807,
+            813,
+            818,
+            820,
+            827,
+            817,
+            826,
+            824
+          ],
+          "top1_score": 0.25224835445660676
+        },
+        {
+          "query": "减脂遇到平台期体重一直不降怎么办？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            808,
+            799,
+            807,
+            809,
+            813,
+            798,
+            820,
+            801
+          ],
+          "top1_score": 0.43797835595969853
+        },
+        {
+          "query": "什么是溜溜球效应，有什么危害？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            808,
+            819,
+            816,
+            811,
+            817,
+            805,
+            821,
+            800
+          ],
+          "top1_score": 0.22287995615576198
+        },
+        {
+          "query": "胰岛素抵抗为什么会让人更容易长胖？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            809,
+            808,
+            815,
+            806,
+            801,
+            824,
+            817,
+            800
+          ],
+          "top1_score": 0.1777080070490724
+        },
+        {
+          "query": "为什么减脂后特别容易饿？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            820,
+            818,
+            813,
+            823,
+            808,
+            821,
+            804
+          ],
+          "top1_score": 0.4278609799341059
+        },
+        {
+          "query": "长期压力大会导致肥胖吗？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            813,
+            817,
+            808,
+            820,
+            823,
+            824,
+            818
+          ],
+          "top1_score": 0.1998088395252414
+        },
+        {
+          "query": "睡眠不足为什么会让人变胖？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            817,
+            798,
+            827,
+            818,
+            804,
+            820,
+            823
+          ],
+          "top1_score": 0.1930938041046243
+        },
+        {
+          "query": "运动后什么时候补充营养最好？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            810
+          ],
+          "retrieved_ids": [
+            810,
+            821,
+            804,
+            814,
+            818,
+            820,
+            827,
+            815
+          ],
+          "top1_score": 0.6363127138887049
+        },
+        {
+          "query": "蛋白粉和肌酸分别有什么作用？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            810
+          ],
+          "retrieved_ids": [
+            810,
+            821,
+            802,
+            822,
+            829,
+            801,
+            823,
+            807
+          ],
+          "top1_score": 0.19096733288868165
+        },
+        {
+          "query": "减脂设定目标用SMART原则是什么意思？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            811
+          ],
+          "retrieved_ids": [
+            811,
+            806,
+            813,
+            798,
+            807,
+            808,
+            821,
+            823
+          ],
+          "top1_score": 0.35729299285820454
+        },
+        {
+          "query": "中老年人减脂蛋白质需求是多少？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            814
+          ],
+          "retrieved_ids": [
+            814,
+            801,
+            822,
+            802,
+            829,
+            799,
+            804,
+            828
+          ],
+          "top1_score": 0.7453465228521202
+        },
+        {
+          "query": "2型糖尿病患者运动需要注意什么？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            816
+          ],
+          "retrieved_ids": [
+            816,
+            815,
+            827,
+            821,
+            804,
+            806,
+            805,
+            814
+          ],
+          "top1_score": 0.1858882135323131
+        },
+        {
+          "query": "久坐办公有什么健康风险怎么缓解？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            817
+          ],
+          "retrieved_ids": [
+            817,
+            822,
+            802,
+            826,
+            818,
+            807,
+            800,
+            804
+          ],
+          "top1_score": 0.5800895450663068
+        },
+        {
+          "query": "晚上吃东西真的更容易发胖吗？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            817
+          ],
+          "retrieved_ids": [
+            817,
+            818,
+            809,
+            823,
+            820,
+            813,
+            824,
+            821
+          ],
+          "top1_score": 0.19180302756354503
+        },
+        {
+          "query": "BMI怎么计算多少算肥胖？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            824
+          ],
+          "retrieved_ids": [
+            824,
+            825,
+            798,
+            809,
+            799,
+            820,
+            821,
+            826
+          ],
+          "top1_score": 0.18479333232728126
+        },
+        {
+          "query": "阅读食品营养标签钠含量多少算高？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            826
+          ],
+          "retrieved_ids": [
+            826,
+            804,
+            818,
+            828,
+            807,
+            800,
+            802,
+            827
+          ],
+          "top1_score": 0.19162405745134836
+        },
+        {
+          "query": "平台期体重一直卡着不动了，怎么突破？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808
+          ],
+          "retrieved_ids": [
+            808,
+            799,
+            807,
+            798,
+            827,
+            820,
+            815,
+            817
+          ],
+          "top1_score": 0.19930046589640815
+        },
+        {
+          "query": "为什么明明吃得很少体重还是不掉？",
+          "metrics": {
+            "recall@4": 0.0,
+            "recall@8": 0.0,
+            "mrr": 0.0,
+            "ndcg@4": 0.0
+          },
+          "relevant_ids": [
+            807
+          ],
+          "retrieved_ids": [
+            798,
+            820,
+            818,
+            813,
+            817,
+            824,
+            808,
+            821
+          ],
+          "top1_score": 0.1632364667102223
+        },
+        {
+          "query": "女生练力量会变成金刚芭比吗？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.5,
+            "ndcg@4": 0.6309297535714575
+          },
+          "relevant_ids": [
+            823
+          ],
+          "retrieved_ids": [
+            822,
+            823,
+            816,
+            814,
+            815,
+            826,
+            808,
+            820
+          ],
+          "top1_score": 0.5454044500128067
+        },
+        {
+          "query": "跑步要跑多久才开始燃烧脂肪？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.3333333333333333,
+            "ndcg@4": 0.5
+          },
+          "relevant_ids": [
+            824
+          ],
+          "retrieved_ids": [
+            823,
+            805,
+            824,
+            821,
+            826,
+            818,
+            806,
+            816
+          ],
+          "top1_score": 0.15408687807509575
+        },
+        {
+          "query": "老想暴食、总馋高热量零食是怎么回事？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 0.3333333333333333,
+            "ndcg@4": 0.5
+          },
+          "relevant_ids": [
+            813
+          ],
+          "retrieved_ids": [
+            817,
+            828,
+            813,
+            826,
+            824,
+            808,
+            818,
+            820
+          ],
+          "top1_score": 0.16594696492268093
+        },
+        {
+          "query": "DIAAS 和 PDCAAS 这两个指标有什么区别？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            824,
+            800,
+            810,
+            820,
+            805,
+            806,
+            829
+          ],
+          "top1_score": 0.15927609009223315
+        },
+        {
+          "query": "VO2max 是什么，怎么测量？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            826
+          ],
+          "retrieved_ids": [
+            826,
+            816,
+            803,
+            824,
+            825,
+            804,
+            807,
+            828
+          ],
+          "top1_score": 0.19003067021999684
+        },
+        {
+          "query": "皮褶厚度法测体脂准不准？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            824
+          ],
+          "retrieved_ids": [
+            824,
+            825,
+            818,
+            798,
+            820,
+            821,
+            823,
+            811
+          ],
+          "top1_score": 0.19116642276085524
+        },
+        {
+          "query": "GL 和 GI 有什么区别，减脂该看哪个？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            800,
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            800,
+            809,
+            813,
+            811,
+            818,
+            814,
+            808
+          ],
+          "top1_score": 0.35281236930782406
+        },
+        {
+          "query": "减脂期碳水和蛋白质分别该怎么吃？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            801
+          ],
+          "retrieved_ids": [
+            801,
+            810,
+            821,
+            807,
+            828,
+            809,
+            813,
+            804
+          ],
+          "top1_score": 0.1964145737780302
+        },
+        {
+          "query": "有哪些激素会影响体重和食欲？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            808,
+            809
+          ],
+          "retrieved_ids": [
+            809,
+            808,
+            820,
+            802,
+            818,
+            804,
+            807,
+            821
+          ],
+          "top1_score": 0.20131388754263024
+        },
+        {
+          "query": "减脂期容易缺哪些营养素，从什么食物补充？",
+          "metrics": {
+            "recall@4": 1.0,
+            "recall@8": 1.0,
+            "mrr": 1.0,
+            "ndcg@4": 1.0
+          },
+          "relevant_ids": [
+            804
+          ],
+          "retrieved_ids": [
+            804,
+            801,
+            802,
+            814,
+            809,
+            820,
+            807,
+            818
+          ],
+          "top1_score": 0.4413264923315915
+        }
+      ],
+      "negatives": [
+        {
+          "query": "最近买什么股票比较好？",
+          "top1_score": 0.006029998401664387,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:6",
+              "score": 0.006029998401664387
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:2",
+              "score": 0.0060184449911664575
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:11",
+              "score": 0.006006913310615648
+            }
+          ]
+        },
+        {
+          "query": "怎么给汽车换机油？",
+          "top1_score": 0.006029998401664387,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:6",
+              "score": 0.006029998401664387
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:3",
+              "score": 0.006029998401664387
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:10",
+              "score": 0.0060184449911664575
+            }
+          ]
+        },
+        {
+          "query": "Python 里怎么画折线图？",
+          "top1_score": 0.006064789406968529,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:3",
+              "score": 0.006064789406968529
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:10",
+              "score": 0.006064789406968529
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:5",
+              "score": 0.006064789406968529
+            }
+          ]
+        },
+        {
+          "query": "跑步鞋应该怎么挑选？",
+          "top1_score": 0.12803441433601234,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:3",
+              "score": 0.12803441433601234
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:12",
+              "score": 0.10708234194500196
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:8",
+              "score": 0.10318175425579723
+            }
+          ]
+        },
+        {
+          "query": "感冒了应该吃什么药？",
+          "top1_score": 0.047529899156298856,
+          "top_titles": [
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:2",
+              "score": 0.047529899156298856
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:3",
+              "score": 0.007457153279253818
+            },
+            {
+              "title": "通用营养与运动科学常识知识库",
+              "section": "page:6",
+              "score": 0.005926796691036981
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "split_mode": "fixed",
+    "seeded_chunks": 32,
+    "total_chunks": 32,
+    "eval_data": "tests/eval_data/rag_queries.json"
+  }
+}

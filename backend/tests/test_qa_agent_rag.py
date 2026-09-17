@@ -5,11 +5,114 @@ qa_agent Agentic RAG 测试（M4.5）。E2E：真实 LLM + 真实检索管线。
 """
 
 import pytest
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agents.qa_agent import make_qa_agent
 from app.core.config import settings
 from app.db.seed_knowledge import seed_knowledge
+
+
+def test_qa_agent_answers_supported_parts_when_evidence_is_partial(monkeypatch):
+    """严格 RAG 下，部分直接证据应支持受限回答，而不是整题拒答。"""
+    class FakeChecker:
+        def with_structured_output(self, _schema):
+            return self
+
+        def invoke(self, _messages):
+            from app.agents.qa_agent import QaSelfCheck
+
+            return QaSelfCheck(
+                coverage="partial",
+                rewritten_query="",
+                reason="切片支持有氧运动建议，但未覆盖个性化训练计划",
+            )
+
+    class FakeGenerator:
+        def __init__(self):
+            self.messages = None
+
+        def invoke(self, messages):
+            self.messages = messages
+            return AIMessage(content="可以选择快走或慢跑等稳态有氧运动[1]。")
+
+    generator = FakeGenerator()
+    result_item = {
+        "id": 1,
+        "source_title": "运动指南",
+        "section": "有氧运动",
+        "page_number": 3,
+        "chunk_index": 0,
+        "content": "稳态有氧适合减脂，持续30分钟以上。",
+    }
+
+    def fake_get_text_llm(*, streaming=True):
+        return generator if streaming else FakeChecker()
+
+    class FakeDb:
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.agents.qa_agent.get_text_llm", fake_get_text_llm)
+    monkeypatch.setattr("app.agents.qa_agent.SessionLocal", lambda: FakeDb())
+    monkeypatch.setattr(
+        "app.agents.qa_agent.retrieve", lambda *_args, **_kwargs: [result_item]
+    )
+
+    result = make_qa_agent()(
+        {"messages": [HumanMessage("减脂但不做力量训练，适合什么运动？")], "task": ""}
+    )
+
+    assert generator.messages is not None
+    assert "部分覆盖" in generator.messages[0].content
+    assert "可以选择快走或慢跑等稳态有氧运动[1]。" in result["messages"][-1].content
+    assert result["citations"][0]["section"] == "有氧运动"
+
+
+def test_qa_agent_abstains_when_knowledge_base_has_no_answer(monkeypatch):
+    """严格 RAG：无相关切片时不得调用生成模型补充通用知识。"""
+    class FakeChecker:
+        def with_structured_output(self, _schema):
+            return self
+
+        def invoke(self, _messages):
+            from app.agents.qa_agent import QaSelfCheck
+
+            return QaSelfCheck(
+                sufficient=False,
+                rewritten_query="",
+                reason="知识库没有相关切片",
+            )
+
+    class FakeGenerator:
+        def __init__(self):
+            self.called = False
+
+        def invoke(self, _messages):
+            self.called = True
+            raise AssertionError("无证据时不应调用回答生成模型")
+
+    generator = FakeGenerator()
+    checker = FakeChecker()
+
+    def fake_get_text_llm(*, streaming=True):
+        return generator if streaming else checker
+
+    class FakeDb:
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.agents.qa_agent.get_text_llm", fake_get_text_llm)
+    monkeypatch.setattr("app.agents.qa_agent.SessionLocal", lambda: FakeDb())
+    monkeypatch.setattr("app.agents.qa_agent.retrieve", lambda *_args, **_kwargs: [])
+
+    result = make_qa_agent()(
+        {"messages": [HumanMessage("量子计算机的纠错率是多少")], "task": ""}
+    )
+
+    assert result["messages"][-1].content == (
+        "知识库中未找到与该问题直接相关的信息，暂时无法可靠回答。"
+    )
+    assert generator.called is False
 
 
 @pytest.fixture(scope="module", autouse=True)

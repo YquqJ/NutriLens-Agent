@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NutriLens Lesson 10: RRF by Hand</title>
+  <style>
+    :root{--ink:#1d2733;--muted:#5e6b78;--line:#d9e0e7;--accent:#176b87;--paper:#fbfcfd}body{margin:0;background:#eef2f5;color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:860px;margin:40px auto;padding:42px 52px;background:var(--paper);box-shadow:0 8px 30px #20304016}h1{font-size:30px;line-height:1.2;margin:0 0 8px;color:#123b4a}h2{margin-top:34px;color:#176b87;border-bottom:1px solid var(--line);padding-bottom:6px}code{background:#eaf1f4;padding:2px 5px;border-radius:3px}pre{background:#17242c;color:#e7f1f3;padding:18px;overflow:auto;border-radius:5px}.note{border-left:4px solid var(--accent);padding:10px 16px;background:#edf6f8}.muted{color:var(--muted)}li{margin:7px 0}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}th{color:#176b87}
+  </style>
+</head>
+<body><main>
+  <p class="muted">NutriLens Agent 求职学习 · 第 10 课</p>
+  <h1>RRF：把两份排行榜合成一份</h1>
+  <p>对应 <code>retriever.py:75-85</code>。目标：不用死背公式，能看懂这十行代码在做什么。</p>
+  <h2>先忽略算法名</h2>
+  <p>向量检索和 BM25 各自交出一份“相关切片排行榜”。RRF 的规则只有一句：<b>一个切片在每份榜单里排名越靠前，获得的分越多；在两份榜单都出现，就把两份分相加。</b></p>
+  <h2>手算示例</h2>
+  <pre>向量榜：A 第 1，B 第 2
+关键词榜：C 第 1，A 第 3
+
+每次贡献 = 1 / (60 + 名次)
+A = 1/61 + 1/63 = 0.03227
+B = 1/62          = 0.01613
+C = 1/61          = 0.01639
+
+最终：A 第一，C 第二，B 第三</pre>
+  <p>你不需要记住小数。只需知道：A 被两条路认可，因此压过了只被单条路认可的 B 和 C。</p>
+  <h2>对应代码逐行翻译</h2>
+  <table><thead><tr><th>代码</th><th>人话</th></tr></thead><tbody>
+  <tr><td><code>fused = {}</code></td><td>准备一个“按 chunk id 汇总成绩”的成绩册。</td></tr>
+  <tr><td><code>for hits in (vec_hits, kw_hits)</code></td><td>依次处理向量榜和关键词榜。</td></tr>
+  <tr><td><code>for rank, chunk in enumerate(hits)</code></td><td>遍历这份榜单：拿到第几名和对应切片。这里 rank 从 0 开始。</td></tr>
+  <tr><td><code>setdefault(chunk.id, ...)</code></td><td>成绩册没有该切片就新建；已有就取出来，方便累计另一条路的得分。</td></tr>
+  <tr><td><code>score += 1/(60+rank+1)</code></td><td>加上当前榜单贡献；<code>+1</code> 是把 0-based rank 改成真实第 1 名、第 2 名。</td></tr>
+  <tr><td><code>ranked_by.append(...)</code></td><td>记录它被哪条路召回，用于调试。</td></tr>
+  <tr><td><code>sorted(..., key=-score)</code></td><td>按总分从高到低排出最终候选。</td></tr>
+  </tbody></table>
+  <h2>60 是什么</h2>
+  <p><code>RRF_K = 60</code> 是常用平滑常数。它让第 1 名和第 2 名的差距不会过于悬殊，重点奖励“多路都认可”。面试中说“RRF 的常用平滑常数”足够，不必推导来源。</p>
+  <h2>故障降级纠正</h2>
+  <p>若 embedding 服务失败，不能走向量检索，因为 query 无法转向量；应该直接运行 <code>keyword_search</code>，返回 BM25 的 top-k。若 rerank 失败，向量和 BM25 已经完成，因此可以回退到 RRF 排名。</p>
+  <div class="note">当前阶段只需精读三段：<code>vector_search</code>、<code>keyword_search</code>、<code>hybrid_search</code>。SQLAlchemy 的查询语法、pgvector 索引细节和 Python 容器 API 先作为“认识即可”的支撑知识，不要求逐行背。</div>
+  <h2>一分钟自测</h2>
+  <ol><li>一个切片只在 BM25 排第 1，另一个切片在两条路都排第 3，谁可能更靠前？为什么？</li><li>为什么 embedding 失败时不能回退到向量检索？</li><li><code>ranked_by</code> 为什么对线上排错有用？</li></ol>
+</main></body></html>

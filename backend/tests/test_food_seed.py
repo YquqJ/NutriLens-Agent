@@ -5,10 +5,19 @@
 幂等性：重复执行不产生重复数据。
 """
 
+from pathlib import Path
+
 from app.db.models import Food
-from app.db.seed_foods import seed_foods
+from app.db.seed_foods import _CSV_PATH, seed_foods
 from app.db.session import SessionLocal
 from app.services.diet import search_foods
+
+
+def test_food_csv_is_loaded_from_backend_data_directory():
+    """食物 CSV 应放在 backend/data，脱离 app 包代码目录。"""
+    backend_root = Path(__file__).resolve().parents[1]
+    assert _CSV_PATH == backend_root / "data" / "foods.csv"
+    assert _CSV_PATH.is_file()
 
 
 def test_food_seed_idempotent_and_alias_search():

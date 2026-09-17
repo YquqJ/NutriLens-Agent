@@ -13,15 +13,20 @@ SSE 解析：TestClient 流式响应按行读，按 W3C 格式配对 event/data 
 
 import json
 import uuid
+from types import SimpleNamespace
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from openai import APITimeoutError
 
-from app.api.chat import _extract_tool_calls, _run_graph_and_stream
+from app.api.chat import (
+    _extract_tool_calls,
+    _normalize_assistant_content,
+    _run_graph_and_stream,
+)
 from app.core.config import settings
 from app.core.security import create_access_token, hash_password
 from app.db.models import Conversation, DietRecord, Message, User
@@ -98,6 +103,75 @@ def test_resume_without_pending_interrupt_returns_400(auth_headers):
         url, json={"value": False}, headers=auth_headers["headers"]
     )
     assert r.status_code == 400
+
+
+def test_invalid_record_date_returns_422_instead_of_server_error(auth_headers):
+    """非法日期是请求参数错误，不能让 ValueError 冒泡成 500。"""
+    r = client.get(
+        "/api/diet/records",
+        params={"date": "not-a-date"},
+        headers=auth_headers["headers"],
+    )
+
+    assert r.status_code == 422
+    assert "日期格式" in r.json()["detail"]
+
+
+def test_image_recognition_json_is_rendered_as_natural_language():
+    """图片识别的内部结构不能直接泄漏到助手正文。"""
+    raw = json.dumps(
+        {
+            "items": [
+                {"food_name": "虾", "estimated_grams": 150},
+                {"food_name": "米饭", "estimated_grams": 100},
+            ]
+        },
+        ensure_ascii=False,
+    )
+
+    visible = _normalize_assistant_content(raw)
+
+    assert visible == "我识别到这顿饭包括：虾约150克、米饭约100克。请确认是否记录。"
+    assert '"items"' not in visible
+
+
+def test_normalize_assistant_content_keeps_normal_reply_unchanged():
+    reply = "已为你记录午餐，共 520 千卡。"
+
+    assert _normalize_assistant_content(reply) == reply
+
+
+def test_image_interrupt_done_contains_normalized_content_without_token_leak(monkeypatch):
+    """带图识别在 interrupt 前不能把内部 JSON 作为 token 泄漏给前端。"""
+    raw = json.dumps(
+        {"items": [{"food_name": "虾", "estimated_grams": 150}]},
+        ensure_ascii=False,
+    )
+
+    class ImageInterruptGraph:
+        def stream(self, *_args, **_kwargs):
+            yield "messages", (AIMessageChunk(content=raw), {})
+            yield "updates", {
+                "__interrupt__": [
+                    SimpleNamespace(value={"type": "diet_confirm"})
+                ]
+            }
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: ImageInterruptGraph())
+
+    frames = list(
+        _run_graph_and_stream(
+            {"image_url": "https://example.test/food.jpg"},
+            {},
+            "test-conversation",
+        )
+    )
+
+    assert all('event: token' not in frame for frame in frames)
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+    assert payload["interrupted"] is True
+    assert payload["content"] == "我识别到这顿饭包括：虾约150克。请确认是否记录。"
 
 
 @pytest.mark.parametrize(

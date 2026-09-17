@@ -132,11 +132,13 @@ async function streamRequest(
         break
       case 'done':
         live.streaming = false
+        // interrupt 结束帧也会携带图片识别摘要，用它覆盖暂存/空白正文，
+        // 避免确认卡片出现时助手气泡仍显示原始结构化 JSON。
+        if (e.content) live.content = e.content
         if (!e.interrupted) {
           live.agentName = e.agent_name || live.agentName
           // 用后端权威终稿替换流式累积的 token 文本：token 流可能混入
           // react agent 的工具间叙述（"现在我将…"），终稿才是干净的最终回答
-          if (e.content) live.content = e.content
           if (e.citations) live.citations = e.citations
         }
         break

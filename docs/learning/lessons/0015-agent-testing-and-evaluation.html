@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NutriLens Lesson 15: Agent Testing and Evaluation</title>
+  <style>
+    :root{--ink:#1d2733;--muted:#5e6b78;--line:#d9e0e7;--accent:#176b87;--paper:#fbfcfd}body{margin:0;background:#eef2f5;color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:860px;margin:40px auto;padding:42px 52px;background:var(--paper);box-shadow:0 8px 30px #20304016}h1{font-size:30px;line-height:1.2;margin:0 0 8px;color:#123b4a}h2{margin-top:34px;color:#176b87;border-bottom:1px solid var(--line);padding-bottom:6px}code{background:#eaf1f4;padding:2px 5px;border-radius:3px}pre{background:#17242c;color:#e7f1f3;padding:18px;overflow:auto;border-radius:5px}.note{border-left:4px solid var(--accent);padding:10px 16px;background:#edf6f8}.warn{border-left:4px solid #b36a00;padding:10px 16px;background:#fff8e6}.muted{color:var(--muted)}li{margin:7px 0}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}th{color:#176b87}
+  </style>
+</head>
+<body><main>
+  <p class="muted">NutriLens Agent 求职学习 · 第 15 课</p>
+  <h1>Agent 测试与评估：怎样证明它可靠，也真的有用？</h1>
+  <p>对应 <code>backend/tests/</code> 与 <code>app/rag/eval.py</code>。目标：把“模型输出不稳定，所以没法测”的误解拆掉，并能在面试中说清测试与 Eval 的工程分工。</p>
+
+  <h2>先记住一条边界</h2>
+  <table><thead><tr><th>测试 Test</th><th>评估 Eval</th></tr></thead><tbody>
+  <tr><td>验证一个<strong>确定的契约</strong>是否满足。</td><td>在一批样本上衡量<strong>质量趋势</strong>。</td></tr>
+  <tr><td>结果通常是 pass / fail。</td><td>结果通常是一组分数、案例和回归差异。</td></tr>
+  <tr><td>适合 PR 门禁：快、稳定、无外部模型依赖。</td><td>适合定期或手动运行：可能慢、有成本、会受模型版本影响。</td></tr>
+  <tr><td>例：确认前不得写饮食记录。</td><td>例：RAG 的 Recall@8 是否比上次下降。</td></tr>
+  </tbody></table>
+  <div class="note">LLM 的自然语言答案不适合断言“必须等于这一整段字符串”；但围绕它的路由、工具调用、权限、写库、引用、拒答和数值事实，仍然有大量确定契约可以严格测试。</div>
+
+  <h2>本项目的四层测试</h2>
+  <ol>
+    <li><strong>纯函数单测：</strong><code>test_eval_metrics.py</code> 对 <code>recall_at_k</code>、<code>mrr</code>、<code>ndcg_at_k</code> 传入固定排名，断言精确数字。MET、BMR 等公式也应属于这一层。</li>
+    <li><strong>Tool / Service 集成测试：</strong><code>test_allergy_guard.py</code> 直接调用 Service，断言“有海鲜过敏且未确认”会抛 <code>AllergyConfirmationRequired</code>，并且数据库仍无记录。这是在保护副作用，不依赖模型是否听话。</li>
+    <li><strong>图控制流测试：</strong><code>test_supervisor.py</code> 用 <code>RunnableLambda</code> 伪造固定路由器，验证 <code>goto</code>、<code>hop_count</code>、重复派发拦截；<code>test_supervisor_graph.py</code> 用 <code>MemorySaver</code> 验证相同 <code>thread_id</code> 的历史能续上。</li>
+    <li><strong>真实模型 / E2E / Eval：</strong>真实 embedding、pgvector、Postgres、LLM 的链路另跑。<code>test_rag_eval.py</code> 标注 <code>pytest.mark.eval</code>，没有 <code>DASHSCOPE_API_KEY</code> 时 <code>skipif</code> 跳过，避免把成本与不稳定性塞进每次快速回归。</li>
+  </ol>
+
+  <h2>桩（Stub）不是“假测试”</h2>
+  <pre>decision = RouteDecision(next_agent="diet_agent", task="记录午餐")
+supervisor = make_supervisor_node(_stub_router(decision))
+cmd = supervisor({"hop_count": 0, ...})
+
+assert cmd.goto == "diet_agent"
+assert cmd.update["hop_count"] == 1</pre>
+  <p>此处的目标不是验证 qwen 会不会理解午餐，而是验证<strong>当路由决策已经给定时，图的代码是否正确地跳转和更新 State</strong>。两件事拆开测，失败时才知道该改 prompt、模型，还是改图代码。</p>
+
+  <h2>HITL 最值得测的不是 UI 文案</h2>
+  <pre>第一次 invoke
+→ 收到 __interrupt__
+→ 数据库中尚无 DietRecord
+
+相同 thread_id + Command(resume=确认数据)
+→ 恢复执行
+→ 恰好写入一条 DietRecord</pre>
+  <p><code>test_interrupt_resume_through_graph</code> 就在验证这条关键不变量。它还间接验证了 Checkpointer 能保存恢复所需的 pending work。生产级别还应补一条：同一个 resume 请求重放时，不会重复落两条记录，也就是<strong>幂等性</strong>。</p>
+
+  <h2>RAG 指标：测“找到了没有”和“排得靠不靠前”</h2>
+  <p>评测集 <code>rag_queries.json</code> 给每个问题写出应命中的 <code>relevant_hashes</code>。用内容 hash 而不用自增 id，是因为 seed 到另一套数据库后 id 会变化，内容 hash 更稳定。</p>
+  <table><thead><tr><th>指标</th><th>它回答的问题</th><th>例子</th></tr></thead><tbody>
+  <tr><td><code>Recall@K</code></td><td>前 K 条有没有找全相关资料？</td><td>相关有 A、B；top-3 找到 A、B，Recall@3 = 1。</td></tr>
+  <tr><td><code>MRR</code></td><td>第一个相关资料排第几？</td><td>第一个相关结果在第 2 位，MRR = 1/2。</td></tr>
+  <tr><td><code>nDCG@K</code></td><td>相关资料是否整体排得更靠前？</td><td>同样命中 A、B，排在第 1、2 位比第 3、4 位分更高。</td></tr>
+  </tbody></table>
+  <div class="warn">检索分数高，不等于回答一定可信。当前项目已测召回排序；下一步应增加回答层评估：每个结论能否被引用片段支持（faithfulness）、引用是否正确、库外问题是否恰当拒答（abstention）。</div>
+
+  <h2>怎样断言 LLM 结果？</h2>
+  <table><thead><tr><th>脆弱断言</th><th>更好的契约断言</th></tr></thead><tbody>
+  <tr><td>最终回答必须等于一整段指定文案</td><td>最终回答包含必须出现的数值/实体；或符合 Pydantic schema</td></tr>
+  <tr><td>模型必须一字不差地解释过敏风险</td><td>未确认时不写库；确认后恰好写一条；风险字段被返回</td></tr>
+  <tr><td>模型永远调用固定顺序的工具</td><td>必须调用的工具被调用；禁止的副作用没有发生；总步数不超过上限</td></tr>
+  <tr><td>每次真实模型跑分都必须 100 分</td><td>记录基线、模型/Prompt/索引版本，观察分数回归和失败案例</td></tr>
+  </tbody></table>
+
+  <h2>面试可说的改进方案</h2>
+  <ol>
+    <li>为 <code>rag_queries.json</code> 加版本和覆盖维度：同义改写、多跳问题、专业术语、库外问题、冲突资料。</li>
+    <li>保存每次 Eval 的模型版本、embedding 模型、chunk 策略、rerank 配置、数据集版本与指标，比较 delta；不能只留一份控制台输出。</li>
+    <li>在检索指标外，加答案级 faithfulness、citation correctness 和 abstention accuracy，并人工复核抽样案例。</li>
+    <li>给写操作补幂等键或已处理 resume 标记，测试重复 resume 不重复创建业务记录。</li>
+  </ol>
+
+  <h2>面试表达</h2>
+  <p>“我把 Agent 的验证分成确定性测试和质量评估。路由 State 更新、权限、写库、HITL 前后副作用这些做无模型的快速门禁；模型、向量检索和数据库的真实链路用带 marker 的 E2E 与 golden dataset 评估。RAG 先看 Recall@K、MRR、nDCG，再补回答是否由证据支撑和库外拒答。这样模型可以变化，但系统的安全契约不会靠祈祷维持。”</p>
+
+  <h2>自测</h2>
+  <ol>
+    <li>为什么不该断言 LLM 最终回答完全等于某一整段文字？</li>
+    <li>哪些测试应该作为快速 PR 门禁，哪些适合 <code>pytest -m eval</code> 单独运行？</li>
+    <li>若 Recall@8 上升，但 faithfulness 下降，可能发生了什么？</li>
+    <li>为 interrupt/resume 设计一条最重要的数据库不变量。</li>
+  </ol>
+  <p class="muted">主参考：<a href="https://docs.pytest.org/en/stable/how-to/skipping.html">pytest conditional skipping 官方文档</a>。有任何一行测试或指标不明白，直接把问题抛给我，我们继续拆。</p>
+</main></body></html>

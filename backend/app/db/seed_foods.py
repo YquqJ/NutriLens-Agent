@@ -3,7 +3,7 @@
 
 用法：uv run python -m app.db.seed_foods
 
-数据源：app/db/foods.csv —— 每 100g 可食部，参考《中国食物成分表》
+数据源：backend/data/foods.csv —— 每 100g 可食部，参考《中国食物成分表》
 常见值整理固化（demo 用途，非临床数据）。数据以 CSV 承载、与代码分离，
 便于替换数据源或人工校验（Excel 可直接打开编辑）。
 
@@ -20,7 +20,7 @@ from pathlib import Path
 from app.db.models import Food
 from app.db.session import SessionLocal
 
-_CSV_PATH = Path(__file__).with_name("foods.csv")
+_CSV_PATH = Path(__file__).resolve().parents[2] / "data" / "foods.csv"
 
 
 def _load_rows() -> list[dict]:

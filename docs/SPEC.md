@@ -79,7 +79,7 @@ worker 分工：
 - [x] **M4.1** `rag/embedding.py`：text-embedding-v3 客户端 + 批量入库
 - [x] **M4.2** `rag/retriever.py`：混合检索（pgvector 余弦 + rank_bm25 内存索引）→ RRF 融合
 - [x] **M4.3** `rag/rerank.py`：gte-rerank 重排（DashScope 原生 API，非 OpenAI 兼容模式）
-- [x] **M4.4** 知识库 PDF 导入：`backend/data/通用营养与运动科学常识知识库.pdf` → 文本提取 → 页码/章节切片 → SHA-256 幂等向量化入库；文档标题只存 document 表，切片通过 `document_id + section + page_number + chunk_index` 生成可核验引用；旧手工常量 seed 切片按 `document_id IS NULL` 精确清理，保留用户业务数据
+- [x] **M4.4** 知识库 PDF 导入：`backend/data/knowledge/通用营养与运动科学常识知识库.pdf` → 文本提取 → 页码/章节切片 → SHA-256 幂等向量化入库；文档标题只存 document 表，切片通过 `document_id + section + page_number + chunk_index` 生成可核验引用；旧手工常量 seed 切片按 `document_id IS NULL` 精确清理，保留用户业务数据
 - [x] **M4.5** `agents/qa_agent.py`：迭代自检（检索结果不足 → 改写 query 重检，≤2 轮）
       验收：问"减脂期每天吃多少蛋白质"，回答带来源且检索轨迹可见
 

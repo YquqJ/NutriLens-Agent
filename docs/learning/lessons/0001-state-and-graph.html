@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NutriLens Lesson 1: State 与 Graph</title>
+  <style>
+    :root{color-scheme:light;--ink:#1d2733;--muted:#5e6b78;--line:#d9e0e7;--accent:#176b87;--paper:#fbfcfd}
+    body{margin:0;background:#eef2f5;color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}
+    main{max-width:860px;margin:40px auto;padding:42px 52px;background:var(--paper);box-shadow:0 8px 30px #20304016}
+    h1{font-size:30px;line-height:1.2;margin:0 0 8px;color:#123b4a} h2{margin-top:34px;color:#176b87;border-bottom:1px solid var(--line);padding-bottom:6px}
+    code{background:#eaf1f4;padding:2px 5px;border-radius:3px} pre{background:#17242c;color:#e7f1f3;padding:18px;overflow:auto;border-radius:5px}
+    .note{border-left:4px solid var(--accent);padding:10px 16px;background:#edf6f8}.muted{color:var(--muted)} li{margin:7px 0}
+  </style>
+</head>
+<body><main>
+  <p class="muted">NutriLens Agent 求职学习 · 第 1 课</p>
+  <h1>State 与 Graph：Agent 的共享工作台和流程骨架</h1>
+  <p>本课目标：看懂 <code>backend/app/agents/state.py</code> 与 <code>graph.py</code> 的职责，并能解释一次请求如何路由、暂停、恢复。</p>
+  <h2>一句话模型</h2>
+  <pre>State = 共享工作台
+Node = 做一件事并返回状态更新
+Edge = 固定流程
+Command = 动态跳转 + 状态更新
+Checkpoint = 保存状态和执行位置
+interrupt/resume = 暂停 / 继续</pre>
+  <h2>读代码顺序</h2>
+  <ol><li>先看 <code>AgentState</code> 的字段，不要先背类型语法。</li><li>再看 <code>_turn_reset</code>，理解哪些字段是“本轮临时数据”。</li><li>再看 <code>build_graph</code> 的节点和边，画出执行路径。</li><li>最后看 <code>get_checkpointer</code>，理解跨请求和 HITL 恢复。</li></ol>
+  <h2>必会解释</h2>
+  <div class="note">模型只提出建议；图决定流程；工具和 service 负责确定性规则与副作用。</div>
+  <ul><li><code>messages</code> 使用 <code>add_messages</code>，新消息追加而不是覆盖。</li><li><code>thread_id</code> 把多次请求绑定到同一条可恢复执行。</li><li><code>interrupt()</code> 首次暂停并保存状态；<code>Command(resume=value)</code> 用同一 thread 继续。</li><li>真正写数据库应放在 interrupt 之后，避免恢复时重复副作用。</li></ul>
+  <h2>练习</h2>
+  <ol><li>指出 <code>AgentState</code> 中哪些字段跨轮保留，哪些字段每轮重置。</li><li>不用看代码，画出文字记录饮食时的节点顺序。</li><li>解释为什么业务消息表和 <code>PostgresSaver</code> 不能互相替代。</li></ol>
+  <p class="muted">遇到任何不明白的行，直接把行号和你的理解发来；下一课会逐段检查你的答案。</p>
+</main></body></html>

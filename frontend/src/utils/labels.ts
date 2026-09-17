@@ -17,6 +17,7 @@ export const MEAL_LABELS: Record<string, string> = {
 
 export const TOOL_LABELS: Record<string, string> = {
   search_food: '检索食物',
+  search_food_batch: '匹配食物营养',
   analyze_food_image: '识别图片',
   create_diet_record: '写入饮食记录',
   get_diet_records: '查询饮食记录',

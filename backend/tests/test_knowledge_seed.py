@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.db.models import KnowledgeChunk, KnowledgeDocument
 from app.db.seed_knowledge import seed_knowledge
 from app.db.session import SessionLocal
+from app.rag.document_loader import PDF_SOURCE_KEY
 from app.rag.retriever import retrieve
 
 
@@ -23,7 +24,11 @@ def test_knowledge_seed_and_retrieve():
 
     db = SessionLocal()
     try:
-        document = db.query(KnowledgeDocument).one()
+        document = (
+            db.query(KnowledgeDocument)
+            .filter(KnowledgeDocument.source_key == PDF_SOURCE_KEY)
+            .one()
+        )
         chunks = db.query(KnowledgeChunk).filter_by(document_id=document.id).all()
         assert len(chunks) >= 20, "PDF 应生成足量知识切片"
         assert all(chunk.page_number and chunk.section for chunk in chunks)

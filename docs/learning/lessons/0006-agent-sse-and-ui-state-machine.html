@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NutriLens Lesson 6: Agent SSE and UI State Machine</title>
+  <style>
+    :root{--ink:#1d2733;--muted:#5e6b78;--line:#d9e0e7;--accent:#176b87;--paper:#fbfcfd}body{margin:0;background:#eef2f5;color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:860px;margin:40px auto;padding:42px 52px;background:var(--paper);box-shadow:0 8px 30px #20304016}h1{font-size:30px;line-height:1.2;margin:0 0 8px;color:#123b4a}h2{margin-top:34px;color:#176b87;border-bottom:1px solid var(--line);padding-bottom:6px}code{background:#eaf1f4;padding:2px 5px;border-radius:3px}pre{background:#17242c;color:#e7f1f3;padding:18px;overflow:auto;border-radius:5px}.note{border-left:4px solid var(--accent);padding:10px 16px;background:#edf6f8}.warn{border-left:4px solid #b36a00;padding:10px 16px;background:#fff8e6}.muted{color:var(--muted)}li{margin:7px 0}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}th{color:#176b87}
+  </style>
+</head>
+<body><main>
+  <p class="muted">NutriLens Agent 求职学习 · 第 6 课</p>
+  <h1>Agent 前端：SSE 事件协议与可恢复状态机</h1>
+  <p>对应 <code>api/chat.py</code>、<code>views/ChatView.vue</code>、<code>components/HitlCard.vue</code>。目标：理解一个 Agent 产品为什么不能只有“流式文本框”。</p>
+  <h2>后端把图投影成 UI 事件</h2>
+  <table><thead><tr><th>事件</th><th>来自哪里</th><th>前端作用</th></tr></thead><tbody>
+  <tr><td><code>token</code></td><td>LLM 文本分片</td><td>追加 assistant 正文</td></tr>
+  <tr><td><code>agent_trace</code></td><td>supervisor update</td><td>显示当前 worker</td></tr>
+  <tr><td><code>tool_calls</code></td><td>AIMessage + ToolMessage 配对</td><td>展示可审计的工具轨迹</td></tr>
+  <tr><td><code>citations</code></td><td>QA worker update</td><td>展示检索证据</td></tr>
+  <tr><td><code>interrupt</code></td><td>LangGraph interrupt payload</td><td>渲染确认卡片，暂停输入</td></tr>
+  <tr><td><code>done</code>/<code>error</code></td><td>运行结束/异常</td><td>收尾、落历史或展示错误</td></tr>
+  </tbody></table>
+  <h2>前端状态机</h2>
+  <pre>idle
+  → streaming
+  → interrupted (pendingMsg 指向同一条 assistant 消息)
+  → resuming
+  → done | error
+
+busy = streaming || pendingMsg</pre>
+  <p><code>busy</code> 不只是按钮 loading。它禁止同一会话在确认未完成时再发送新消息，避免两个执行流同时操作同一条 LangGraph thread。</p>
+  <h2>为什么不用“只流文本”</h2>
+  <p>工具调用、证据、人工确认和最终回答有不同语义。把它们混进 token，会导致前端无法做确认卡片、无法可视化工具轨迹，也难以重放历史。因此后端使用 <code>stream_mode=["messages", "updates"]</code>，再转成稳定的业务 SSE 协议。</p>
+  <h2>分片解析的前端基本功</h2>
+  <p>网络 chunk 不等于一条 SSE 事件。<code>streamRequest</code> 用 buffer 累积文本，再以空行 <code>\n\n</code> 切帧，最后解析 <code>event:</code> 和 <code>data:</code>。这是流式接口最常见的边界问题。</p>
+  <h2>确认后为何复用同一条消息</h2>
+  <p>初次请求创建 <code>live</code> assistant 消息；收到 interrupt 后将它放到 <code>pendingMsg</code>。确认时继续把同一个 <code>live</code> 传给 <code>streamRequest</code>。因此 UI 从确认卡片自然过渡为最终回复，而不是凭空多一条 assistant 消息。</p>
+  <h2>终稿为何覆盖 token</h2>
+  <p>ReAct 流中的文本可能包含模型在工具间的过程话术。后端在 <code>done</code> 返回最终 state 的最后一条 AIMessage；前端用它覆盖 token 累积文本。用户看到的是结果，工具过程则去 Tool Trace 面板。</p>
+  <h2>Agent 开发必须建立的安全边界</h2>
+  <div class="warn">`Command(resume=...)` 是来自浏览器的输入，和普通 POST body 一样不可信。当前前端限制了克数范围，但后端恢复后的 <code>confirmed["items"]</code> 没有再次做完整 schema 校验，也把营养字段交给客户端传回。生产级实现应只接受“草稿条目 id + 修改后的 grams + acknowledgement”，在服务端按原始草稿重新计算营养、验证范围和过敏确认。</div>
+  <h2>面试表达</h2>
+  <p>“我把 LangGraph 的内部事件投影为一个前端可消费的 SSE 协议。前端以判别联合类型处理 token、路由、工具、引用和 interrupt；HITL 把同一条会话消息从 streaming 切到 pending，再经同一 thread_id resume。关键是把 resume 当作不可信边界，服务端必须重新验证和计算。”</p>
+  <h2>自测</h2>
+  <ol><li>为什么不能假设一次 <code>reader.read()</code> 恰好返回一条 SSE 事件？</li><li>为什么 interrupt 时不把 assistant 草稿直接写入 messages 表？</li><li>为什么 <code>busy = streaming || pendingMsg</code> 是状态一致性措施，而不只是 UX？</li><li>如何改造 resume payload，才能防止客户端篡改 calories 与 confidence？</li></ol>
+  <p class="muted">官方参考：<a href="https://docs.langchain.com/oss/python/langgraph/interrupts">LangGraph Interrupts</a>、<a href="https://docs.langchain.com/oss/python/langgraph/persistence">LangGraph Persistence</a>。不明白时直接报代码行号继续问。</p>
+</main></body></html>

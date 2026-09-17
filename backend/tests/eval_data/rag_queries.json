@@ -1,0 +1,422 @@
+{
+  "default_source_key": "nutrition_exercise_basics_pdf",
+  "evidence": {
+    "safe_calorie_deficit": {
+      "page_number": 1,
+      "text": "建议每日制造 300 - 500 千卡的热量赤字"
+    },
+    "bmr_definition": {
+      "page_number": 1,
+      "text": "维持基本生命活动（如心跳、呼吸、体温）所需的最低能量"
+    },
+    "bmr_share": {
+      "page_number": 1,
+      "text": "BMR通常占每日总能量消 耗的 60%-75%"
+    },
+    "tdee_components": {
+      "page_number": 1,
+      "text": "TDEE = BMR + TEF + EAT + NEAT"
+    },
+    "energy_balance": {
+      "page_number": 1,
+      "text": "体重变化 = 能量摄入 - 能量消耗"
+    },
+    "simple_sugars": {
+      "page_number": 1,
+      "text": "简单糖：单糖（葡萄糖、果糖） 、双糖（蔗糖、乳糖） ，吸收快"
+    },
+    "complex_carbs": {
+      "page_number": 1,
+      "text": "复合碳水：淀粉、多糖，消化较慢，提供持久能量"
+    },
+    "gi_definition": {
+      "page_number": 1,
+      "text": "血糖生成指数（GI） ：反映食物升高血糖的速度"
+    },
+    "gl_definition": {
+      "page_number": 2,
+      "text": "血糖负荷（GL） ：GL = (GI × 碳水化合物克数) / 100"
+    },
+    "minimum_carbs": {
+      "page_number": 2,
+      "text": "减脂期不建议低于 130g/天（大脑最低需求）"
+    },
+    "protein_pdcaas": {
+      "page_number": 2,
+      "text": "PDCAAS（蛋白质消化率校正氨基酸评分）"
+    },
+    "protein_diaas": {
+      "page_number": 2,
+      "text": "DIAAS（可消化必需氨基酸评分）"
+    },
+    "cutting_protein": {
+      "page_number": 2,
+      "text": "减脂期人群：1.6g - 2.4g / kg体重"
+    },
+    "saturated_fat_limit": {
+      "page_number": 2,
+      "text": "饱和脂肪：多存在于动物油脂、椰子油。过量摄入增加心血管风险"
+    },
+    "trans_fat_limit": {
+      "page_number": 2,
+      "text": "反式脂肪：人工氢化植物油产生，极度有害，应尽量避免"
+    },
+    "vitamin_c": {
+      "page_number": 2,
+      "text": "维生素 C：抗氧化、胶原蛋白合成、促进铁吸收。来源：柑橘类、猕猴桃、青椒"
+    },
+    "cutting_micronutrients": {
+      "page_number": 3,
+      "text": "减脂期极易缺乏钙、铁、维生素 D、B族维生素及膳食 纤维"
+    },
+    "mineral_sources": {
+      "page_number": 3,
+      "text": "钙：骨骼牙齿、肌肉收缩。来源：奶制品、豆腐、绿叶菜"
+    },
+    "energy_systems": {
+      "page_number": 3,
+      "text": "人体有三大供能系统，根据运动强度和时长交替主导"
+    },
+    "slow_jog_calories": {
+      "page_number": 3,
+      "text": "60kg成人慢跑 1 小时约消耗 400-500 千卡"
+    },
+    "fitt_principle": {
+      "page_number": 4,
+      "text": "FITT原则"
+    },
+    "intermittent_fasting_16_8": {
+      "page_number": 4,
+      "text": "16:8 法：每天 8 小时内进食，16 小时禁食"
+    },
+    "palm_portions": {
+      "page_number": 4,
+      "text": "手掌法则：1 掌心蛋白质，1 拳头碳水，2 拳头蔬菜，1 拇指脂肪"
+    },
+    "weight_plateau": {
+      "page_number": 5,
+      "text": "饮食休息（Diet Break）：将热量恢复至 TDEE水平维持 1-2 周"
+    },
+    "yo_yo_effect": {
+      "page_number": 5,
+      "text": "极端节食 → 快速掉重 → 代谢受损/暴食 → 快速反弹 → 再次节食"
+    },
+    "insulin_resistance": {
+      "page_number": 5,
+      "text": "高胰岛素水平会抑制脂肪分解，促进脂肪合成"
+    },
+    "leptin_hunger": {
+      "page_number": 5,
+      "text": "减脂后瘦素骤降，导致极度饥饿"
+    },
+    "cortisol_stress": {
+      "page_number": 5,
+      "text": "长期慢性压力导致皮质醇持续偏高"
+    },
+    "sleep_hormones": {
+      "page_number": 5,
+      "text": "睡眠不足（<7 小时）会导致：饥饿素上升、瘦素下降、皮质醇升高、胰岛素敏感性下降"
+    },
+    "post_workout_nutrition": {
+      "page_number": 6,
+      "text": "运动后 30-60 分钟内补充“碳水+蛋白质”"
+    },
+    "protein_powder": {
+      "page_number": 6,
+      "text": "蛋白粉：便捷、高性价比的蛋白质来源"
+    },
+    "creatine": {
+      "page_number": 6,
+      "text": "肌酸（Creatine）：目前研究最透彻、最安全的补剂"
+    },
+    "smart_goals": {
+      "page_number": 6,
+      "text": "S (Specific)：具体"
+    },
+    "emotional_eating": {
+      "page_number": 7,
+      "text": "情绪性进食：因压力、无聊、悲伤而非生理饥饿进食"
+    },
+    "older_adult_protein": {
+      "page_number": 8,
+      "text": "中老年人的蛋白质需求应提高至 1.0-1.2g/kg体 重/天"
+    },
+    "diabetes_exercise": {
+      "page_number": 8,
+      "text": "患者必须在运动前后监测血糖，严禁空腹进行高强度 运动"
+    },
+    "sedentary_risk": {
+      "page_number": 9,
+      "text": "建议每坐 1 小时必须起身活动 5 分钟"
+    },
+    "late_eating": {
+      "page_number": 9,
+      "text": "只要全天总热量不超标，晚上进食本身不会 直接转化为脂肪"
+    },
+    "bmi_obesity": {
+      "page_number": 11,
+      "text": "BMI = 体重(kg) ÷ 身高(m)的平方"
+    },
+    "skinfold_accuracy": {
+      "page_number": 11,
+      "text": "皮褶厚度法：使用皮脂钳测量，经济便携，但极度依赖操作者的经验"
+    },
+    "food_label_sodium": {
+      "page_number": 12,
+      "text": "每 100g超过 600mg即为高钠"
+    },
+    "metabolic_adaptation": {
+      "page_number": 4,
+      "text": "甲状腺激素（T3）下降、瘦素水平降低、 交感神经活性下降、NEAT无意识减少"
+    },
+    "women_strength": {
+      "page_number": 11,
+      "text": "女性的睾酮水平仅为男性的 1/10 到 1/20"
+    },
+    "fat_burning_myth": {
+      "page_number": 11,
+      "text": "并非燃脂的“开关”"
+    },
+    "vo2max": {
+      "page_number": 12,
+      "text": "VO2max（最大摄氧量）估算：可通过库珀 12 分钟跑测试"
+    }
+  },
+  "queries": [
+    {
+      "query": "减脂期每天制造多大的热量缺口比较安全？",
+      "relevant_hashes": ["40a83ffa04a5e920c04f84293c71785989147625523b019b20411797cd1c97e2"],
+      "relevant_evidence_ids": ["safe_calorie_deficit"]
+    },
+    {
+      "query": "基础代谢率BMR是什么，占每天总消耗多少比例？",
+      "relevant_hashes": ["420113686096788701fd79d5a7553df884ce1d4ac49a10f3b880b9a4f983fa48"],
+      "relevant_evidence_ids": ["bmr_definition", "bmr_share"]
+    },
+    {
+      "query": "每天总能量消耗TDEE由哪几部分组成？",
+      "relevant_hashes": ["6ea5cda4c2f47af34da499fde2620aa234ddaca6c1bf030af047819c19ef3942"],
+      "relevant_evidence_ids": ["tdee_components"]
+    },
+    {
+      "query": "体重增加或下降是由什么决定的？",
+      "relevant_hashes": ["6202e862007696cae7bca9e8f20d88fa5ca83b38586701c9bbf378e96ca5ad1b"],
+      "relevant_evidence_ids": ["energy_balance"]
+    },
+    {
+      "query": "简单糖和复合碳水有什么区别？",
+      "relevant_hashes": ["c6eb6c899dbc30d3053ac609f8ff551c823867db866ca21d8f12d620d25aec44"],
+      "relevant_evidence_ids": ["simple_sugars", "complex_carbs"]
+    },
+    {
+      "query": "减脂期每天至少要吃多少克碳水？",
+      "relevant_hashes": ["01a79cec1f8de6c2aef382678754bf003c78c7ad358dfa792b9b4a0e00d65bd2"],
+      "relevant_evidence_ids": ["minimum_carbs"]
+    },
+    {
+      "query": "蛋白质质量用什么指标评价？",
+      "relevant_hashes": ["34ceb5a024d8c6b8c7958f1ef16c948d6bd8b6f3cd42a506f6de881c40ac822f"],
+      "relevant_evidence_ids": ["protein_pdcaas", "protein_diaas"]
+    },
+    {
+      "query": "反式脂肪和饱和脂肪为什么应该限制？",
+      "relevant_hashes": ["ff510a6df568d53f6aced18fe94c2095c3fd57f388376b538e8cf1d8698d685c"],
+      "relevant_evidence_ids": ["saturated_fat_limit", "trans_fat_limit"]
+    },
+    {
+      "query": "维生素C有什么作用，吃什么能补？",
+      "relevant_hashes": ["b731cc1541448578b1e06024f59712592c0c2420f985ecb973adb30f9106aec2"],
+      "relevant_evidence_ids": ["vitamin_c"]
+    },
+    {
+      "query": "减脂期容易缺乏哪些营养素？",
+      "relevant_hashes": ["aa02c06834fca983bd7c3c595e5a7356aa323fbcff8b8718ec0beb666e371e3e"],
+      "relevant_evidence_ids": ["cutting_micronutrients"]
+    },
+    {
+      "query": "人体有哪三大供能系统？",
+      "relevant_hashes": ["69d665f2c26f6ce9ef6056ff115ddf06f5334dc02ecd72939783e81d945de505"],
+      "relevant_evidence_ids": ["energy_systems"]
+    },
+    {
+      "query": "慢跑一小时大概能消耗多少热量？",
+      "relevant_hashes": ["6fc1dbcff26e2b8d88c53ab19a50d0fa4cc1c393e1e11ea6d8a3305f9c244360"],
+      "relevant_evidence_ids": ["slow_jog_calories"]
+    },
+    {
+      "query": "运动处方的FITT原则指什么？",
+      "relevant_hashes": ["a69723d412a87df9dd4cea5bd038b440a06769bef1953890e9453aaf57ad1104"],
+      "relevant_evidence_ids": ["fitt_principle"]
+    },
+    {
+      "query": "16比8断食法具体怎么做？",
+      "relevant_hashes": ["a836a58b5127c0d3349fa4b7d229a06eeb328c0e416ffd331d62904f9430ee78"],
+      "relevant_evidence_ids": ["intermittent_fasting_16_8"]
+    },
+    {
+      "query": "怎样用手掌法则控制每餐份量？",
+      "relevant_hashes": ["e2988f112f450302f187b493c6fc60e64a7d1bc2d9975c5cc3ad51660ebe1c98"],
+      "relevant_evidence_ids": ["palm_portions"]
+    },
+    {
+      "query": "减脂遇到平台期体重一直不降怎么办？",
+      "relevant_hashes": ["fed6f4fd50ca0db1dc83af797164cca8ff7b858b78914419c9e72ee01e932219"],
+      "relevant_evidence_ids": ["weight_plateau"]
+    },
+    {
+      "query": "什么是溜溜球效应，有什么危害？",
+      "relevant_hashes": ["b925a260366186e14147a2e22f7150d86044e1672a8f8175ac3d638dfcebed12"],
+      "relevant_evidence_ids": ["yo_yo_effect"]
+    },
+    {
+      "query": "胰岛素抵抗为什么会让人更容易长胖？",
+      "relevant_hashes": ["a7807ad2617a1c01aa53a1d49ef6d201376eae9eea7f802f7964ec6898310c42"],
+      "relevant_evidence_ids": ["insulin_resistance"]
+    },
+    {
+      "query": "为什么减脂后特别容易饿？",
+      "relevant_hashes": ["5f0127f8606b61f4bff2d7a279abe96fb365401bf4c5360830f86219540453e4"],
+      "relevant_evidence_ids": ["leptin_hunger"]
+    },
+    {
+      "query": "长期压力大会导致肥胖吗？",
+      "relevant_hashes": ["c2c3cb46885a61218c9a5e79cee0bda40e9a42ffe15860ef0a96a03ce26110b0"],
+      "relevant_evidence_ids": ["cortisol_stress"]
+    },
+    {
+      "query": "睡眠不足为什么会让人变胖？",
+      "relevant_hashes": ["ed11e0795a7b60b0a162b8564f8c190734c900fdea570144a8e769abe91df5c1"],
+      "relevant_evidence_ids": ["sleep_hormones"]
+    },
+    {
+      "query": "运动后什么时候补充营养最好？",
+      "relevant_hashes": ["3d10f8108f2e66363178a593d6183e3985a251ce1c9e694387cc714d65879273"],
+      "relevant_evidence_ids": ["post_workout_nutrition"]
+    },
+    {
+      "query": "蛋白粉和肌酸分别有什么作用？",
+      "relevant_hashes": ["897535ed57eaac2bd62992cc4dd7aa69c7f8dec18184b68c8c803a6eb52223bf"],
+      "relevant_evidence_ids": ["protein_powder", "creatine"]
+    },
+    {
+      "query": "减脂设定目标用SMART原则是什么意思？",
+      "relevant_hashes": ["3d26492d61b045e80f90cd11e6399570e87f00d09faebca778154ead5d0c00ea"],
+      "relevant_evidence_ids": ["smart_goals"]
+    },
+    {
+      "query": "中老年人减脂蛋白质需求是多少？",
+      "relevant_hashes": ["d4b837b4a0275c790992c20fcdba729bc8f7cfe1e6afcbc1f9d711cac055b827"],
+      "relevant_evidence_ids": ["older_adult_protein"]
+    },
+    {
+      "query": "2型糖尿病患者运动需要注意什么？",
+      "relevant_hashes": ["553e5612bf013218b7e1e3a6902c3eca5690b241a823e7b76e55cc3d0b72b4aa"],
+      "relevant_evidence_ids": ["diabetes_exercise"]
+    },
+    {
+      "query": "久坐办公有什么健康风险怎么缓解？",
+      "relevant_hashes": ["6a2396e2407581e602739c32f94ce7ed5d61ff9fe947dad997a10d95895c1bbb"],
+      "relevant_evidence_ids": ["sedentary_risk"]
+    },
+    {
+      "query": "晚上吃东西真的更容易发胖吗？",
+      "relevant_hashes": ["629874a870164d28b6d73424e7bb72b8aa4aef4eda0ac2e64f7f7e5e4df14b39"],
+      "relevant_evidence_ids": ["late_eating"]
+    },
+    {
+      "query": "BMI怎么计算多少算肥胖？",
+      "relevant_hashes": ["7ce89b4c1cae486009cdba4c0197fd2ee712d438ca19d2c18f5a6127e9ccee22"],
+      "relevant_evidence_ids": ["bmi_obesity"]
+    },
+    {
+      "query": "阅读食品营养标签钠含量多少算高？",
+      "relevant_hashes": ["76da7c9311d12a8da36d967823cdd3fd0bfb8e38ae17d51dd204e483cb6201d5"],
+      "relevant_evidence_ids": ["food_label_sodium"]
+    },
+    {
+      "query": "平台期体重一直卡着不动了，怎么突破？",
+      "relevant_hashes": ["fed6f4fd50ca0db1dc83af797164cca8ff7b858b78914419c9e72ee01e932219"],
+      "relevant_evidence_ids": ["weight_plateau"]
+    },
+    {
+      "query": "为什么明明吃得很少体重还是不掉？",
+      "relevant_hashes": ["f2251706bdda58c840c31dc922be43bf9e16ad52e33f35bc2524d80df3884b55"],
+      "relevant_evidence_ids": ["metabolic_adaptation"]
+    },
+    {
+      "query": "女生练力量会变成金刚芭比吗？",
+      "relevant_hashes": ["bf6c8603b3f6cbb4b53039459e0b12e3e089a6f6def8f3b49cae33b207fa6a2a"],
+      "relevant_evidence_ids": ["women_strength"]
+    },
+    {
+      "query": "跑步要跑多久才开始燃烧脂肪？",
+      "relevant_hashes": ["54f4b53bd7849419396f30be757bce2c2f748242396a92534d870d411cb4c617"],
+      "relevant_evidence_ids": ["fat_burning_myth"]
+    },
+    {
+      "query": "老想暴食、总馋高热量零食是怎么回事？",
+      "relevant_hashes": ["38c6d6b78537444ff438fc3ce90a40e027f8a64f3dabc9b6baa49d773f2100a7"],
+      "relevant_evidence_ids": ["emotional_eating"]
+    },
+    {
+      "query": "DIAAS 和 PDCAAS 这两个指标有什么区别？",
+      "relevant_hashes": ["34ceb5a024d8c6b8c7958f1ef16c948d6bd8b6f3cd42a506f6de881c40ac822f"],
+      "relevant_evidence_ids": ["protein_pdcaas", "protein_diaas"]
+    },
+    {
+      "query": "VO2max 是什么，怎么测量？",
+      "relevant_hashes": ["6e997c20415625e2699906f0cfbf744084d0b73296b783662ecae2cb2d55dee5"],
+      "relevant_evidence_ids": ["vo2max"]
+    },
+    {
+      "query": "皮褶厚度法测体脂准不准？",
+      "relevant_hashes": ["7ce89b4c1cae486009cdba4c0197fd2ee712d438ca19d2c18f5a6127e9ccee22"],
+      "relevant_evidence_ids": ["skinfold_accuracy"]
+    },
+    {
+      "query": "GL 和 GI 有什么区别，减脂该看哪个？",
+      "relevant_hashes": ["c6eb6c899dbc30d3053ac609f8ff551c823867db866ca21d8f12d620d25aec44", "01a79cec1f8de6c2aef382678754bf003c78c7ad358dfa792b9b4a0e00d65bd2"],
+      "relevant_evidence_ids": ["gi_definition", "gl_definition"]
+    },
+    {
+      "query": "减脂期碳水和蛋白质分别该怎么吃？",
+      "relevant_hashes": ["01a79cec1f8de6c2aef382678754bf003c78c7ad358dfa792b9b4a0e00d65bd2", "34ceb5a024d8c6b8c7958f1ef16c948d6bd8b6f3cd42a506f6de881c40ac822f"],
+      "relevant_evidence_ids": ["minimum_carbs", "cutting_protein"]
+    },
+    {
+      "query": "有哪些激素会影响体重和食欲？",
+      "relevant_hashes": ["a7807ad2617a1c01aa53a1d49ef6d201376eae9eea7f802f7964ec6898310c42", "5f0127f8606b61f4bff2d7a279abe96fb365401bf4c5360830f86219540453e4", "c2c3cb46885a61218c9a5e79cee0bda40e9a42ffe15860ef0a96a03ce26110b0"],
+      "relevant_evidence_ids": ["insulin_resistance", "leptin_hunger", "cortisol_stress"]
+    },
+    {
+      "query": "减脂期容易缺哪些营养素，从什么食物补充？",
+      "relevant_hashes": ["aa02c06834fca983bd7c3c595e5a7356aa323fbcff8b8718ec0beb666e371e3e", "34911fa4002872e27d7fd6cdd38153b15f8d4b83ff3a0e9f9457d99fad4e0de6"],
+      "relevant_evidence_ids": ["cutting_micronutrients", "mineral_sources"]
+    },
+    {
+      "query": "最近买什么股票比较好？",
+      "relevant_hashes": [],
+      "relevant_evidence_ids": []
+    },
+    {
+      "query": "怎么给汽车换机油？",
+      "relevant_hashes": [],
+      "relevant_evidence_ids": []
+    },
+    {
+      "query": "Python 里怎么画折线图？",
+      "relevant_hashes": [],
+      "relevant_evidence_ids": []
+    },
+    {
+      "query": "跑步鞋应该怎么挑选？",
+      "relevant_hashes": [],
+      "relevant_evidence_ids": []
+    },
+    {
+      "query": "感冒了应该吃什么药？",
+      "relevant_hashes": [],
+      "relevant_evidence_ids": []
+    }
+  ]
+}
