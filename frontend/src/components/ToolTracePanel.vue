@@ -89,7 +89,7 @@ const open = ref(false)
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .trace {
   max-width: 100%;
   /* width: 100%; */
@@ -134,7 +134,9 @@ const open = ref(false)
   animation: rot 0.9s linear infinite;
 }
 @keyframes rot {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 .cpu {
   width: 14px;

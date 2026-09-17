@@ -122,7 +122,7 @@ function confirm() {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .hitl {
   margin-top: 10px;
   border: 1px solid var(--line-strong);

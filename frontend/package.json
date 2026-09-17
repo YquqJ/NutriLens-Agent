@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "check:styles": "node scripts/format-styles.mjs --check",
+    "format:styles": "node scripts/format-styles.mjs",
     "type-check": "vue-tsc --noEmit",
     "test": "vitest run",
     "preview": "vite preview"
@@ -21,6 +23,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
+    "prettier": "^3.9.7",
+    "sass": "^1.104.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
     "vitest": "^3.2.4",

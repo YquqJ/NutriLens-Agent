@@ -210,7 +210,7 @@ onMounted(load)
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 两卡等高：默认 stretch，去除 top 对齐 */
 .layout {
   display: grid;

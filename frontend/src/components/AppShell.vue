@@ -11,8 +11,8 @@ const auth = useAuthStore()
 const nav = [
   { path: '/dashboard', label: '今日', icon: 'Odometer' },
   { path: '/records', label: '记录', icon: 'Notebook' },
-  { path: '/chat', label: '智能对话', icon: 'ChatDotRound' },
-  { path: '/plan', label: '饮食计划', icon: 'Calendar' },
+  { path: '/chat', label: '对话', icon: 'ChatDotRound' },
+  { path: '/plan', label: '计划', icon: 'Calendar' },
   { path: '/profile', label: '档案', icon: 'User' },
 ]
 
@@ -63,7 +63,7 @@ function logout() {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .shell {
   display: flex;
   height: 100%;
@@ -82,6 +82,7 @@ function logout() {
   align-items: center;
   gap: 10px;
   padding: 24px 20px 20px;
+  border-bottom: 1px solid var(--line);
 }
 .brand-mark {
   width: 28px;
@@ -115,7 +116,9 @@ function logout() {
   border-radius: var(--radius-sm);
   color: var(--ink-2);
   font-weight: 500;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 .nav-item:hover {
   background: var(--bg);
@@ -161,7 +164,7 @@ function logout() {
 .main {
   flex: 1;
   overflow-y: auto;
-  margin: 16px; 
+  margin: 16px;
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 12px;

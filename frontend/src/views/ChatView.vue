@@ -491,7 +491,7 @@ watch(
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .chat-page {
   display: flex;
   flex-direction: column;
@@ -511,13 +511,15 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
+  padding: 16px 12px;
   border-right: 1px solid var(--border);
+  background: #fff;
 }
 .new-btn {
   width: 100%;
-  height: 36px;
+  height: 40px;
   border-radius: 10px;
+  font-size: 14px;
   font-weight: 600;
 }
 .conv-list {
@@ -528,8 +530,8 @@ watch(
   gap: 2px;
 }
 .conv-label {
-  padding: 6px 10px 4px;
-  font-size: 11px;
+  padding: 12px 10px 4px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   color: var(--muted-2);
 }
@@ -537,11 +539,13 @@ watch(
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 10px;
+  padding: 11px 10px;
   border-radius: 10px;
   cursor: pointer;
   color: var(--muted);
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 .conv-item:hover {
   background: var(--surface-hover);
@@ -559,7 +563,7 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 500;
 }
 .conv-time {
@@ -595,28 +599,34 @@ watch(
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 8px 24px;
-  background: linear-gradient(180deg, var(--bg-elevated), var(--surface));
+  padding: 28px 24px;
+  background: var(--surface);
 }
 /* 居中阅读列：消息与输入框共用同一宽度，避免超长行与两侧空旷 */
 .col {
-  max-width: 800px;
+  max-width: 80%;
   margin: 0 auto;
   width: 100%;
 }
 .empty {
   max-width: 520px;
-  margin: 12vh auto 0;
+  margin: 10vh auto 0;
+  padding: 30px;
+  border: 1px solid var(--primary-line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 26px rgba(20, 79, 45, 0.04);
   text-align: center;
 }
 .empty-title {
-  font-size: 17px;
+  color: var(--ink);
+  font-size: 21px;
   font-weight: 600;
   margin: 0 0 4px;
 }
 .empty-sub {
   color: var(--ink-3);
-  font-size: 13px;
+  font-size: 14px;
   margin: 0 0 16px;
 }
 .examples {
@@ -626,7 +636,7 @@ watch(
   justify-content: center;
 }
 .chip {
-  padding: 7px 14px;
+  padding: 8px 14px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   background: var(--bg-elevated);
@@ -634,7 +644,9 @@ watch(
   font-size: 13px;
   cursor: pointer;
   font-family: var(--font);
-  transition: border-color 0.12s, color 0.12s;
+  transition:
+    border-color 0.12s,
+    color 0.12s;
 }
 .chip:hover {
   border-color: var(--primary);
@@ -643,7 +655,8 @@ watch(
 
 .composer-wrap {
   border-top: 1px solid var(--line);
-  padding: 12px 0 12px;
+  padding: 14px 24px;
+  background: var(--bg-elevated);
 }
 /* HITL 卡片对齐到助手内容列（头像 32 + 间距 12），并限制宽度 */
 .hitl-slot {
@@ -688,10 +701,10 @@ watch(
   align-items: center;
   gap: 6px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--bg-elevated);
   padding: 8px 10px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 5px 18px rgba(20, 79, 45, 0.06);
 }
 .composer-input {
   flex: 1;
@@ -747,9 +760,32 @@ watch(
   --el-button-disabled-text-color: var(--muted-2);
 }
 
-.chat-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0; padding: 22px 24px 20px; border-bottom: 1px solid var(--line); background: var(--bg-elevated); }.chat-topbar h1 { margin: 0; font-size: 32px; line-height: 1.22; }.chat-topbar .page-kicker { margin-bottom: 7px; }.chat-status { padding: 7px 11px; border: 1px solid var(--primary-line); border-radius: 999px; background: var(--primary-soft); color: var(--primary-deep); font-size: 13px; }
-.convs { padding: 16px 12px; background: #fff; }.new-btn { height: 40px; font-size: 14px; }.conv-label { padding-top: 12px; font-size: 12px; }.conv-item { padding: 11px 10px; }.conv-title { font-size: 14px; }.messages { padding: 28px 24px; background: var(--surface); }.col { max-width: 80%; }.empty { margin-top: 10vh; padding: 30px; border: 1px solid var(--primary-line); border-radius: var(--radius); background: var(--bg-elevated); box-shadow: 0 8px 26px rgba(20, 79, 45, .04); }.empty-title { color: var(--ink); font-size: 21px; }.empty-sub { font-size: 14px; }.chip { padding: 8px 14px; font-size: 13px; }.composer-wrap { padding: 14px 24px; background: var(--bg-elevated); }.composer { border-radius: 12px; padding: 8px 10px; box-shadow: 0 5px 18px rgba(20, 79, 45, .06); }
-
+.chat-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+  padding: 22px 24px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elevated);
+}
+.chat-topbar h1 {
+  margin: 0;
+  font-size: 32px;
+  line-height: 1.22;
+}
+.chat-topbar .page-kicker {
+  margin-bottom: 7px;
+}
+.chat-status {
+  padding: 7px 11px;
+  border: 1px solid var(--primary-line);
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+  font-size: 13px;
+}
 @media (max-width: 760px) {
   .chat-page {
     height: calc(100dvh - 57px);
@@ -761,7 +797,16 @@ watch(
   .messages {
     padding: 18px 0;
   }
-  .chat-topbar { padding: 14px 0; background: transparent; }.chat-topbar h1 { font-size: 27px; }.chat-status { display: none; }
+  .chat-topbar {
+    padding: 14px 0;
+    background: transparent;
+  }
+  .chat-topbar h1 {
+    font-size: 27px;
+  }
+  .chat-status {
+    display: none;
+  }
   .col {
     max-width: none;
   }

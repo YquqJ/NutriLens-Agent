@@ -59,14 +59,21 @@ watch(() => [props.visible, props.activeIndex], scrollToActive)
   </el-drawer>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .drawer-head {
   display: flex;
   align-items: baseline;
   gap: 8px;
 }
-.title { font-size: 16px; font-weight: 650; color: var(--text); }
-.count { font-size: 12px; color: var(--muted-2); }
+.title {
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--text);
+}
+.count {
+  font-size: 12px;
+  color: var(--muted-2);
+}
 .citation-list {
   display: flex;
   flex-direction: column;
@@ -82,14 +89,40 @@ watch(() => [props.visible, props.activeIndex], scrollToActive)
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-elevated);
-  transition: border-color .16s, background .16s;
+  transition:
+    border-color 0.16s,
+    background 0.16s;
 }
-.citation-card.active { border-color: #60a5fa; background: #eff6ff; }
-.citation-top { display: flex; align-items: baseline; gap: 8px; }
-.citation-index { color: #2563eb; font-family: var(--font-num); font-weight: 700; }
-.citation-source { color: var(--text); font-size: 14px; font-weight: 600; }
-.citation-meta { margin-top: 7px; color: var(--ink-2); font-size: 13px; line-height: 1.55; }
-.citation-location { margin-top: 4px; color: var(--muted-2); font-size: 12px; }
+.citation-card.active {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+.citation-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.citation-index {
+  color: #2563eb;
+  font-family: var(--font-num);
+  font-weight: 700;
+}
+.citation-source {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.citation-meta {
+  margin-top: 7px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.citation-location {
+  margin-top: 4px;
+  color: var(--muted-2);
+  font-size: 12px;
+}
 .citation-content {
   margin-top: 12px;
   padding: 10px 11px;

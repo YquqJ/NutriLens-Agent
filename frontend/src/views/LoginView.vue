@@ -132,7 +132,7 @@ onMounted(() => {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .login {
   display: flex;
   height: 100%;
@@ -221,7 +221,7 @@ onMounted(() => {
   border: 1px solid var(--primary-line);
   border-radius: 12px;
   background: var(--bg-elevated);
-  box-shadow: 0 18px 42px rgba(21, 128, 61, .08);
+  box-shadow: 0 18px 42px rgba(21, 128, 61, 0.08);
 }
 .form-box h1 {
   margin: 0;
@@ -233,11 +233,31 @@ onMounted(() => {
   color: var(--ink-3);
   font-size: 15px;
 }
-.form-box :deep(.el-form-item__label) { padding-bottom: 7px; font-size: 15px; font-weight: 650; }
-.form-box :deep(.el-input__wrapper) { min-height: 44px; padding: 0 13px; }
-.form-box :deep(.el-input__inner) { font-size: 15px; }
-.remember-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -2px 0 18px; color: var(--ink-3); font-size: 13px; }
-.remember-row :deep(.el-checkbox__label) { font-size: 14px; color: var(--ink-2); }
+.form-box :deep(.el-form-item__label) {
+  padding-bottom: 7px;
+  font-size: 15px;
+  font-weight: 650;
+}
+.form-box :deep(.el-input__wrapper) {
+  min-height: 44px;
+  padding: 0 13px;
+}
+.form-box :deep(.el-input__inner) {
+  font-size: 15px;
+}
+.remember-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -2px 0 18px;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.remember-row :deep(.el-checkbox__label) {
+  font-size: 14px;
+  color: var(--ink-2);
+}
 .submit {
   width: 100%;
   min-height: 44px;
@@ -251,11 +271,28 @@ onMounted(() => {
   text-align: center;
 }
 @media (max-width: 760px) {
-  .login { min-height: 100%; display: block; }
-  .brand-panel { width: auto; padding: 28px 24px; }
-  .tagline { margin-top: 36px; font-size: 27px; }
-  .brand-copy,.features { display: none; }
-  .form-panel { padding: 24px 16px 36px; }
-  .form-box { min-height: 0; padding: 30px 22px; }
+  .login {
+    min-height: 100%;
+    display: block;
+  }
+  .brand-panel {
+    width: auto;
+    padding: 28px 24px;
+  }
+  .tagline {
+    margin-top: 36px;
+    font-size: 27px;
+  }
+  .brand-copy,
+  .features {
+    display: none;
+  }
+  .form-panel {
+    padding: 24px 16px 36px;
+  }
+  .form-box {
+    min-height: 0;
+    padding: 30px 22px;
+  }
 }
 </style>
