@@ -1,46 +1,46 @@
 /* ============================================================
    NutriLens 设计系统
-   基调：暖纸白底 + 墨色文字 + 健康淡绿主色 + 细边框。
+   基调：近白底 + 墨色文字 + 薄荷清新绿主色 + 细边框。
    刻意规避"AI 味"：无渐变、无玻璃拟态、无霓虹、无 emoji 图标。
    ============================================================ */
 
 :root {
   /* 色板 */
-  --bg: #f7f6f3;           /* 页面底：暖纸白 */
+  --bg: #f8faf8;           /* 页面底：近白绿 */
   --bg-elevated: #ffffff;  /* 卡片 / 面板底 */
-  --ink: #1a1d1a;          /* 正文：墨色 */
-  --ink-2: #4a4e49;        /* 次级文字 */
-  --ink-3: #8a8e88;        /* 弱文字 / 占位 */
-  --line: #e7e5e0;         /* 细边框（hairline） */
-  --line-strong: #d8d5ce;  /* 稍强边框 */
+  --ink: #17241b;          /* 正文：墨色 */
+  --ink-2: #46574c;        /* 次级文字 */
+  --ink-3: #76857b;        /* 弱文字 / 占位 */
+  --line: #dce8df;         /* 细边框（hairline） */
+  --line-strong: #cbdacf;  /* 稍强边框 */
 
   /* 主题色：健康淡绿（单一来源，改这里即全站生效） */
   --primary: #16a34a;      /* 主绿：按钮 / 链接 / 强调 */
   --primary-deep: #15803d; /* 深绿：hover / 深色文字 */
-  --primary-soft: #e7f6ee; /* 淡绿底：选中态 / 用户气泡 / 头像底 */
-  --primary-line: #c9ecd6; /* 淡绿描边 */
-  --warn: #b4542a;         /* 警示暖橙（热量超标等） */
-  --info: #3a6b8f;         /* 信息蓝（克制使用） */
+  --primary-soft: #f0fdf4; /* 淡绿底：选中态 / 用户气泡 / 头像底 */
+  --primary-line: #bbf7d0; /* 淡绿描边 */
+  --warn: #dd6f5b;         /* 警示珊瑚（热量超标等） */
+  --info: #4d8ccb;         /* 信息蓝（克制使用） */
 
   /* 中性灰（对齐 CookHero 观感，供聊天区使用） */
-  --text: #1f2937;         /* 正文 */
-  --muted: #6b7280;        /* 次级文字 */
-  --muted-2: #9ca3af;      /* 弱文字 / 占位 */
-  --border: #e5e7eb;       /* 中性细边框 */
-  --surface: #f9fafb;      /* 面板浅灰底 */
-  --surface-hover: #f3f4f6;/* hover 浅灰底 */
+  --text: #17241b;         /* 正文 */
+  --muted: #6c7a70;        /* 次级文字 */
+  --muted-2: #9aa79f;      /* 弱文字 / 占位 */
+  --border: #dce8df;       /* 中性细边框 */
+  --surface: #f7fbf8;      /* 面板浅灰底 */
+  --surface-hover: #edf8f0;/* hover 浅灰底 */
 
   /* 数据可视化语义色（看板图表 / 餐次 / 宏量，单一来源，图表 JS 据此读取） */
-  --viz-intake: #22c55e;   /* 摄入 / 蛋白质（清新绿） */
-  --viz-burned: #fb923c;   /* 消耗 / 脂肪（暖橙） */
-  --viz-carbs: #38bdf8;    /* 碳水（浅天蓝） */
+  --viz-intake: #16a34a;   /* 摄入 / 蛋白质（清新绿） */
+  --viz-burned: #dd6f5b;   /* 消耗 / 脂肪（珊瑚） */
+  --viz-carbs: #4d8ccb;    /* 碳水（浅天蓝） */
 
   /* 尺寸 */
-  --radius: 10px;          /* 卡片圆角，克制，不 pill */
+  --radius: 8px;           /* 卡片圆角，克制，不 pill */
   --radius-sm: 6px;
 
   /* 阴影：极轻，只用于浮层（抽屉 / 下拉），卡片用边框不靠阴影 */
-  --shadow: 0 1px 2px rgba(26, 29, 26, 0.04), 0 6px 20px rgba(26, 29, 26, 0.06);
+  --shadow: 0 1px 2px rgba(20, 79, 45, 0.04), 0 10px 26px rgba(20, 79, 45, 0.05);
 
   /* 字体 */
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
@@ -50,14 +50,14 @@
 
   /* Element Plus 变量覆盖：把组件库拉进同一套色板 */
   --el-color-primary: var(--primary);
-  --el-color-primary-light-3: #45c27a;
-  --el-color-primary-light-5: #74d49c;
-  --el-color-primary-light-7: #a5e5c1;
-  --el-color-primary-light-8: #bcefd3;
+  --el-color-primary-light-3: #5cc67c;
+  --el-color-primary-light-5: #8dde9f;
+  --el-color-primary-light-7: #b7edc1;
+  --el-color-primary-light-8: #cef5d5;
   --el-color-primary-light-9: var(--primary-soft);
   --el-color-primary-dark-2: var(--primary-deep);
   --el-color-success: var(--primary);
-  --el-color-warning: #c8861f;
+  --el-color-warning: #d69342;
   --el-color-danger: var(--warn);
   --el-color-error: var(--warn);
   --el-text-color-primary: var(--ink);

@@ -12,10 +12,11 @@ const router = createRouter({
       path: '/',
       component: () => import('@/components/AppShell.vue'),
       children: [
-        { path: '', redirect: '/chat' },
+        { path: '', redirect: '/dashboard' },
         { path: 'chat', name: 'chat', component: () => import('@/views/ChatView.vue') },
         { path: 'dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
         { path: 'records', name: 'records', component: () => import('@/views/RecordsView.vue') },
+        { path: 'plan', name: 'plan', component: () => import('@/views/PlanView.vue') },
         { path: 'profile', name: 'profile', component: () => import('@/views/ProfileView.vue') },
       ],
     },
