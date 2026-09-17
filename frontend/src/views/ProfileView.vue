@@ -104,8 +104,9 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div class="page-wrapper">
     <div class="page-head">
+      <span class="page-kicker">个人健康档案</span>
       <h1>身体档案</h1>
       <p>填写身体数据与目标，系统据此计算你的每日热量目标。</p>
     </div>
@@ -167,7 +168,10 @@ onMounted(load)
             />
           </el-form-item>
 
-          <el-button v-if="editing" type="primary" :loading="saving" @click="save">保存档案</el-button>
+          <div v-if="editing">
+            <el-button type="primary" :loading="saving" @click="save">保存档案</el-button>
+            <el-button @click="editing = false">取消</el-button>
+          </div>
         </el-form>
       </section>
 

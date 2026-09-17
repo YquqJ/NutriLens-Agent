@@ -103,10 +103,10 @@ onMounted(load)
 </script>
 
 <template>
-  <div v-loading="loading" class="dashboard-page">
+  <div v-loading="loading" class="dashboard-page page-wrapper">
     <header class="page-head dashboard-head">
       <div>
-        <span class="eyebrow">Daily health workspace</span>
+        <span class="page-kicker">每日健康工作台</span>
         <h1>今天，保持轻盈节奏</h1>
         <p>从饮食、运动与能量收支开始，照顾好今天的身体状态。</p>
       </div>
@@ -115,7 +115,7 @@ onMounted(load)
 
     <section class="status-grid">
       <article class="daily-status">
-        <span class="eyebrow hero-eyebrow">Daily rhythm</span>
+        <span class="eyebrow hero-eyebrow">今日节奏</span>
         <h2>{{ heroTitle }}</h2>
         <p>{{ heroNote }}</p>
         <div class="hero-context"><span>今日重点</span><b>{{ target == null ? '建立能量基线' : overBudget ? '让晚餐更轻盈' : '优先补足蛋白质' }}</b></div>
@@ -164,9 +164,9 @@ onMounted(load)
         <router-link :to="insight.to" class="insight-link">{{ insight.action }} <el-icon><ArrowRight /></el-icon></router-link>
       </article>
       <article class="panel macro-panel">
-        <div class="panel-heading"><div><h2>宏量营养素</h2><p>按克数统计</p></div></div>
+        <div class="panel-heading"><div><h2>营养摄入构成</h2><p>蛋白质、碳水、脂肪的已记录摄入量（克）</p></div></div>
         <div v-if="macroTotal > 0" class="donut-wrap"><EChart :option="macroOption" /><div class="donut-center"><b class="num">{{ fmt(macroTotal) }}</b><span>克 · 合计</span></div></div>
-        <div v-else class="compact-empty"><el-icon><PieChart /></el-icon><span>记录饮食后显示构成</span></div>
+        <div v-else class="compact-empty"><el-icon><PieChart /></el-icon><span>记录饮食后，显示三种营养素的克数与占比</span></div>
       </article>
     </section>
   </div>

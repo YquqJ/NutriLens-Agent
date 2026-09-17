@@ -40,10 +40,10 @@ onMounted(load)
 </script>
 
 <template>
-  <div v-loading="loading" class="plan-page">
+  <div v-loading="loading" class="plan-page page-wrapper">
     <header class="page-head plan-head">
       <div>
-        <span class="eyebrow">Personal plan</span>
+        <span class="page-kicker">我的健康计划</span>
         <h1>{{ plan ? '这是你正在执行的健康计划' : '把目标拆成每天能做到的事' }}</h1>
         <p>{{ plan ? '饮食与运动安排来自 AI 对话，并已同步为当前计划。' : '饮食和运动会在同一份计划里协同安排，并依据你的档案和记录持续调整。' }}</p>
       </div>
@@ -91,7 +91,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-.plan-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }.plan-head h1 { font-size: 31px; }.eyebrow { display: block; margin-bottom: 7px; color: var(--primary-deep); font-size: 11px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.plan-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }.plan-head h1 { font-size: 32px; }.eyebrow { display: block; margin-bottom: 7px; color: var(--primary-deep); font-size: 11px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
 .plan-hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(260px, .9fr); gap: 28px; margin-top: 26px; padding: 30px; background: var(--primary-soft); border-color: var(--primary-line); }.hero-kicker { color: var(--primary-deep); font-size: 13px; font-weight: 650; }.hero-copy h2 { max-width: 560px; margin: 10px 0 0; font-size: 29px; line-height: 1.25; letter-spacing: 0; }.hero-copy p { max-width: 560px; margin: 12px 0 22px; color: var(--ink-2); font-size: 14px; }.plan-preview { align-self: center; padding: 18px; background: var(--bg-elevated); border: 1px solid var(--primary-line); border-radius: var(--radius); }.preview-head { display: flex; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid var(--line); color: var(--ink-3); font-size: 12px; }.preview-head b { color: var(--primary-deep); }.preview-row { display: flex; align-items: center; gap: 11px; padding: 15px 0 0; }.row-icon,.focus-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 7px; }.row-icon.meal,.focus-icon.meal { color: var(--primary-deep); background: var(--primary-soft); }.row-icon.exercise,.focus-icon.exercise { color: var(--info); background: #eef6ff; }.preview-row b,.preview-row small { display: block; }.preview-row b { font-size: 14px; }.preview-row small { margin-top: 2px; color: var(--ink-3); font-size: 12px; }
 .active-plan { padding: 28px; margin-top: 24px; border-top: 3px solid var(--primary); }.active-head,.plan-title-row,.plan-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; }.plan-badge { display: inline-flex; align-items: center; gap: 6px; color: var(--primary-deep); font-size: 12px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }.updated-at { color: var(--ink-3); font-size: 12px; }.plan-title-row { margin-top: 14px; align-items: flex-start; }.plan-title-row h2 { margin: 0; font-size: 25px; line-height: 1.25; }.plan-state { padding: 4px 8px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-deep); font-size: 12px; font-weight: 700; }.plan-content { max-width: 900px; margin-top: 20px; padding: 22px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fbfefb; color: var(--ink); font-size: 15px; line-height: 1.9; white-space: pre-wrap; word-break: break-word; }.plan-footer { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }.plan-footer a { display: inline-flex; align-items: center; gap: 5px; flex: none; font-weight: 650; }.plan-focus { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }.focus-card { display: flex; align-items: flex-start; gap: 13px; padding: 20px; }.focus-card h2 { margin: 0; font-size: 16px; }.focus-card p { margin: 5px 0 0; color: var(--ink-3); font-size: 13px; }
 .how-it-works { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }.step { padding: 20px; }.step-number { color: var(--primary-deep); font-family: var(--font-num); font-size: 13px; font-weight: 700; }.step h2 { margin: 10px 0 0; font-size: 17px; }.step p { margin: 6px 0 0; color: var(--ink-3); font-size: 13px; }

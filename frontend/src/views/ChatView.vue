@@ -381,105 +381,107 @@ watch(
 </script>
 
 <template>
-  <div class="chat">
-    <!-- 会话列表 -->
-    <aside class="convs">
-      <el-button class="new-btn" type="primary" @click="newConversation">
-        <el-icon><Plus /></el-icon>&nbsp;新会话
-      </el-button>
-      <div class="conv-list">
-        <div v-if="convs.length" class="conv-label">最近会话</div>
-        <div
-          v-for="c in convs"
-          :key="c.id"
-          class="conv-item"
-          :class="{ active: c.id === activeId }"
-          @click="selectConversation(c.id)"
-        >
-          <span class="conv-title">{{ c.title }}</span>
-          <span class="conv-time">{{ formatTime(c.updated_at) }}</span>
-          <el-icon class="conv-del" @click.stop="removeConversation(c.id)"><Close /></el-icon>
-        </div>
-      </div>
-    </aside>
+  <div class="chat-page">
+    <header class="page-head chat-topbar">
+      <div><span class="page-kicker">AI 健康助手</span><h1>智能健康对话</h1></div>
+      <span class="chat-status">饮食、运动与计划都可以在这里完成</span>
+    </header>
 
-    <!-- 消息区 -->
-    <section class="main">
-      <header class="chat-topbar">
-        <div><span class="chat-eyebrow">NutriLens guide</span><h1>智能健康对话</h1></div>
-        <span class="chat-status">饮食、运动与计划都可以在这里完成</span>
-      </header>
-      <div ref="listEl" class="messages">
-        <div class="col">
-          <div v-if="!messages.length" class="empty">
-            <p class="empty-title">记录你吃了什么、做了什么运动</p>
-            <p class="empty-sub">直接描述，或从下面的问题开始：</p>
-            <div class="examples">
-              <button v-for="ex in EXAMPLES" :key="ex" class="chip" @click="send(ex)">{{ ex }}</button>
-            </div>
+    <div class="page-body">
+      <!-- 会话列表 -->
+      <aside class="convs">
+        <el-button class="new-btn" type="primary" @click="newConversation">
+          <el-icon><Plus /></el-icon>&nbsp;新会话
+        </el-button>
+        <div class="conv-list">
+          <div v-if="convs.length" class="conv-label">最近会话</div>
+          <div
+            v-for="c in convs"
+            :key="c.id"
+            class="conv-item"
+            :class="{ active: c.id === activeId }"
+            @click="selectConversation(c.id)"
+          >
+            <span class="conv-title">{{ c.title }}</span>
+            <span class="conv-time">{{ formatTime(c.updated_at) }}</span>
+            <el-icon class="conv-del" @click.stop="removeConversation(c.id)"><Close /></el-icon>
           </div>
+        </div>
+      </aside>
 
-          <template v-for="m in messages" :key="m.key">
-            <ChatMessage :message="m" @citation-click="openCitation($event, m)" @sync-plan="syncPlan" />
-            <div v-if="m.interrupt" class="hitl-slot">
-              <HitlCard
-                :payload="m.interrupt"
-                @confirm="confirmDiet"
-                @cancel="cancelDiet"
+      <!-- 消息区 -->
+      <section class="main">
+        <div ref="listEl" class="messages">
+          <div class="col">
+            <div v-if="!messages.length" class="empty">
+              <p class="empty-title">记录你吃了什么、做了什么运动</p>
+              <p class="empty-sub">直接描述，或从下面的问题开始：</p>
+              <div class="examples">
+                <button v-for="ex in EXAMPLES" :key="ex" class="chip" @click="send(ex)">{{ ex }}</button>
+              </div>
+            </div>
+
+            <template v-for="m in messages" :key="m.key">
+              <ChatMessage :message="m" @citation-click="openCitation($event, m)" @sync-plan="syncPlan" />
+              <div v-if="m.interrupt" class="hitl-slot">
+                <HitlCard
+                  :payload="m.interrupt"
+                  @confirm="confirmDiet"
+                  @cancel="cancelDiet"
+                />
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- 输入区 -->
+        <div class="composer-wrap">
+          <div class="col">
+            <div v-if="imageUrl" class="preview">
+              <img :src="imageUrl" alt="待发送图片" />
+              <button class="preview-rm" title="移除图片" @click="clearImage">
+                <el-icon><Close /></el-icon>
+              </button>
+            </div>
+
+            <div class="composer">
+              <input ref="fileInput" type="file" accept="image/*" hidden @change="onFileChange" />
+              <el-button
+                class="img-btn"
+                :disabled="busy"
+                :loading="uploading"
+                title="上传食物照片"
+                @click="pickImage"
+              >
+                <el-icon style="font-size: 18px;"><Picture /></el-icon>
+              </el-button>
+              <el-input
+                v-model="input"
+                type="textarea"
+                class="composer-input"
+                :rows="1"
+                :autosize="{ minRows: 1, maxRows: 5 }"
+                resize="none"
+                placeholder="描述你的饮食或运动，如「午餐吃了一碗牛肉面 / 今天跑了30分钟」"
+                :disabled="busy"
+                @keydown.enter.exact.prevent="send()"
               />
+              <el-button
+                type="primary"
+                class="send-btn"
+                circle
+                :disabled="!canSend"
+                :loading="streaming"
+                title="发送"
+                @click="send()"
+              >
+                <el-icon v-if="!streaming"><Promotion /></el-icon>
+              </el-button>
             </div>
-          </template>
-        </div>
-      </div>
-
-      <!-- 输入区 -->
-      <div class="composer-wrap">
-        <div class="col">
-          <div v-if="imageUrl" class="preview">
-            <img :src="imageUrl" alt="待发送图片" />
-            <button class="preview-rm" title="移除图片" @click="clearImage">
-              <el-icon><Close /></el-icon>
-            </button>
           </div>
-
-          <div class="composer">
-            <input ref="fileInput" type="file" accept="image/*" hidden @change="onFileChange" />
-            <el-button
-              class="img-btn"
-              :disabled="busy"
-              :loading="uploading"
-              title="上传食物照片"
-              @click="pickImage"
-            >
-              <el-icon style="font-size: 18px;"><Picture /></el-icon>
-            </el-button>
-            <el-input
-              v-model="input"
-              type="textarea"
-              class="composer-input"
-              :rows="1"
-              :autosize="{ minRows: 1, maxRows: 5 }"
-              resize="none"
-              placeholder="描述你的饮食或运动，如「午餐吃了一碗牛肉面」"
-              :disabled="busy"
-              @keydown.enter.exact.prevent="send()"
-            />
-            <el-button
-              type="primary"
-              class="send-btn"
-              circle
-              :disabled="!canSend"
-              :loading="streaming"
-              title="发送"
-              @click="send()"
-            >
-              <el-icon v-if="!streaming"><Promotion /></el-icon>
-            </el-button>
-          </div>
-          <!-- <div class="hint">Enter 发送 · Shift+Enter 换行</div> -->
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
 
     <CitationDrawer
       v-model:visible="citationDrawerVisible"
@@ -490,11 +492,18 @@ watch(
 </template>
 
 <style scoped>
-.chat {
+.chat-page {
   display: flex;
+  flex-direction: column;
   height: 100%;
   gap: 0;
   background: var(--bg-elevated);
+}
+.page-body {
+  flex: 1;
+  display: flex;
+  width: 100%;
+  overflow: hidden;
 }
 .convs {
   width: 224px;
@@ -738,11 +747,11 @@ watch(
   --el-button-disabled-text-color: var(--muted-2);
 }
 
-.chat-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 24px 16px; border-bottom: 1px solid var(--line); background: var(--bg-elevated); }.chat-eyebrow { display: block; color: var(--primary-deep); font-size: 11px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }.chat-topbar h1 { margin: 2px 0 0; font-size: 21px; line-height: 1.25; }.chat-status { padding: 6px 10px; border: 1px solid var(--primary-line); border-radius: 999px; background: var(--primary-soft); color: var(--primary-deep); font-size: 12px; }
-.convs { padding: 16px 12px; background: #fbfefb; }.new-btn { height: 40px; font-size: 14px; }.conv-label { padding-top: 12px; font-size: 12px; }.conv-item { padding: 11px 10px; }.conv-title { font-size: 14px; }.messages { padding: 28px 24px; background: var(--surface); }.col { max-width: 840px; }.empty { margin-top: 10vh; padding: 30px; border: 1px solid var(--primary-line); border-radius: var(--radius); background: var(--bg-elevated); box-shadow: 0 8px 26px rgba(20, 79, 45, .04); }.empty-title { color: var(--ink); font-size: 21px; }.empty-sub { font-size: 14px; }.chip { padding: 8px 14px; font-size: 13px; }.composer-wrap { padding: 14px 24px; background: var(--bg-elevated); }.composer { border-radius: 12px; padding: 8px 10px; box-shadow: 0 5px 18px rgba(20, 79, 45, .06); }
+.chat-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0; padding: 22px 24px 20px; border-bottom: 1px solid var(--line); background: var(--bg-elevated); }.chat-topbar h1 { margin: 0; font-size: 32px; line-height: 1.22; }.chat-topbar .page-kicker { margin-bottom: 7px; }.chat-status { padding: 7px 11px; border: 1px solid var(--primary-line); border-radius: 999px; background: var(--primary-soft); color: var(--primary-deep); font-size: 13px; }
+.convs { padding: 16px 12px; background: #fff; }.new-btn { height: 40px; font-size: 14px; }.conv-label { padding-top: 12px; font-size: 12px; }.conv-item { padding: 11px 10px; }.conv-title { font-size: 14px; }.messages { padding: 28px 24px; background: var(--surface); }.col { max-width: 80%; }.empty { margin-top: 10vh; padding: 30px; border: 1px solid var(--primary-line); border-radius: var(--radius); background: var(--bg-elevated); box-shadow: 0 8px 26px rgba(20, 79, 45, .04); }.empty-title { color: var(--ink); font-size: 21px; }.empty-sub { font-size: 14px; }.chip { padding: 8px 14px; font-size: 13px; }.composer-wrap { padding: 14px 24px; background: var(--bg-elevated); }.composer { border-radius: 12px; padding: 8px 10px; box-shadow: 0 5px 18px rgba(20, 79, 45, .06); }
 
 @media (max-width: 760px) {
-  .chat {
+  .chat-page {
     height: calc(100dvh - 57px);
     min-height: 560px;
   }
@@ -752,7 +761,7 @@ watch(
   .messages {
     padding: 18px 0;
   }
-  .chat-topbar { padding: 14px 0; background: transparent; }.chat-topbar h1 { font-size: 19px; }.chat-status { display: none; }
+  .chat-topbar { padding: 14px 0; background: transparent; }.chat-topbar h1 { font-size: 27px; }.chat-status { display: none; }
   .col {
     max-width: none;
   }

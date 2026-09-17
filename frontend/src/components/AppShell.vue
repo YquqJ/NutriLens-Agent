@@ -161,11 +161,13 @@ function logout() {
 .main {
   flex: 1;
   overflow-y: auto;
-  margin: 12px 12px 12px 0;
-  padding: 30px 34px 42px;
+  margin: 16px; 
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 12px;
+}
+.main > .page-wrapper {
+  padding: 32px;
 }
 
 @media (max-width: 760px) {

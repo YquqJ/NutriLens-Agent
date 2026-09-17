@@ -145,14 +145,23 @@ a {
 }
 .page-head h1 {
   margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-size: 32px;
+  font-weight: 650;
+  line-height: 1.22;
+  letter-spacing: 0;
 }
 .page-head p {
-  margin: 4px 0 0;
+  margin: 7px 0 0;
   color: var(--ink-3);
-  font-size: 14px;
+  font-size: 15px;
+}
+.page-kicker {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--primary-deep);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 /* ---- Element Plus 微调：按钮更克制 ---- */

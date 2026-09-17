@@ -20,13 +20,13 @@ const router = createRouter({
         { path: 'profile', name: 'profile', component: () => import('@/views/ProfileView.vue') },
       ],
     },
-    { path: '/:pathMatch(.*)*', redirect: '/chat' },
+    { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
   ],
 })
 
 router.beforeEach((to) => {
   if (to.path !== '/login' && !getToken()) return { path: '/login' }
-  if (to.path === '/login' && getToken()) return { path: '/chat' }
+  if (to.path === '/login' && getToken()) return { path: '/dashboard' }
   return true
 })
 
