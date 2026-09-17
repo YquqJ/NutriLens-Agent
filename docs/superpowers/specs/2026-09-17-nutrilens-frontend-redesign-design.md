@@ -68,7 +68,7 @@
 - `ChatView.vue`：保持聊天状态机；接收 query 参数预填消息。
 - `PlanView.vue`：不读取聊天历史、不解析模型文本；仅提供到 ChatView 的计划生成入口。
 - `ProfileView.vue`：消费 profile API。
-- 新增 `calendar.ts`：纯函数负责月历日期、状态和标记派生，便于单测。
+- 新增 `calendar.ts`：纯函数负责月历日期、状态和标记派生，使用 Vitest 单测。
 
 ## 视觉系统
 

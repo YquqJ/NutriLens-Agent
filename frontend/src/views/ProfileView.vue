@@ -218,6 +218,11 @@ onMounted(load)
 .result-card {
   padding: 24px;
 }
+.result-card {
+  display: flex;
+  flex-direction: column;
+  border-top: 3px solid var(--primary);
+}
 
 /* ---- 卡片头：标题 + 右上角编辑按钮 ---- */
 .card-head {
@@ -230,6 +235,7 @@ onMounted(load)
   margin: 0;
   font-size: 15px;
   font-weight: 600;
+  color: var(--ink);
 }
 .edit-btn {
   flex: none;
@@ -249,6 +255,20 @@ onMounted(load)
 /* 表单限宽，避免输入框在宽卡片里被拉得过长 */
 .profile-form {
   max-width: 520px;
+}
+.profile-form :deep(.el-form-item) {
+  margin-bottom: 18px;
+}
+.profile-form :deep(.el-form-item__label) {
+  padding-bottom: 6px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.profile-form :deep(.el-input-number),
+.profile-form :deep(.el-input-number .el-input__wrapper),
+.field-select {
+  width: 100%;
 }
 
 /* 年龄 / 身高 / 体重：一行三列，三等分短宽 */
@@ -296,7 +316,7 @@ onMounted(load)
 
 /* ---- 测算结果 ---- */
 .target-box {
-  padding: 18px 20px;
+  padding: 20px;
   border-radius: var(--radius-sm);
   background: var(--primary-soft);
   border: 1px solid var(--primary-line);
@@ -314,7 +334,7 @@ onMounted(load)
   color: var(--primary-deep);
 }
 .tb-value .num {
-  font-size: 34px;
+  font-size: 38px;
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1;
@@ -333,11 +353,13 @@ onMounted(load)
 .split {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 12px;
 }
 .mini {
-  padding: 14px 0;
-  border-top: 1px solid var(--line);
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
 }
 .mini-label {
   font-size: 12px;
@@ -355,7 +377,8 @@ onMounted(load)
 }
 
 .empty-note {
-  margin-top: 16px;
+  margin-top: auto;
+  padding-top: 16px;
   padding: 12px;
   background: var(--bg);
   border-radius: var(--radius-sm);

@@ -2,7 +2,8 @@
 // 对话页：会话列表 + SSE 流式渲染 + HITL 确认卡片。
 // 流式协议：POST /chat 返回 SSE 分帧（token/agent_trace/tool_calls/interrupt/done），
 // fetch + ReadableStream 逐帧解析；interrupt 挂起后经 /chat/resume 恢复。
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getToken } from '@/api/http'
 import { listConversations, createConversation, getMessages, deleteConversation } from '@/api/conversations'
@@ -22,6 +23,8 @@ import type {
 } from '@/types'
 
 const convs = ref<Conversation[]>([])
+const route = useRoute()
+const router = useRouter()
 const activeId = ref<string | null>(null)
 const messages = ref<ChatMsg[]>([])
 const input = ref('')
@@ -345,7 +348,22 @@ async function refreshList() {
   convs.value = await listConversations()
 }
 
-onMounted(loadConversations)
+function applyPlanPrompt() {
+  const prompt = typeof route.query.prompt === 'string' ? route.query.prompt.trim() : ''
+  if (!prompt || !activeId.value) return
+  input.value = prompt
+  router.replace({ query: {} })
+}
+
+onMounted(async () => {
+  await loadConversations()
+  applyPlanPrompt()
+})
+
+watch(
+  () => route.query.prompt,
+  () => applyPlanPrompt(),
+)
 </script>
 
 <template>
@@ -700,5 +718,35 @@ onMounted(loadConversations)
   --el-button-disabled-bg-color: var(--border);
   --el-button-disabled-border-color: var(--border);
   --el-button-disabled-text-color: var(--muted-2);
+}
+
+@media (max-width: 760px) {
+  .chat {
+    height: calc(100dvh - 57px);
+    min-height: 560px;
+  }
+  .convs {
+    display: none;
+  }
+  .messages {
+    padding: 18px 0;
+  }
+  .col {
+    max-width: none;
+  }
+  .empty {
+    margin: 8vh auto 0;
+    padding: 0 12px;
+  }
+  .composer-wrap {
+    padding: 10px 0;
+  }
+  .composer {
+    border-radius: 12px;
+    padding: 6px 8px;
+  }
+  .hitl-slot {
+    margin-left: 0;
+  }
 }
 </style>
