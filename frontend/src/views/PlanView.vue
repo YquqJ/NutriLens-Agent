@@ -5,6 +5,7 @@ import { Calendar, ChatDotRound, Food, MagicStick, Timer } from '@element-plus/i
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { getCurrentPlan } from '@/api/plans'
+import MarkdownContent from '@/components/MarkdownContent.vue'
 import { getErrorMessage } from '@/utils/error'
 import type { HealthPlan } from '@/types'
 
@@ -57,13 +58,8 @@ onMounted(load)
           <span class="updated-at">更新于 {{ formatTime(plan.updated_at) }}</span>
         </header>
         <div class="plan-title-row"><h2>{{ plan.title }}</h2><span class="plan-state">进行中</span></div>
-        <div class="plan-content">{{ plan.content }}</div>
+        <MarkdownContent class="plan-content" :content="plan.content" />
         <footer class="plan-footer"><span>计划包含饮食与运动安排；下一份计划会自动替换当前版本。</span><router-link to="/chat"><el-icon><ChatDotRound /></el-icon>继续与 AI 调整</router-link></footer>
-      </section>
-
-      <section class="plan-focus">
-        <article class="focus-card panel"><span class="focus-icon meal"><el-icon><Food /></el-icon></span><div><h2>饮食安排</h2><p>按档案目标执行餐次、热量与食物建议；实际摄入会回到记录月历。</p></div></article>
-        <article class="focus-card panel"><span class="focus-icon exercise"><el-icon><Timer /></el-icon></span><div><h2>运动安排</h2><p>在对话中记录训练后，系统会将消耗同步进当天的能量收支。</p></div></article>
       </section>
     </template>
 
@@ -91,6 +87,12 @@ onMounted(load)
 </template>
 
 <style scoped lang="scss">
+.plan-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: hidden;
+}
 .plan-head {
   display: flex;
   align-items: flex-start;
@@ -191,9 +193,13 @@ onMounted(load)
   font-size: 12px;
 }
 .active-plan {
-  padding: 28px;
-  margin-top: 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 28px;
+  margin-top: 12px;
   border-top: 3px solid var(--primary);
+  overflow: hidden;
 }
 .active-head,
 .plan-title-row,
@@ -235,7 +241,7 @@ onMounted(load)
   font-weight: 700;
 }
 .plan-content {
-  max-width: 900px;
+  flex: 1;
   margin-top: 20px;
   padding: 22px;
   border: 1px solid var(--line);
@@ -244,8 +250,8 @@ onMounted(load)
   color: var(--ink);
   font-size: 15px;
   line-height: 1.9;
-  white-space: pre-wrap;
   word-break: break-word;
+  overflow-y: auto;
 }
 .plan-footer {
   margin-top: 18px;

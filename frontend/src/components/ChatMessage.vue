@@ -2,35 +2,15 @@
 // 单条对话消息（对齐 CookHero 观感）：
 // 用户＝蓝色实心气泡白字右对齐（图片内嵌不溢出）；助手＝机器人头像 + 白底细边气泡 + 下方元信息行。
 import { agentLabel } from '@/utils/labels'
+import MarkdownContent from './MarkdownContent.vue'
 import ToolTracePanel from './ToolTracePanel.vue'
-import { computed } from 'vue'
 import type { ChatMessage, Citation } from '@/types'
 
-const props = defineProps<{ message: ChatMessage }>()
+defineProps<{ message: ChatMessage }>()
 const emit = defineEmits<{
   (e: 'citation-click', citation: Citation): void
   (e: 'sync-plan', message: ChatMessage): void
 }>()
-
-type ContentPart = { type: 'text'; value: string } | { type: 'citation'; citation: Citation }
-
-// 不使用 v-html：只把后端结构化 citations 中存在的 [n] 渲染成按钮，避免回答文本注入 HTML。
-const contentParts = computed<ContentPart[]>(() => {
-  const citations = new Map(props.message.citations.map((citation) => [citation.index, citation]))
-  const parts: ContentPart[] = []
-  const pattern = /\[(\d+)]/g
-  let start = 0
-  for (const match of props.message.content.matchAll(pattern)) {
-    const index = Number(match[1])
-    const citation = citations.get(index)
-    if (!citation || match.index === undefined) continue
-    if (match.index > start) parts.push({ type: 'text', value: props.message.content.slice(start, match.index) })
-    parts.push({ type: 'citation', citation })
-    start = match.index + match[0].length
-  }
-  if (start < props.message.content.length) parts.push({ type: 'text', value: props.message.content.slice(start) })
-  return parts.length ? parts : [{ type: 'text', value: props.message.content }]
-})
 
 // 各 agent 标签配色（淡底 + 深字 + 圆点），通过 CSS 变量注入
 const AGENT_TONES: Record<string, string> = {
@@ -84,18 +64,12 @@ function formatTime(iso: string | null | undefined) {
         <span v-if="message.agentName" class="agent" :class="toneClass(message.agentName)">{{ agentLabel(message.agentName) }}</span>
 
         <div v-if="message.content || message.streaming" class="bubble assistant-bubble">
-          <template v-if="message.content">
-            <template v-for="(part, index) in contentParts" :key="index">
-              <button
-                v-if="part.type === 'citation'"
-                class="citation-link"
-                type="button"
-                :title="`查看 ${part.citation.label}`"
-                @click="emit('citation-click', part.citation)"
-              >[{{ part.citation.index }}]</button>
-              <template v-else>{{ part.value }}</template>
-            </template>
-          </template>
+          <MarkdownContent
+            v-if="message.content"
+            :content="message.content"
+            :citations="message.citations"
+            @citation-click="emit('citation-click', $event)"
+          />
           <span v-else class="typing">
             <svg class="spin" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M21 12a9 9 0 1 1-6.2-8.56" />
@@ -122,9 +96,6 @@ function formatTime(iso: string | null | undefined) {
             type="button"
             @click="emit('sync-plan', message)"
           >同步到饮食计划</button>
-          <!-- <button v-if="message.content" class="copy" title="复制" @click="copy">
-            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-          </button> -->
         </div>
       </div>
     </div>
@@ -137,9 +108,6 @@ function formatTime(iso: string | null | undefined) {
       </div>
       <div class="meta user-meta">
         <span v-if="message.createdAt" class="time">{{ formatTime(message.createdAt) }}</span>
-        <!-- <button v-if="message.content" class="copy" title="复制" @click="copy">
-          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-        </button> -->
       </div>
     </div>
   </div>
@@ -252,30 +220,7 @@ function formatTime(iso: string | null | undefined) {
   color: var(--text);
   font-size: 14px;
   line-height: 1.7;
-  white-space: pre-wrap;
   word-break: break-word;
-}
-.citation-link {
-  display: inline;
-  padding: 0 1px;
-  border: none;
-  background: none;
-  color: #60a5fa;
-  font: inherit;
-  font-weight: 650;
-  cursor: pointer;
-  text-decoration: underline;
-  text-decoration-color: #bfdbfe;
-  text-underline-offset: 2px;
-}
-.citation-link:hover {
-  color: #3b82f6;
-  text-decoration-color: currentColor;
-}
-.citation-link:focus-visible {
-  outline: 2px solid #93c5fd;
-  outline-offset: 2px;
-  border-radius: 3px;
 }
 .typing {
   display: inline-flex;

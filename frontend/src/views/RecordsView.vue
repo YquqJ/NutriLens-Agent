@@ -478,7 +478,7 @@ onMounted(() => void Promise.all([loadMonth(), loadSelected()]))
     overflow: hidden;
     margin-top: 5px;
     color: var(--ink-3);
-    font-size: 11px;
+    font-size: 12px;
     text-overflow: ellipsis;
     white-space: nowrap;
 

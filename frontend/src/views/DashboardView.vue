@@ -42,7 +42,7 @@ const energyLabel = computed(() => {
 })
 const heroTitle = computed(() => {
   if (target.value == null) return '先完善身体档案，建立今天的能量目标。'
-  if (overBudget.value) return '今天已超过能量目标，晚餐可以轻一点。'
+  if (overBudget.value) return '今天已超过能量目标，管住嘴迈开腿！'
   return '今天的节奏不错，继续保持这份轻盈。'
 })
 const heroNote = computed(() => {
@@ -110,7 +110,7 @@ onMounted(load)
         <h1>今天，保持轻盈节奏</h1>
         <p>从饮食、运动与能量收支开始，照顾好今天的身体状态。</p>
       </div>
-      <div class="today-stamp"><span>今日</span><b>{{ todayLabel }}</b></div>
+      <div class="today-stamp"><b>{{ todayLabel }}</b></div>
     </header>
 
     <section class="status-grid">
@@ -192,7 +192,6 @@ onMounted(load)
   font-size: 32px;
 }
 .today-stamp {
-  min-width: 166px;
   padding: 12px 14px;
   border: 1px solid var(--primary-line);
   border-radius: var(--radius);
@@ -205,13 +204,14 @@ onMounted(load)
 }
 .today-stamp span {
   color: var(--primary-deep);
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 700;
 }
 .today-stamp b {
   margin-top: 2px;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 18px;
+  color: var(--primary-deep);
 }
 .status-grid {
   display: grid;
@@ -251,7 +251,7 @@ onMounted(load)
   color: #d9fbe4;
 }
 .daily-status h2 {
-  max-width: 500px;
+  max-width: 600px;
   margin: 12px 0 0;
   font-size: 31px;
   line-height: 1.17;
@@ -267,7 +267,7 @@ onMounted(load)
   display: inline-flex;
   gap: 9px;
   align-items: center;
-  margin-top: 18px;
+  margin-top: 22px;
   padding: 7px 10px;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 6px;
@@ -283,7 +283,7 @@ onMounted(load)
 .hero-actions {
   display: flex;
   gap: 8px;
-  margin-top: 20px;
+  margin-top: 24px;
 }
 .hero-button {
   display: inline-flex;

@@ -6,14 +6,19 @@
 // 用 disabled 实现并覆盖样式回正常观感。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import { getProfile, updateProfile } from '@/api/profile'
 import { getErrorMessage } from '@/utils/error'
+import {
+  PROFILE_REQUIRED_MESSAGES,
+  type ProfileDraft,
+} from '@/utils/profileValidation'
 import type { UserProfile } from '@/types'
 
 const loading = ref(false)
 const saving = ref(false)
-const filled = ref(false) // 是否已填过资料
 const editing = ref(true) // 编辑态：未填过默认开启，填过后默认只读
+const profileFormRef = ref<FormInstance>()
 // 计算结果（后端回填，前端只读展示）
 const result = reactive<{ bmr: number | null; tdee: number | null; calorie_target: number | null }>({
   bmr: null,
@@ -21,15 +26,22 @@ const result = reactive<{ bmr: number | null; tdee: number | null; calorie_targe
   calorie_target: null,
 })
 
-const form = reactive({
-  gender: null as string | null,
-  age: null as number | null,
-  height_cm: null as number | null,
-  weight_kg: null as number | null,
-  activity_level: null as string | null,
-  goal: null as string | null,
+const form = reactive<ProfileDraft & Pick<UserProfile, 'goal_note'>>({
+  gender: null,
+  age: null,
+  height_cm: null,
+  weight_kg: null,
+  activity_level: null,
+  goal: null,
   goal_note: '',
 })
+
+const profileRules = Object.fromEntries(
+  Object.entries(PROFILE_REQUIRED_MESSAGES).map(([field, message]) => [
+    field,
+    [{ required: true, message, trigger: 'change' }],
+  ]),
+) as FormRules<ProfileDraft>
 
 const activityOptions = [
   { value: 'sedentary', label: '久坐（几乎不运动）' },
@@ -67,8 +79,6 @@ async function load() {
   try {
     const p = await getProfile()
     fill(p)
-    filled.value = !!(p.gender || p.age || p.height_cm || p.weight_kg || p.activity_level || p.goal)
-    editing.value = !filled.value
   } catch (e) {
     ElMessage.error(getErrorMessage(e))
   } finally {
@@ -77,10 +87,19 @@ async function load() {
 }
 
 function startEdit() {
+  profileFormRef.value?.clearValidate()
   editing.value = true
 }
 
+function cancelEdit() {
+  profileFormRef.value?.clearValidate()
+  editing.value = false
+}
+
 async function save() {
+  const valid = await profileFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
   saving.value = true
   try {
     // partial update：过滤掉 null / 空串，避免覆盖未填字段
@@ -90,7 +109,6 @@ async function save() {
     }
     const updated = await updateProfile(patch as Partial<UserProfile>)
     fill(updated)
-    filled.value = true
     editing.value = false
     ElMessage.success('档案已保存')
   } catch (e) {
@@ -116,13 +134,20 @@ onMounted(load)
       <section class="panel form-card" :class="{ 'is-editing': editing }">
         <div class="card-head">
           <h2 class="card-title">基础数据</h2>
-          <el-button v-if="filled && !editing" class="edit-btn" text @click="startEdit">
+          <el-button v-if="!editing" class="edit-btn" text @click="startEdit">
             <el-icon><EditPen /></el-icon>&nbsp;编辑
           </el-button>
         </div>
 
-        <el-form class="profile-form" label-position="top">
-          <el-form-item label="性别">
+        <el-form
+          ref="profileFormRef"
+          :model="form"
+          :rules="profileRules"
+          class="profile-form"
+          label-position="top"
+          scroll-to-error
+        >
+          <el-form-item label="性别" prop="gender">
             <el-radio-group v-model="form.gender" :disabled="!editing">
               <el-radio-button value="male">男</el-radio-button>
               <el-radio-button value="female">女</el-radio-button>
@@ -130,18 +155,18 @@ onMounted(load)
           </el-form-item>
 
           <div class="row-3">
-            <el-form-item label="年龄">
+            <el-form-item label="年龄" prop="age">
               <el-input-number v-model="form.age" :min="10" :max="100" :readonly="!editing" controls-position="right" />
             </el-form-item>
-            <el-form-item label="身高（cm）">
+            <el-form-item label="身高（cm）" prop="height_cm">
               <el-input-number v-model="form.height_cm" :min="80" :max="250" :precision="0" :readonly="!editing" controls-position="right" />
             </el-form-item>
-            <el-form-item label="体重（kg）">
+            <el-form-item label="体重（kg）" prop="weight_kg">
               <el-input-number v-model="form.weight_kg" :min="25" :max="300" :precision="1" :readonly="!editing" controls-position="right" />
             </el-form-item>
           </div>
 
-          <el-form-item label="活动水平">
+          <el-form-item label="活动水平" prop="activity_level">
             <el-select
               v-model="form.activity_level"
               :disabled="!editing"
@@ -152,7 +177,7 @@ onMounted(load)
             </el-select>
           </el-form-item>
 
-          <el-form-item label="目标">
+          <el-form-item label="目标" prop="goal">
             <el-radio-group v-model="form.goal" :disabled="!editing">
               <el-radio-button v-for="o in goalOptions" :key="o.value" :value="o.value">{{ o.label }}</el-radio-button>
             </el-radio-group>
@@ -170,7 +195,7 @@ onMounted(load)
 
           <div v-if="editing">
             <el-button type="primary" :loading="saving" @click="save">保存档案</el-button>
-            <el-button @click="editing = false">取消</el-button>
+            <el-button @click="cancelEdit">取消</el-button>
           </div>
         </el-form>
       </section>
@@ -236,6 +261,7 @@ onMounted(load)
   margin-bottom: 16px;
 }
 .card-title {
+  height: 32px;
   margin: 0;
   font-size: 15px;
   font-weight: 600;
