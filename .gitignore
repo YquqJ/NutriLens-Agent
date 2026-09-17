@@ -19,9 +19,10 @@ frontend/.env.local
 *.db
 
 # ---- 个人文档（不入库）----
-docs/INTERVIEW_CASES.md
-docs/RAG_REVIEW.md
-docs/learning/
+docs/
+
+# ---- 评测报告 ----
+backend/reports/
 
 # ---- IDE / 系统 ----
 .idea/

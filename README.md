@@ -38,12 +38,28 @@ cd backend
 cp ../.env.example .env          # 填入 DASHSCOPE_API_KEY / OSS 配置
 uv sync                          # 首次安装依赖（固定 Python 3.12）
 uv run python -m app.db.init_db  # 建表 + 向量索引
-uv run python -m app.db.seed_knowledge # 导入 backend/data 下的营养运动知识 PDF
+uv run python -m app.db.seed_knowledge # 导入注册表中的全部营养运动知识 PDF
 uv run uvicorn app.main:app --reload
 
 # 3. 前端（M6 后提供）
 cd frontend && npm install && npm run dev
 ```
+
+## RAG 评测
+
+项目内置三份知识文档和两套冻结评测集。`rag_queries_v2.json` 面向多文档
+检索，包含 32 条正例、5 条越界负例，并覆盖单文档、多证据和跨文档问题。
+
+```bash
+cd backend
+uv run python -m app.rag.run_ablation \
+  --split-mode section_aware \
+  --eval-data tests/eval_data/rag_queries_v2.json
+```
+
+当前 v2 基线中，`hybrid_rrf` 的 Recall@4 为 96.88%、Recall@8 为
+98.44%、MRR 为 90.10%、nDCG@4 为 90.54%；`hybrid_rerank` 的 MRR 为
+91.67%。完整逐题结果写入 `backend/reports/rag-v2-section-aware.json`。
 
 ## 项目结构
 
