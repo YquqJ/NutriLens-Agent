@@ -105,6 +105,50 @@ def test_resume_without_pending_interrupt_returns_400(auth_headers):
     assert r.status_code == 400
 
 
+def test_messages_are_returned_in_page_no_order(auth_headers):
+    """历史消息按 pageNo 反向分页查询，但每页仍按发送先后顺序返回。"""
+    cid = auth_headers["conversation_id"]
+    db = SessionLocal()
+    try:
+        db.add_all(
+            [
+                Message(conversation_id=cid, role="user", content=f"消息 {i}")
+                for i in range(1, 66)
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    url = f"/api/conversations/{cid}/messages"
+    first = client.get(
+        url,
+        params={"pageNo": 1, "pageSize": 30},
+        headers=auth_headers["headers"],
+    )
+
+    assert first.status_code == 200
+    assert first.json()["total"] == 65
+    assert first.json()["pageNo"] == 1
+    assert first.json()["pageSize"] == 30
+    assert first.json()["hasMore"] is True
+    assert [item["content"] for item in first.json()["items"]] == [
+        f"消息 {i}" for i in range(36, 66)
+    ]
+
+    last = client.get(
+        url,
+        params={"pageNo": 3, "pageSize": 30},
+        headers=auth_headers["headers"],
+    )
+
+    assert last.status_code == 200
+    assert last.json()["hasMore"] is False
+    assert [item["content"] for item in last.json()["items"]] == [
+        f"消息 {i}" for i in range(1, 6)
+    ]
+
+
 def test_invalid_record_date_returns_422_instead_of_server_error(auth_headers):
     """非法日期是请求参数错误，不能让 ValueError 冒泡成 500。"""
     r = client.get(

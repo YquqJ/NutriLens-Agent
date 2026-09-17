@@ -2,9 +2,9 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
@@ -22,6 +22,38 @@ class ConversationOut(BaseModel):
 
 class ConversationCreate(BaseModel):
     title: str = "新会话"
+
+
+class MessageOut(BaseModel):
+    id: int
+    role: str
+    content: str
+    image_url: str | None
+    agent_name: str | None
+    tool_trace: str | None
+    citations: str | None
+    created_at: str
+
+
+class MessagePageOut(BaseModel):
+    items: list[MessageOut]
+    total: int
+    pageNo: int
+    pageSize: int
+    hasMore: bool
+
+
+def _serialize_message(message: Message) -> MessageOut:
+    return MessageOut(
+        id=message.id,
+        role=message.role,
+        content=message.content,
+        image_url=message.image_url,
+        agent_name=message.agent_name,
+        tool_trace=message.tool_trace,
+        citations=message.citations,
+        created_at=message.created_at.isoformat(),
+    )
 
 
 @router.get("")
@@ -58,29 +90,41 @@ def create_conversation(
     )
 
 
-@router.get("/{conversation_id}/messages")
+@router.get("/{conversation_id}/messages", response_model=MessagePageOut)
 def get_messages(
     conversation_id: str,
+    page_no: int = Query(default=1, ge=1, alias="pageNo"),
+    page_size: int = Query(default=30, ge=1, le=100, alias="pageSize"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """拉取会话全部消息（前端切换会话时回放历史，含 agent 徽章与工具轨迹）。"""
+    """按最新优先分页读取会话消息，每页仍按发送先后顺序返回。"""
     conv = db.get(Conversation, conversation_id)
     if conv is None or conv.user_id != user.id:
         raise HTTPException(status_code=404, detail="会话不存在")
-    return [
-        {
-            "id": m.id,
-            "role": m.role,
-            "content": m.content,
-            "image_url": m.image_url,
-            "agent_name": m.agent_name,
-            "tool_trace": m.tool_trace,
-            "citations": m.citations,
-            "created_at": m.created_at.isoformat(),
-        }
-        for m in conv.messages
-    ]
+
+    total = db.scalar(
+        select(func.count()).select_from(Message).where(
+            Message.conversation_id == conversation_id
+        )
+    ) or 0
+    offset = (page_no - 1) * page_size
+    items = db.scalars(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.id.desc())
+        .offset(offset)
+        .limit(page_size)
+    ).all()
+    items.reverse()
+
+    return MessagePageOut(
+        items=[_serialize_message(message) for message in items],
+        total=total,
+        pageNo=page_no,
+        pageSize=page_size,
+        hasMore=offset + len(items) < total,
+    )
 
 
 @router.delete("/{conversation_id}", status_code=204)

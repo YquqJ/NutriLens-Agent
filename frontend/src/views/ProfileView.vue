@@ -9,11 +9,25 @@ import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getProfile, updateProfile } from '@/api/profile'
 import { getErrorMessage } from '@/utils/error'
-import {
-  PROFILE_REQUIRED_MESSAGES,
-  type ProfileDraft,
-} from '@/utils/profileValidation'
 import type { UserProfile } from '@/types'
+
+type RequiredProfileField =
+  | 'gender'
+  | 'age'
+  | 'height_cm'
+  | 'weight_kg'
+  | 'activity_level'
+  | 'goal'
+type ProfileDraft = Pick<UserProfile, RequiredProfileField>
+
+const PROFILE_REQUIRED_MESSAGES: Record<RequiredProfileField, string> = {
+  gender: '请选择性别',
+  age: '请输入年龄',
+  height_cm: '请输入身高',
+  weight_kg: '请输入体重',
+  activity_level: '请选择活动水平',
+  goal: '请选择目标',
+}
 
 const loading = ref(false)
 const saving = ref(false)

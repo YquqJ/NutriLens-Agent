@@ -5,11 +5,29 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { getErrorMessage } from '@/utils/error'
-import {
-  clearRememberedCredentials,
-  getRememberedCredentials,
-  saveRememberedCredentials,
-} from '@/utils/rememberedCredentials'
+
+type RememberedCredentials = { username: string; password: string }
+const REMEMBERED_CREDENTIALS_KEY = 'nutrilens.rememberedCredentials'
+
+function getRememberedCredentials(): RememberedCredentials | null {
+  try {
+    const value = localStorage.getItem(REMEMBERED_CREDENTIALS_KEY)
+    if (!value) return null
+    const credentials = JSON.parse(value) as Partial<RememberedCredentials>
+    if (!credentials.username || !credentials.password) return null
+    return { username: credentials.username, password: credentials.password }
+  } catch {
+    return null
+  }
+}
+
+function saveRememberedCredentials(credentials: RememberedCredentials) {
+  localStorage.setItem(REMEMBERED_CREDENTIALS_KEY, JSON.stringify(credentials))
+}
+
+function clearRememberedCredentials() {
+  localStorage.removeItem(REMEMBERED_CREDENTIALS_KEY)
+}
 
 const router = useRouter()
 const auth = useAuthStore()

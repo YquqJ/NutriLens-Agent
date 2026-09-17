@@ -103,7 +103,16 @@ function formatTime(iso: string | null | undefined) {
     <!-- 用户 -->
     <div v-else class="user">
       <div class="bubble user-bubble">
-        <img v-if="message.imageUrl" :src="message.imageUrl" class="pic" alt="食物图片" />
+        <el-image
+          v-if="message.imageUrl"
+          :src="message.imageUrl"
+          :preview-src-list="[message.imageUrl]"
+          :initial-index="0"
+          class="pic"
+          fit="cover"
+          alt="食物图片"
+          preview-teleported
+        />
         <span v-if="message.content" class="content">{{ message.content }}</span>
       </div>
       <div class="meta user-meta">
@@ -324,6 +333,14 @@ function formatTime(iso: string | null | undefined) {
   max-width: 100%;
   max-height: 240px;
   border-radius: 10px;
+  cursor: zoom-in;
+  object-fit: cover;
+}
+.pic :deep(.el-image__inner) {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: inherit;
   object-fit: cover;
 }
 .pic + .content {

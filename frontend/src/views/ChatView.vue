@@ -10,6 +10,7 @@ import { listConversations, createConversation, getMessages, deleteConversation 
 import { uploadImage } from '@/api/uploads'
 import { getErrorMessage } from '@/utils/error'
 import { saveCurrentPlan } from '@/api/plans'
+import { MESSAGE_PAGE_SIZE } from '@/api/conversations'
 import ChatMessage from '@/components/ChatMessage.vue'
 import CitationDrawer from '@/components/CitationDrawer.vue'
 import HitlCard from '@/components/HitlCard.vue'
@@ -28,6 +29,11 @@ const route = useRoute()
 const router = useRouter()
 const activeId = ref<string | null>(null)
 const messages = ref<ChatMsg[]>([])
+const loadingMessages = ref(true)
+const messageLoadError = ref(false)
+const currentMessagePage = ref(1)
+const hasMoreMessages = ref(false)
+const loadingOlderMessages = ref(false)
 const input = ref('')
 const streaming = ref(false)
 const pendingMsg = ref<ChatMsg | null>(null)
@@ -46,7 +52,28 @@ const EXAMPLES = ['帮我记录午餐：一碗牛肉面', '我今天吃了多少
 
 // ---- 工具 ----
 let seq = 0
+let messageRequestId = 0
 const uid = () => `t${Date.now()}_${seq++}`
+
+type KeyedMessage = { key: string }
+
+function mergeOlderMessages<T extends KeyedMessage>(current: T[], older: T[]) {
+  const seenKeys = new Set(current.map((message) => message.key))
+  const uniqueOlder = older.filter((message) => {
+    if (seenKeys.has(message.key)) return false
+    seenKeys.add(message.key)
+    return true
+  })
+  return [...uniqueOlder, ...current]
+}
+
+function getPrependedScrollTop(
+  previousScrollTop: number,
+  previousScrollHeight: number,
+  nextScrollHeight: number,
+) {
+  return previousScrollTop + nextScrollHeight - previousScrollHeight
+}
 
 function toChatMessage(m: Message): ChatMsg {
   let toolTrace: ToolTraceEntry[] = []
@@ -186,21 +213,44 @@ async function streamRequest(
 
 // ---- 会话管理 ----
 async function loadConversations() {
-  convs.value = await listConversations()
-  if (convs.value.length) await selectConversation(convs.value[0].id)
-  else await newConversation()
+  try {
+    convs.value = await listConversations()
+    if (convs.value.length) await selectConversation(convs.value[0].id)
+    else await newConversation()
+  } catch (error) {
+    loadingMessages.value = false
+    messageLoadError.value = true
+    ElMessage.error(getErrorMessage(error, '会话加载失败'))
+  }
 }
 
 async function selectConversation(id: string) {
+  const requestId = ++messageRequestId
   activeId.value = id
   pendingMsg.value = null
   streaming.value = false
+  loadingMessages.value = true
+  messageLoadError.value = false
+  loadingOlderMessages.value = false
+  currentMessagePage.value = 1
+  hasMoreMessages.value = false
+  messages.value = []
   try {
-    messages.value = (await getMessages(id)).map(toChatMessage)
+    const page = await getMessages(id)
+    if (requestId !== messageRequestId) return
+    messages.value = page.items.map(toChatMessage)
+    messageLoadError.value = false
+    currentMessagePage.value = page.pageNo
+    hasMoreMessages.value = page.hasMore
   } catch (e) {
+    if (requestId !== messageRequestId) return
+    messageLoadError.value = true
     ElMessage.error(getErrorMessage(e))
+  } finally {
+    if (requestId !== messageRequestId) return
+    loadingMessages.value = false
+    scrollBottom()
   }
-  scrollBottom()
 }
 
 async function newConversation() {
@@ -208,7 +258,56 @@ async function newConversation() {
   convs.value.unshift(c)
   activeId.value = c.id
   messages.value = []
+  loadingMessages.value = false
+  messageLoadError.value = false
+  loadingOlderMessages.value = false
+  currentMessagePage.value = 1
+  hasMoreMessages.value = false
   pendingMsg.value = null
+}
+
+async function loadOlderMessages() {
+  const id = activeId.value
+  const list = listEl.value
+  if (!id || !list || loadingOlderMessages.value || !hasMoreMessages.value) return
+
+  const requestId = messageRequestId
+  loadingOlderMessages.value = true
+  await nextTick()
+  const previousScrollTop = list.scrollTop
+  const previousScrollHeight = list.scrollHeight
+
+  try {
+    const page = await getMessages(id, currentMessagePage.value + 1, MESSAGE_PAGE_SIZE)
+    if (requestId !== messageRequestId || id !== activeId.value) return
+
+    messages.value = mergeOlderMessages(messages.value, page.items.map(toChatMessage))
+    currentMessagePage.value = page.pageNo
+    hasMoreMessages.value = page.hasMore
+
+    await nextTick()
+    list.scrollTop = getPrependedScrollTop(
+      previousScrollTop,
+      previousScrollHeight,
+      list.scrollHeight,
+    )
+  } catch (error) {
+    if (requestId === messageRequestId && id === activeId.value) {
+      ElMessage.error(getErrorMessage(error, '历史消息加载失败'))
+    }
+  } finally {
+    if (requestId === messageRequestId && id === activeId.value) {
+      loadingOlderMessages.value = false
+    }
+  }
+}
+
+function onMessageScroll() {
+  if (listEl.value && listEl.value.scrollTop <= 24) void loadOlderMessages()
+}
+
+function retryLoadMessages() {
+  if (activeId.value) void selectConversation(activeId.value)
 }
 
 async function removeConversation(id: string) {
@@ -411,9 +510,24 @@ watch(
 
       <!-- 消息区 -->
       <section class="main">
-        <div ref="listEl" class="messages">
+        <div ref="listEl" class="messages" @scroll.passive="onMessageScroll">
           <div class="col">
-            <div v-if="!messages.length" class="empty">
+            <div v-if="messages.length && (loadingOlderMessages || !hasMoreMessages)" class="history-state" aria-live="polite">
+              <span v-if="loadingOlderMessages" class="history-loading">
+                <el-icon class="is-loading"><Loading /></el-icon>
+                正在加载历史消息…
+              </span>
+              <span v-else>已加载全部消息</span>
+            </div>
+            <div v-if="loadingMessages" class="message-loading" role="status" aria-live="polite">
+              <el-icon class="message-loading-icon is-loading"><Loading /></el-icon>
+              <span>正在加载消息…</span>
+            </div>
+            <div v-else-if="messageLoadError" class="message-error" role="alert">
+              <span>消息加载失败，请稍后重试</span>
+              <el-button text type="primary" @click="retryLoadMessages">重新加载</el-button>
+            </div>
+            <div v-else-if="!loadingMessages && !messageLoadError && !messages.length" class="empty">
               <p class="empty-title">记录你吃了什么、做了什么运动</p>
               <p class="empty-sub">直接描述，或从下面的问题开始：</p>
               <div class="examples">
@@ -607,6 +721,43 @@ watch(
   max-width: 80%;
   margin: 0 auto;
   width: 100%;
+}
+.history-state {
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-2);
+  font-size: 12px;
+}
+.history-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.message-loading {
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.message-loading-icon {
+  font-size: 24px;
+  color: var(--primary);
+}
+.message-error {
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
 }
 .empty {
   max-width: 520px;

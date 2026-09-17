@@ -108,6 +108,14 @@ export interface Message {
   created_at: string
 }
 
+export interface MessagePage {
+  items: Message[]
+  total: number
+  pageNo: number
+  pageSize: number
+  hasMore: boolean
+}
+
 // 工具轨迹单条（tool_trace 解析后的元素）
 export interface ToolTraceEntry {
   name: string
