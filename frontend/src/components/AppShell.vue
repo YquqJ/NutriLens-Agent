@@ -67,6 +67,7 @@ function logout() {
 .shell {
   display: flex;
   height: 100%;
+  background: #eef5ef;
 }
 .side {
   width: 216px;
@@ -160,7 +161,11 @@ function logout() {
 .main {
   flex: 1;
   overflow-y: auto;
-  padding: 28px 32px 40px;
+  margin: 12px 12px 12px 0;
+  padding: 30px 34px 42px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
 }
 
 @media (max-width: 760px) {
@@ -200,7 +205,10 @@ function logout() {
   }
   .main {
     overflow: visible;
-    padding: 22px 16px 32px;
+    margin: 0;
+    padding: 24px 16px 32px;
+    border: 0;
+    border-radius: 0;
   }
 }
 </style>

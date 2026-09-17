@@ -173,6 +173,11 @@ def make_supervisor_node(
                 "next_agent": decision.next_agent,
                 "task": decision.task,
                 "hop_count": hop_count + 1,
+                "plan_requested": state.get("plan_requested", False)
+                or (
+                    decision.next_agent == "plan_agent"
+                    and "计划" in decision.task
+                ),
                 "agent_trace": state.get("agent_trace", [])
                 + [f"supervisor→{decision.next_agent}"],
             },

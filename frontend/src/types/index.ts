@@ -80,6 +80,16 @@ export interface TrendSeries {
   series: TrendPoint[]
 }
 
+// ---- 当前健康计划 ----
+export interface HealthPlan {
+  id: number
+  title: string
+  content: string
+  conversation_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 // ---- 会话 / 消息 ----
 export interface Conversation {
   id: string

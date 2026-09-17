@@ -1,9 +1,16 @@
 <script setup lang="ts">
-// 计划后端尚未落地：本页只承接用户到 plan_agent 对话，避免伪造已保存的计划数据。
+// 计划页读取后端当前计划；新计划由 plan_agent 完成回复时自动归档。
+import { onMounted, ref } from 'vue'
+import { Calendar, ChatDotRound, Food, MagicStick, Timer } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { Food, MagicStick, Timer } from '@element-plus/icons-vue'
+import { getCurrentPlan } from '@/api/plans'
+import { getErrorMessage } from '@/utils/error'
+import type { HealthPlan } from '@/types'
 
 const router = useRouter()
+const loading = ref(false)
+const plan = ref<HealthPlan | null>(null)
 
 function startPlanConversation() {
   router.push({
@@ -11,179 +18,83 @@ function startPlanConversation() {
     query: { prompt: '帮我生成一份包含饮食和运动安排的计划。' },
   })
 }
+
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  }).format(new Date(value))
+}
+
+async function load() {
+  loading.value = true
+  try {
+    plan.value = await getCurrentPlan()
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '计划读取失败'))
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
 </script>
 
 <template>
-  <div class="plan-page">
-    <header class="page-head">
+  <div v-loading="loading" class="plan-page">
+    <header class="page-head plan-head">
       <div>
         <span class="eyebrow">Personal plan</span>
-        <h1>把目标拆成每天能做到的事</h1>
-        <p>饮食和运动会在同一份计划里协同安排，并依据你的档案和记录持续调整。</p>
+        <h1>{{ plan ? '这是你正在执行的健康计划' : '把目标拆成每天能做到的事' }}</h1>
+        <p>{{ plan ? '饮食与运动安排来自 AI 对话，并已同步为当前计划。' : '饮食和运动会在同一份计划里协同安排，并依据你的档案和记录持续调整。' }}</p>
       </div>
+      <el-button v-if="plan" type="primary" @click="startPlanConversation"><el-icon><MagicStick /></el-icon>&nbsp;生成新计划</el-button>
     </header>
 
-    <section class="plan-hero panel">
-      <div class="hero-copy">
-        <span class="hero-kicker">由 NutriLens Agent 生成</span>
-        <h2>从一次对话开始，建立属于你的健康节奏。</h2>
-        <p>告诉助手你的目标、饮食偏好和运动频率。确认后，计划会在这里展示每日餐次与训练安排。</p>
-        <el-button type="primary" @click="startPlanConversation">
-          <el-icon><MagicStick /></el-icon>&nbsp;生成饮食与运动计划
-        </el-button>
-      </div>
-      <div class="plan-preview" aria-hidden="true">
-        <div class="preview-head"><span>计划草案</span><b>待生成</b></div>
-        <div class="preview-row">
-          <span class="row-icon meal"><el-icon><Food /></el-icon></span>
-          <span><b>饮食安排</b><small>热量、宏量与餐次建议</small></span>
-        </div>
-        <div class="preview-row">
-          <span class="row-icon exercise"><el-icon><Timer /></el-icon></span>
-          <span><b>运动安排</b><small>频率、项目与训练时长</small></span>
-        </div>
-      </div>
-    </section>
+    <template v-if="plan">
+      <section class="active-plan panel">
+        <header class="active-head">
+          <div class="plan-badge"><el-icon><Calendar /></el-icon><span>当前计划</span></div>
+          <span class="updated-at">更新于 {{ formatTime(plan.updated_at) }}</span>
+        </header>
+        <div class="plan-title-row"><h2>{{ plan.title }}</h2><span class="plan-state">进行中</span></div>
+        <div class="plan-content">{{ plan.content }}</div>
+        <footer class="plan-footer"><span>计划包含饮食与运动安排；下一份计划会自动替换当前版本。</span><router-link to="/chat"><el-icon><ChatDotRound /></el-icon>继续与 AI 调整</router-link></footer>
+      </section>
 
-    <section class="how-it-works">
-      <article class="step panel">
-        <span class="step-number">01</span>
-        <h2>说明你的目标</h2>
-        <p>例如减脂周期、训练频率、食物偏好或不适合的食材。</p>
-      </article>
-      <article class="step panel">
-        <span class="step-number">02</span>
-        <h2>确认计划草案</h2>
-        <p>先看每日目标、餐次与训练安排，再决定是否启用。</p>
-      </article>
-      <article class="step panel">
-        <span class="step-number">03</span>
-        <h2>跟随记录调整</h2>
-        <p>真实的饮食与运动记录会让后续建议更贴合你的节奏。</p>
-      </article>
-    </section>
+      <section class="plan-focus">
+        <article class="focus-card panel"><span class="focus-icon meal"><el-icon><Food /></el-icon></span><div><h2>饮食安排</h2><p>按档案目标执行餐次、热量与食物建议；实际摄入会回到记录月历。</p></div></article>
+        <article class="focus-card panel"><span class="focus-icon exercise"><el-icon><Timer /></el-icon></span><div><h2>运动安排</h2><p>在对话中记录训练后，系统会将消耗同步进当天的能量收支。</p></div></article>
+      </section>
+    </template>
+
+    <template v-else>
+      <section class="plan-hero panel">
+        <div class="hero-copy">
+          <span class="hero-kicker">由 NutriLens Agent 生成</span>
+          <h2>从一次对话开始，建立属于你的健康节奏。</h2>
+          <p>告诉助手你的目标、饮食偏好和运动频率。生成完成后，饮食与运动建议会自动同步到这里。</p>
+          <el-button type="primary" @click="startPlanConversation"><el-icon><MagicStick /></el-icon>&nbsp;生成饮食与运动计划</el-button>
+        </div>
+        <div class="plan-preview" aria-hidden="true">
+          <div class="preview-head"><span>计划草案</span><b>等待生成</b></div>
+          <div class="preview-row"><span class="row-icon meal"><el-icon><Food /></el-icon></span><span><b>饮食安排</b><small>热量、宏量与餐次建议</small></span></div>
+          <div class="preview-row"><span class="row-icon exercise"><el-icon><Timer /></el-icon></span><span><b>运动安排</b><small>频率、项目与训练时长</small></span></div>
+        </div>
+      </section>
+      <section class="how-it-works">
+        <article class="step panel"><span class="step-number">01</span><h2>说明你的目标</h2><p>例如减脂周期、训练频率、食物偏好或不适合的食材。</p></article>
+        <article class="step panel"><span class="step-number">02</span><h2>确认计划草案</h2><p>在对话中补充细节，AI 会给出饮食和运动的完整安排。</p></article>
+        <article class="step panel"><span class="step-number">03</span><h2>自动同步</h2><p>计划生成完成后，这里会展示最新版本，后续可继续在对话中调整。</p></article>
+      </section>
+    </template>
   </div>
 </template>
 
 <style scoped>
-.eyebrow {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--primary-deep);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.page-head h1 {
-  font-size: 28px;
-}
-.plan-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
-  gap: 24px;
-  margin-top: 26px;
-  padding: 28px;
-  background: var(--primary-soft);
-  border-color: var(--primary-line);
-}
-.hero-kicker {
-  color: var(--primary-deep);
-  font-size: 11px;
-  font-weight: 650;
-}
-.hero-copy h2 {
-  max-width: 560px;
-  margin: 10px 0 0;
-  font-size: 26px;
-  line-height: 1.25;
-  letter-spacing: 0;
-}
-.hero-copy p {
-  max-width: 560px;
-  margin: 10px 0 20px;
-  color: var(--ink-2);
-  font-size: 13px;
-}
-.plan-preview {
-  align-self: center;
-  padding: 16px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--primary-line);
-  border-radius: var(--radius);
-}
-.preview-head {
-  display: flex;
-  justify-content: space-between;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink-3);
-  font-size: 11px;
-}
-.preview-head b {
-  color: var(--primary-deep);
-}
-.preview-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 13px 0 0;
-}
-.row-icon {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 7px;
-}
-.row-icon.meal {
-  color: var(--primary-deep);
-  background: var(--primary-soft);
-}
-.row-icon.exercise {
-  color: var(--info);
-  background: #eef6ff;
-}
-.preview-row b,
-.preview-row small {
-  display: block;
-}
-.preview-row b {
-  font-size: 12px;
-}
-.preview-row small {
-  margin-top: 2px;
-  color: var(--ink-3);
-  font-size: 10px;
-}
-.how-it-works {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  margin-top: 20px;
-}
-.step {
-  padding: 20px;
-}
-.step-number {
-  color: var(--primary-deep);
-  font-family: var(--font-num);
-  font-size: 12px;
-  font-weight: 700;
-}
-.step h2 {
-  margin: 10px 0 0;
-  font-size: 15px;
-}
-.step p {
-  margin: 6px 0 0;
-  color: var(--ink-3);
-  font-size: 12px;
-}
-@media (max-width: 840px) {
-  .plan-hero,
-  .how-it-works {
-    grid-template-columns: 1fr;
-  }
-}
+.plan-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }.plan-head h1 { font-size: 31px; }.eyebrow { display: block; margin-bottom: 7px; color: var(--primary-deep); font-size: 11px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.plan-hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(260px, .9fr); gap: 28px; margin-top: 26px; padding: 30px; background: var(--primary-soft); border-color: var(--primary-line); }.hero-kicker { color: var(--primary-deep); font-size: 13px; font-weight: 650; }.hero-copy h2 { max-width: 560px; margin: 10px 0 0; font-size: 29px; line-height: 1.25; letter-spacing: 0; }.hero-copy p { max-width: 560px; margin: 12px 0 22px; color: var(--ink-2); font-size: 14px; }.plan-preview { align-self: center; padding: 18px; background: var(--bg-elevated); border: 1px solid var(--primary-line); border-radius: var(--radius); }.preview-head { display: flex; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid var(--line); color: var(--ink-3); font-size: 12px; }.preview-head b { color: var(--primary-deep); }.preview-row { display: flex; align-items: center; gap: 11px; padding: 15px 0 0; }.row-icon,.focus-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 7px; }.row-icon.meal,.focus-icon.meal { color: var(--primary-deep); background: var(--primary-soft); }.row-icon.exercise,.focus-icon.exercise { color: var(--info); background: #eef6ff; }.preview-row b,.preview-row small { display: block; }.preview-row b { font-size: 14px; }.preview-row small { margin-top: 2px; color: var(--ink-3); font-size: 12px; }
+.active-plan { padding: 28px; margin-top: 24px; border-top: 3px solid var(--primary); }.active-head,.plan-title-row,.plan-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; }.plan-badge { display: inline-flex; align-items: center; gap: 6px; color: var(--primary-deep); font-size: 12px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }.updated-at { color: var(--ink-3); font-size: 12px; }.plan-title-row { margin-top: 14px; align-items: flex-start; }.plan-title-row h2 { margin: 0; font-size: 25px; line-height: 1.25; }.plan-state { padding: 4px 8px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-deep); font-size: 12px; font-weight: 700; }.plan-content { max-width: 900px; margin-top: 20px; padding: 22px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fbfefb; color: var(--ink); font-size: 15px; line-height: 1.9; white-space: pre-wrap; word-break: break-word; }.plan-footer { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }.plan-footer a { display: inline-flex; align-items: center; gap: 5px; flex: none; font-weight: 650; }.plan-focus { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }.focus-card { display: flex; align-items: flex-start; gap: 13px; padding: 20px; }.focus-card h2 { margin: 0; font-size: 16px; }.focus-card p { margin: 5px 0 0; color: var(--ink-3); font-size: 13px; }
+.how-it-works { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }.step { padding: 20px; }.step-number { color: var(--primary-deep); font-family: var(--font-num); font-size: 13px; font-weight: 700; }.step h2 { margin: 10px 0 0; font-size: 17px; }.step p { margin: 6px 0 0; color: var(--ink-3); font-size: 13px; }
+@media (max-width: 840px) { .plan-hero,.how-it-works,.plan-focus { grid-template-columns: 1fr; }.plan-head h1 { font-size: 27px; } }.plan-head > .el-button { flex: none; }
+@media (max-width: 600px) { .plan-head { display: block; }.plan-head > .el-button { margin-top: 14px; }.plan-hero,.active-plan { padding: 20px 16px; }.hero-copy h2 { font-size: 25px; }.active-head,.plan-title-row,.plan-footer { align-items: flex-start; flex-direction: column; }.plan-content { padding: 16px; font-size: 14px; }.plan-focus { grid-template-columns: 1fr; } }
 </style>

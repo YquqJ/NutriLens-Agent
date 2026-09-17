@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 月历记录页：月度概览来自既有 dashboard summary，选中日沿用饮食/运动记录 CRUD。
 import { computed, onMounted, ref } from 'vue'
-import { Bicycle, Calendar, Dish, Lightning } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Bicycle, Dish, Lightning } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getSummary } from '@/api/dashboard'
 import {
@@ -34,7 +34,10 @@ const editingEx = ref<number | null>(null)
 const exDraft = ref<number | null>(null)
 
 const fmt = (value: number) => Math.round(value).toLocaleString('zh-CN')
+const today = todayISO()
+const currentMonth = today.slice(0, 7)
 const selectedState = computed(() => monthStates.value[date.value] ?? null)
+const canMoveForward = computed(() => month.value < currentMonth)
 const calendarDates = computed(() => {
   const [year, value] = month.value.split('-').map(Number)
   return buildMonthGrid(year, value)
@@ -54,6 +57,15 @@ const mealColor = (mealType: string) => MEAL_COLORS[mealType] || '#76857b'
 
 function currentMonthDays() {
   return calendarDates.value.filter((value) => value.startsWith(month.value))
+}
+
+function monthLabel(value: string) {
+  const [year, monthValue] = value.split('-')
+  return `${year} 年 ${Number(monthValue)} 月`
+}
+
+function isFutureDate(value: string) {
+  return value > today
 }
 
 async function loadSelected() {
@@ -102,16 +114,23 @@ async function loadMonth() {
   monthLoading.value = false
 }
 
-async function changeMonth() {
-  const selectedInMonth = date.value.startsWith(month.value)
-  if (!selectedInMonth) date.value = `${month.value}-01`
+async function navigateMonth(offset: number) {
+  const [year, monthValue] = month.value.split('-').map(Number)
+  const next = new Date(year, monthValue - 1 + offset, 1)
+  const nextMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`
+  if (nextMonth > currentMonth) return
+  month.value = nextMonth
+  const selectedInMonth = date.value.startsWith(nextMonth)
+  if (!selectedInMonth) date.value = nextMonth === currentMonth ? today : `${nextMonth}-01`
   await Promise.all([loadMonth(), loadSelected()])
 }
 
 async function selectDate(value: string) {
+  if (isFutureDate(value)) return
   date.value = value
-  if (!value.startsWith(month.value)) month.value = value.slice(0, 7)
-  await loadSelected()
+  const switchedMonth = !value.startsWith(month.value)
+  if (switchedMonth) month.value = value.slice(0, 7)
+  await (switchedMonth ? Promise.all([loadMonth(), loadSelected()]) : loadSelected())
 }
 
 function startEditDiet(record: DietRecord) {
@@ -187,15 +206,24 @@ onMounted(() => void Promise.all([loadMonth(), loadSelected()]))
         <h1>你的健康节奏，有迹可循</h1>
         <p>红点代表热量超标，薄荷绿代表目标内；食和动分别表示饮食与运动记录。</p>
       </div>
-      <el-date-picker v-model="month" type="month" value-format="YYYY-MM" :clearable="false" class="month-picker" @change="changeMonth" />
+      <aside class="day-summary">
+        <div><span class="eyebrow">Selected day</span><h2>{{ selectedDateText }}</h2></div>
+        <div class="summary-energy"><strong class="num">{{ fmt(summary?.intake ?? 0) }}</strong><span>千卡摄入</span></div>
+        <p class="summary-status" :class="selectedState?.status">{{ selectedState?.status === 'over_target' ? '今日摄入超过热量目标' : selectedState?.status === 'no_records' ? '当天还没有记录' : '当前摄入处于目标范围内' }}</p>
+        <dl><div><dt>饮食</dt><dd>{{ dietRecords.length }} 条</dd></div><div><dt>运动</dt><dd>{{ exerciseRecords.length }} 条</dd></div><div><dt>消耗</dt><dd class="num">{{ fmt(summary?.burned ?? 0) }} kcal</dd></div></dl>
+      </aside>
     </header>
 
     <section v-loading="monthLoading" class="calendar-layout">
       <article class="calendar-panel panel">
-        <div class="calendar-title"><div><h2>{{ month.replace('-', ' 年 ') }} 月</h2><p v-if="monthWarning">{{ monthWarning }}</p></div><el-icon><Calendar /></el-icon></div>
+        <div class="calendar-title">
+          <el-button circle plain aria-label="上一个月" @click="navigateMonth(-1)"><el-icon><ArrowLeft /></el-icon></el-button>
+          <div><h2>{{ monthLabel(month) }}</h2><p v-if="monthWarning">{{ monthWarning }}</p></div>
+          <el-button circle plain aria-label="下一个月" :disabled="!canMoveForward" @click="navigateMonth(1)"><el-icon><ArrowRight /></el-icon></el-button>
+        </div>
         <div class="week-row"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
         <div class="calendar-grid">
-          <button v-for="value in calendarDates" :key="value" class="day-cell" :class="{ muted: !value.startsWith(month), selected: value === date }" @click="selectDate(value)">
+          <button v-for="value in calendarDates" :key="value" class="day-cell" :class="{ muted: !value.startsWith(month), selected: value === date, future: isFutureDate(value) }" :disabled="isFutureDate(value)" @click="selectDate(value)">
             <span class="day-number"><b>{{ Number(value.slice(-2)) }}</b><i :class="['status-dot', monthStates[value]?.status ?? 'no_records']" /></span>
             <span class="flags"><i v-if="monthStates[value]?.hasDiet" class="record-flag diet">食</i><i v-if="monthStates[value]?.hasExercise" class="record-flag exercise">动</i></span>
             <small v-if="monthStates[value]?.hasDiet" class="day-intake num">{{ fmt(monthStates[value].intake) }} kcal</small>
@@ -204,18 +232,11 @@ onMounted(() => void Promise.all([loadMonth(), loadSelected()]))
         </div>
         <div class="calendar-legend"><span><i class="status-dot over_target" />热量超标</span><span><i class="status-dot within_target" />目标内</span><span><i class="record-flag diet">食</i>饮食</span><span><i class="record-flag exercise">动</i>运动</span></div>
       </article>
-
-      <aside class="day-summary">
-        <span class="eyebrow">Selected day</span>
-        <h2>{{ selectedDateText }}</h2>
-        <strong class="num">{{ fmt(summary?.intake ?? 0) }}</strong><span class="summary-unit">千卡摄入</span>
-        <p class="summary-status" :class="selectedState?.status">{{ selectedState?.status === 'over_target' ? '今日摄入超过热量目标' : selectedState?.status === 'no_records' ? '当天还没有记录' : '当前摄入处于目标范围内' }}</p>
-        <dl><div><dt>饮食记录</dt><dd>{{ dietRecords.length }} 条</dd></div><div><dt>运动记录</dt><dd>{{ exerciseRecords.length }} 条</dd></div><div><dt>运动消耗</dt><dd class="num">{{ fmt(summary?.burned ?? 0) }} kcal</dd></div></dl>
-      </aside>
     </section>
 
     <section v-loading="loading" class="record-detail">
-      <div class="detail-head"><div><h2>当天记录</h2><p>{{ selectedDateText }} 的饮食与运动明细</p></div><el-tabs v-model="tab"><el-tab-pane label="饮食" name="diet" /><el-tab-pane label="运动" name="exercise" /></el-tabs></div>
+      <div class="detail-head"><div><h2>当天记录</h2><p>{{ selectedDateText }} 的饮食与运动明细</p></div><el-radio-group v-model="tab" class="record-tabs"><el-radio-button value="diet">饮食</el-radio-button><el-radio-button value="exercise">运动</el-radio-button></el-radio-group></div>
+      <div class="record-scroll">
 
       <template v-if="tab === 'diet'">
         <div v-if="!dietRecords.length" class="empty-state panel"><el-icon class="es-icon"><Dish /></el-icon><span class="es-title">当日暂无饮食记录</span><span class="es-hint">去智能对话中描述你吃了什么，记录会自动落到这里。</span></div>
@@ -229,6 +250,7 @@ onMounted(() => void Promise.all([loadMonth(), loadSelected()]))
         <div v-if="!exerciseRecords.length" class="empty-state panel"><el-icon class="es-icon"><Bicycle /></el-icon><span class="es-title">当日暂无运动记录</span><span class="es-hint">去智能对话中说明运动类型和时长，记录会自动落到这里。</span></div>
         <article v-for="record in exerciseRecords" :key="record.id" class="exercise-card panel"><span class="exercise-icon"><el-icon><Lightning /></el-icon></span><div><b>{{ record.exercise_type }}</b><small>MET {{ record.met }}</small></div><template v-if="editingEx === record.id"><el-input-number v-model="exDraft" :min="1" :max="1440" :precision="0" size="small" controls-position="right" /><span>分钟</span></template><template v-else><span class="num">{{ record.duration_minutes }} 分钟</span></template><strong class="num">{{ fmt(record.calories_burned) }} 千卡</strong><div class="record-actions"><template v-if="editingEx === record.id"><el-button size="small" type="primary" @click="saveEx(record)">保存</el-button><el-button size="small" @click="cancelEditEx">取消</el-button></template><template v-else><el-button size="small" text @click="startEditEx(record)">编辑</el-button><el-button size="small" text type="danger" @click="removeEx(record)">删除</el-button></template></div></article>
       </template>
+      </div>
     </section>
   </div>
 </template>
@@ -240,4 +262,20 @@ onMounted(() => void Promise.all([loadMonth(), loadSelected()]))
 .record-detail { margin-top: 22px; }.detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }.detail-head p { margin: 4px 0 0; color: var(--ink-3); font-size: 12px; }.detail-head :deep(.el-tabs__header) { margin: 0; }.record-card { padding: 17px; margin-top: 12px; }.record-card header { display: flex; align-items: center; gap: 9px; }.meal { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 5px; background: color-mix(in srgb, var(--meal-color) 10%, #fff); color: var(--meal-color); font-size: 11px; font-weight: 750; }.meal i { width: 6px; height: 6px; border-radius: 50%; background: var(--meal-color); }.source { padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink-3); font-size: 10px; }.record-card header > strong { margin-left: auto; color: var(--primary-deep); font-size: 13px; }.record-actions { display: flex; gap: 2px; }.item-list { display: grid; gap: 0; margin-top: 13px; border-top: 1px solid var(--line); }.food-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }.food-item:last-child { border-bottom: 0; }.food-item b,.food-item span { display: block; }.food-item b { font-size: 12px; }.food-item > div:first-child span { margin-top: 2px; color: var(--ink-3); font-size: 10px; }.food-values { display: flex; align-items: center; gap: 14px; color: var(--ink-3); font-size: 11px; }.food-values b { color: var(--ink); }.exercise-card { display: flex; align-items: center; gap: 12px; padding: 17px; margin-top: 12px; }.exercise-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 7px; background: #eef6ff; color: var(--info); }.exercise-card b,.exercise-card small { display: block; }.exercise-card b { font-size: 13px; }.exercise-card small { margin-top: 2px; color: var(--ink-3); font-size: 10px; }.exercise-card > strong { margin-left: auto; color: var(--primary-deep); }.empty-state { margin-top: 12px; }
 @media (max-width: 1000px) { .calendar-layout { grid-template-columns: 1fr; }.day-summary { min-height: 200px; }.record-detail { margin-top: 18px; } }
 @media (max-width: 680px) { .records-head { display: block; }.month-picker { margin-top: 14px; }.calendar-panel { padding: 13px; }.week-row,.calendar-grid { gap: 4px; }.day-cell { min-height: 65px; padding: 5px; }.day-cell.selected { padding: 4px; }.day-intake { font-size: 7px; }.detail-head { display: block; }.detail-head :deep(.el-tabs__header) { margin-top: 12px; }.record-card header { align-items: flex-start; flex-wrap: wrap; }.record-card header > strong { margin-left: 0; }.record-actions { margin-left: auto; }.food-item { align-items: flex-start; flex-direction: column; gap: 7px; }.food-values { width: 100%; justify-content: space-between; gap: 8px; }.exercise-card { flex-wrap: wrap; }.exercise-card > strong { margin-left: 0; }.exercise-card .record-actions { margin-left: auto; } }
+
+/* 二次布局：月历占满主宽度，详情区在桌面端独立滚动。 */
+.records-page { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.records-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(410px, .9fr); align-items: stretch; gap: 20px; margin-bottom: 18px; }
+.records-head h1 { font-size: 32px; }
+.records-head > div { align-self: center; }
+.records-head .day-summary { display: grid; grid-template-columns: minmax(150px, 1fr) auto; align-items: center; column-gap: 18px; row-gap: 8px; min-height: 116px; padding: 16px 18px; border: 1px solid var(--primary-line); border-radius: var(--radius); background: var(--primary-soft); color: var(--ink); }
+.records-head .day-summary .eyebrow { margin-bottom: 3px; font-size: 10px; color: var(--primary-deep); }
+.records-head .day-summary h2 { font-size: 17px; }
+.summary-energy { text-align: right; }.summary-energy strong,.summary-energy span { display: block; }.summary-energy strong { color: var(--primary-deep); font-size: 28px; line-height: 1; }.summary-energy span { margin-top: 3px; color: var(--ink-3); font-size: 11px; }
+.records-head .summary-status { grid-column: 1 / -1; margin: 0; padding: 0; background: transparent; color: var(--ink-2); font-size: 12px; }.records-head .summary-status.over_target { background: transparent; color: #c85c4c; }
+.records-head .day-summary dl { display: flex; grid-column: 1 / -1; gap: 14px; margin: 0; }.records-head .day-summary dl div { flex: 1; padding: 6px 0 0; border-top: 1px solid var(--primary-line); color: var(--ink-2); font-size: 12px; }.records-head .day-summary dt { color: var(--ink-3); }.records-head .day-summary dd { color: var(--ink); }
+.calendar-layout { display: block; flex: none; margin-top: 0; }.calendar-panel { padding: 18px 22px 15px; }.calendar-title { display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; justify-items: center; }.calendar-title h2 { font-size: 20px; }.calendar-title .el-button { --el-button-hover-bg-color: var(--primary-soft); --el-button-hover-border-color: var(--primary-line); }.week-row { margin: 14px 0 7px; }.week-row span { font-size: 13px; }.week-row,.calendar-grid { gap: 7px; }.day-cell { min-height: 72px; padding: 8px; cursor: pointer; }.day-cell:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--primary); box-shadow: 0 5px 14px rgba(21, 128, 61, .08); }.day-cell:disabled { cursor: not-allowed; }.day-cell.future { opacity: .3; background: #fafcfb; }.day-number b { font-size: 15px; }.status-dot { width: 8px; height: 8px; }.flags { margin-top: 7px; }.record-flag { width: 21px; height: 18px; font-size: 10px; }.day-intake { margin-top: 4px; font-size: 10px; }.calendar-legend { margin-top: 13px; font-size: 12px; }
+.record-detail { display: flex; min-height: 0; flex: 1; flex-direction: column; margin-top: 18px; }.detail-head { flex: none; align-items: center; margin-bottom: 12px; }.detail-head h2 { font-size: 18px; }.detail-head p { font-size: 13px; }.record-tabs :deep(.el-radio-button__inner) { min-width: 76px; font-size: 13px; }.record-scroll { min-height: 0; overflow-y: auto; padding: 0 4px 10px 0; }.record-card,.exercise-card { margin-top: 10px; }.record-card header > strong,.exercise-card > strong { font-size: 14px; }
+@media (max-width: 1000px) { .records-page { height: auto; overflow: visible; }.records-head { grid-template-columns: 1fr; }.records-head .day-summary { max-width: none; }.record-detail { min-height: auto; }.record-scroll { overflow: visible; }.day-cell { min-height: 82px; } }
+@media (max-width: 680px) { .records-head { display: grid; gap: 14px; }.records-head h1 { font-size: 28px; }.records-head .day-summary { grid-template-columns: 1fr auto; min-height: auto; padding: 14px; }.records-head .day-summary dl { gap: 9px; }.summary-energy strong { font-size: 24px; }.calendar-panel { padding: 14px 12px 12px; }.calendar-title { grid-template-columns: 36px 1fr 36px; }.calendar-title h2 { font-size: 17px; }.week-row,.calendar-grid { gap: 4px; }.week-row span { font-size: 11px; }.day-cell { min-height: 66px; padding: 6px; }.day-cell.selected { padding: 5px; }.day-number b { font-size: 12px; }.flags { min-height: 15px; margin-top: 5px; }.record-flag { width: 17px; height: 15px; font-size: 8px; }.day-intake { margin-top: 4px; font-size: 8px; }.calendar-legend { gap: 9px; margin-top: 12px; font-size: 10px; }.detail-head { display: flex; align-items: flex-end; }.record-tabs :deep(.el-radio-button__inner) { min-width: 62px; }.record-scroll { padding-right: 0; } }
 </style>

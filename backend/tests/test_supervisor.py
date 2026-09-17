@@ -119,6 +119,17 @@ def test_allows_routing_to_different_agent():
     assert cmd.goto == "plan_agent"
 
 
+def test_marks_a_plan_generation_turn_for_result_persistence():
+    """计划生成标记不能依赖收尾 supervisor 的 task 文案。"""
+    supervisor = make_supervisor_node(
+        _stub_router(RouteDecision(next_agent="plan_agent", task="生成一周饮食与运动计划"))
+    )
+    cmd = supervisor(
+        {"messages": [HumanMessage("给我做一周计划")], "hop_count": 0}
+    )
+    assert cmd.update["plan_requested"] is True
+
+
 # ======================================================================
 # 真实 LLM 联调（需要 DASHSCOPE_API_KEY，未配置自动跳过）
 # ======================================================================

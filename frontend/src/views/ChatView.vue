@@ -9,6 +9,7 @@ import { getToken } from '@/api/http'
 import { listConversations, createConversation, getMessages, deleteConversation } from '@/api/conversations'
 import { uploadImage } from '@/api/uploads'
 import { getErrorMessage } from '@/utils/error'
+import { saveCurrentPlan } from '@/api/plans'
 import ChatMessage from '@/components/ChatMessage.vue'
 import CitationDrawer from '@/components/CitationDrawer.vue'
 import HitlCard from '@/components/HitlCard.vue'
@@ -348,6 +349,19 @@ async function refreshList() {
   convs.value = await listConversations()
 }
 
+async function syncPlan(message: ChatMsg) {
+  if (!message.content) return
+  try {
+    await saveCurrentPlan({
+      content: message.content,
+      conversation_id: activeId.value,
+    })
+    ElMessage.success('计划已同步到饮食计划')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '计划同步失败'))
+  }
+}
+
 function applyPlanPrompt() {
   const prompt = typeof route.query.prompt === 'string' ? route.query.prompt.trim() : ''
   if (!prompt || !activeId.value) return
@@ -391,6 +405,10 @@ watch(
 
     <!-- 消息区 -->
     <section class="main">
+      <header class="chat-topbar">
+        <div><span class="chat-eyebrow">NutriLens guide</span><h1>智能健康对话</h1></div>
+        <span class="chat-status">饮食、运动与计划都可以在这里完成</span>
+      </header>
       <div ref="listEl" class="messages">
         <div class="col">
           <div v-if="!messages.length" class="empty">
@@ -402,7 +420,7 @@ watch(
           </div>
 
           <template v-for="m in messages" :key="m.key">
-            <ChatMessage :message="m" @citation-click="openCitation($event, m)" />
+            <ChatMessage :message="m" @citation-click="openCitation($event, m)" @sync-plan="syncPlan" />
             <div v-if="m.interrupt" class="hitl-slot">
               <HitlCard
                 :payload="m.interrupt"
@@ -720,6 +738,9 @@ watch(
   --el-button-disabled-text-color: var(--muted-2);
 }
 
+.chat-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 24px 16px; border-bottom: 1px solid var(--line); background: var(--bg-elevated); }.chat-eyebrow { display: block; color: var(--primary-deep); font-size: 11px; font-weight: 750; letter-spacing: .09em; text-transform: uppercase; }.chat-topbar h1 { margin: 2px 0 0; font-size: 21px; line-height: 1.25; }.chat-status { padding: 6px 10px; border: 1px solid var(--primary-line); border-radius: 999px; background: var(--primary-soft); color: var(--primary-deep); font-size: 12px; }
+.convs { padding: 16px 12px; background: #fbfefb; }.new-btn { height: 40px; font-size: 14px; }.conv-label { padding-top: 12px; font-size: 12px; }.conv-item { padding: 11px 10px; }.conv-title { font-size: 14px; }.messages { padding: 28px 24px; background: var(--surface); }.col { max-width: 840px; }.empty { margin-top: 10vh; padding: 30px; border: 1px solid var(--primary-line); border-radius: var(--radius); background: var(--bg-elevated); box-shadow: 0 8px 26px rgba(20, 79, 45, .04); }.empty-title { color: var(--ink); font-size: 21px; }.empty-sub { font-size: 14px; }.chip { padding: 8px 14px; font-size: 13px; }.composer-wrap { padding: 14px 24px; background: var(--bg-elevated); }.composer { border-radius: 12px; padding: 8px 10px; box-shadow: 0 5px 18px rgba(20, 79, 45, .06); }
+
 @media (max-width: 760px) {
   .chat {
     height: calc(100dvh - 57px);
@@ -731,12 +752,13 @@ watch(
   .messages {
     padding: 18px 0;
   }
+  .chat-topbar { padding: 14px 0; background: transparent; }.chat-topbar h1 { font-size: 19px; }.chat-status { display: none; }
   .col {
     max-width: none;
   }
   .empty {
-    margin: 8vh auto 0;
-    padding: 0 12px;
+    margin: 8vh 0 0;
+    padding: 24px 14px;
   }
   .composer-wrap {
     padding: 10px 0;

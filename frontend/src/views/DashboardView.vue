@@ -7,10 +7,8 @@ import type { EChartsCoreOption } from 'echarts/core'
 import EChart from '@/components/EChart.vue'
 import { getSummary, getTrend } from '@/api/dashboard'
 import type { DailySummary, TrendPoint } from '@/types'
-import { todayISO } from '@/utils/date'
 import { getErrorMessage } from '@/utils/error'
 
-const date = ref(todayISO())
 const summary = ref<DailySummary | null>(null)
 const trend = ref<TrendPoint[]>([])
 const loading = ref(false)
@@ -26,6 +24,9 @@ const C = {
 }
 
 const fmt = (value: number) => Math.round(value).toLocaleString('zh-CN')
+const todayLabel = new Intl.DateTimeFormat('zh-CN', {
+  month: 'long', day: 'numeric', weekday: 'long',
+}).format(new Date())
 const target = computed(() => summary.value?.calorie_target ?? null)
 const intake = computed(() => summary.value?.intake ?? 0)
 const remaining = computed(() => summary.value?.remaining ?? null)
@@ -88,7 +89,7 @@ const macroOption = computed<EChartsCoreOption>(() => {
 async function load() {
   loading.value = true
   try {
-    const [nextSummary, nextTrend] = await Promise.all([getSummary(date.value), getTrend(7)])
+    const [nextSummary, nextTrend] = await Promise.all([getSummary(), getTrend(7)])
     summary.value = nextSummary
     trend.value = nextTrend.series
   } catch (error) {
@@ -109,7 +110,7 @@ onMounted(load)
         <h1>今天，保持轻盈节奏</h1>
         <p>从饮食、运动与能量收支开始，照顾好今天的身体状态。</p>
       </div>
-      <el-date-picker v-model="date" type="date" value-format="YYYY-MM-DD" :clearable="false" class="date-pick" @change="load" />
+      <div class="today-stamp"><span>今日</span><b>{{ todayLabel }}</b></div>
     </header>
 
     <section class="status-grid">
@@ -117,6 +118,7 @@ onMounted(load)
         <span class="eyebrow hero-eyebrow">Daily rhythm</span>
         <h2>{{ heroTitle }}</h2>
         <p>{{ heroNote }}</p>
+        <div class="hero-context"><span>今日重点</span><b>{{ target == null ? '建立能量基线' : overBudget ? '让晚餐更轻盈' : '优先补足蛋白质' }}</b></div>
         <div class="hero-actions">
           <router-link class="hero-button primary" to="/records">查看今日记录<el-icon><ArrowRight /></el-icon></router-link>
           <router-link class="hero-button secondary" to="/chat">问问 NutriLens</router-link>
@@ -124,7 +126,7 @@ onMounted(load)
       </article>
 
       <article class="energy-card panel">
-        <div class="energy-head"><span>今日能量预算</span><router-link to="/records">详情 →</router-link></div>
+        <div class="energy-head"><span>今日能量预算</span><router-link to="/records">查看记录 <el-icon><ArrowRight /></el-icon></router-link></div>
         <div class="energy-main">
           <div class="energy-ring" :class="{ over: overBudget }" :style="{ '--progress': budgetPct + '%' }">
             <div><b class="num">{{ displayRemaining }}</b><span>{{ energyLabel }}</span></div>
@@ -144,9 +146,9 @@ onMounted(load)
     </section>
 
     <section class="quick-actions" aria-label="快捷操作">
-      <router-link class="quick-action panel" to="/chat"><span class="quick-icon"><el-icon><Food /></el-icon></span><span><b>记录一餐</b><small>拍照或文字描述</small></span></router-link>
-      <router-link class="quick-action panel" to="/chat"><span class="quick-icon exercise"><el-icon><Timer /></el-icon></span><span><b>记录运动</b><small>跑步、力量或步行</small></span></router-link>
-      <router-link class="quick-action panel" to="/plan"><span class="quick-icon plan"><el-icon><MagicStick /></el-icon></span><span><b>生成计划</b><small>饮食与运动一起安排</small></span></router-link>
+      <router-link class="quick-action panel" to="/chat"><span class="quick-icon"><el-icon><Food /></el-icon></span><span><b>记录一餐</b><small>拍照或文字描述</small></span><el-icon class="quick-arrow"><ArrowRight /></el-icon></router-link>
+      <router-link class="quick-action panel" to="/chat"><span class="quick-icon exercise"><el-icon><Timer /></el-icon></span><span><b>记录运动</b><small>跑步、力量或步行</small></span><el-icon class="quick-arrow"><ArrowRight /></el-icon></router-link>
+      <router-link class="quick-action panel" to="/plan"><span class="quick-icon plan"><el-icon><MagicStick /></el-icon></span><span><b>生成计划</b><small>饮食与运动一起安排</small></span><el-icon class="quick-arrow"><ArrowRight /></el-icon></router-link>
     </section>
 
     <section class="dashboard-lower">
@@ -172,32 +174,33 @@ onMounted(load)
 
 <style scoped>
 .dashboard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.eyebrow { display: block; margin-bottom: 6px; color: var(--primary-deep); font-size: 10px; font-weight: 750; letter-spacing: 0.1em; text-transform: uppercase; }
-.dashboard-head h1 { font-size: 29px; }
-.date-pick { width: 164px; flex: none; }
+.eyebrow { display: block; margin-bottom: 7px; color: var(--primary-deep); font-size: 11px; font-weight: 750; letter-spacing: 0.1em; text-transform: uppercase; }
+.dashboard-head h1 { font-size: 32px; }
+.today-stamp { min-width: 166px; padding: 12px 14px; border: 1px solid var(--primary-line); border-radius: var(--radius); background: var(--primary-soft); text-align: right; }.today-stamp span,.today-stamp b { display: block; }.today-stamp span { color: var(--primary-deep); font-size: 12px; font-weight: 700; }.today-stamp b { margin-top: 2px; color: var(--ink); font-size: 14px; }
 .status-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(310px, .8fr); gap: 18px; margin-top: 26px; }
-.daily-status { position: relative; overflow: hidden; min-height: 304px; padding: 28px; border-radius: var(--radius); background: var(--primary); color: #fff; box-shadow: var(--shadow); }
+.daily-status { position: relative; overflow: hidden; min-height: 326px; padding: 30px; border: 1px solid #11843d; border-radius: var(--radius); background: var(--primary); color: #fff; box-shadow: var(--shadow); }
 .daily-status::after { content: ''; position: absolute; right: -62px; bottom: -92px; width: 294px; height: 294px; border: 1px solid rgba(255,255,255,.3); border-radius: 50%; box-shadow: 0 0 0 31px rgba(255,255,255,.07), 0 0 0 62px rgba(255,255,255,.035); }
 .daily-status > * { position: relative; z-index: 1; }
 .hero-eyebrow { color: #d9fbe4; }
-.daily-status h2 { max-width: 480px; margin: 12px 0 0; font-size: 29px; line-height: 1.17; letter-spacing: 0; }
-.daily-status p { max-width: 430px; margin: 11px 0 0; color: #e1f8e9; font-size: 13px; }
-.hero-actions { display: flex; gap: 8px; margin-top: 25px; }
-.hero-button { display: inline-flex; align-items: center; gap: 7px; padding: 9px 11px; border: 1px solid rgba(255,255,255,.35); border-radius: 6px; color: #fff; font-size: 12px; font-weight: 700; }
+.daily-status h2 { max-width: 500px; margin: 12px 0 0; font-size: 31px; line-height: 1.17; letter-spacing: 0; }
+.daily-status p { max-width: 460px; margin: 11px 0 0; color: #e1f8e9; font-size: 14px; }
+.hero-context { display: inline-flex; gap: 9px; align-items: center; margin-top: 18px; padding: 7px 10px; border: 1px solid rgba(255,255,255,.22); border-radius: 6px; background: rgba(255,255,255,.12); font-size: 12px; }.hero-context span { color: #d9fbe4; }.hero-context b { font-weight: 700; }
+.hero-actions { display: flex; gap: 8px; margin-top: 20px; }
+.hero-button { display: inline-flex; align-items: center; gap: 7px; padding: 10px 13px; border: 1px solid rgba(255,255,255,.35); border-radius: 6px; color: #fff; font-size: 13px; font-weight: 700; }
 .hero-button.primary { background: #fff; border-color: #fff; color: var(--primary-deep); }
-.energy-card { padding: 21px; }
+.energy-card { padding: 23px; background: #fbfefb; }
 .energy-head,.panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.energy-head { color: var(--ink-3); font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
-.energy-head a,.panel-heading a { color: var(--primary-deep); font-size: 11px; font-weight: 700; letter-spacing: 0; text-transform: none; }
+.energy-head { color: var(--ink-3); font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.energy-head a { display: inline-flex; align-items: center; gap: 3px; }.energy-head a,.panel-heading a { color: var(--primary-deep); font-size: 12px; font-weight: 700; letter-spacing: 0; text-transform: none; }
 .energy-main { display: flex; align-items: center; gap: 20px; margin-top: 17px; }
-.energy-ring { position: relative; width: 130px; height: 130px; display: grid; place-items: center; flex: none; border-radius: 50%; background: conic-gradient(var(--primary) 0 var(--progress), #e7efe9 var(--progress) 100%); }
+.energy-ring { position: relative; width: 140px; height: 140px; display: grid; place-items: center; flex: none; border-radius: 50%; background: conic-gradient(var(--primary) 0 var(--progress), #e7efe9 var(--progress) 100%); }
 .energy-ring.over { background: conic-gradient(var(--warn) 0 var(--progress), #f3e6e3 var(--progress) 100%); }
-.energy-ring::after { content: ''; position: absolute; width: 95px; height: 95px; border-radius: 50%; background: var(--bg-elevated); }
-.energy-ring div { position: relative; z-index: 1; text-align: center; }.energy-ring b { display: block; font-size: 25px; line-height: 1; }.energy-ring span { display: block; max-width: 60px; margin-top: 4px; color: var(--ink-3); font-size: 10px; line-height: 1.25; }
-.energy-main dl { flex: 1; min-width: 0; margin: 0; }.energy-main dl div { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid #edf2ee; font-size: 12px; }.energy-main dl div:last-child { border: 0; }.energy-main dt { color: var(--ink-3); }.energy-main dd { margin: 0; font-weight: 700; }
-.macro-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-top: 16px; }.macro-grid div { padding: 9px 5px; border-radius: 6px; background: #f6faf7; text-align: center; }.macro-grid b,.macro-grid span { display: block; }.macro-grid b { font-size: 13px; }.macro-grid span { margin-top: 3px; color: var(--ink-3); font-size: 10px; }.protein { color: var(--primary-deep); }.carbs { color: var(--info); }.fat { color: var(--warn); }
-.quick-actions { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-top: 18px; }.quick-action { display: flex; align-items: center; gap: 10px; padding: 14px 15px; transition: transform .16s, border-color .16s; }.quick-action:hover { transform: translateY(-2px); border-color: var(--primary-line); }.quick-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; background: var(--primary-soft); color: var(--primary-deep); }.quick-icon.exercise { background: #eef6ff; color: var(--info); }.quick-icon.plan { background: #f3f0ff; color: #7565bd; }.quick-action b,.quick-action small { display: block; }.quick-action b { color: var(--ink); font-size: 12px; }.quick-action small { margin-top: 2px; color: var(--ink-3); font-size: 10px; }
-.dashboard-lower { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(220px,.62fr) minmax(280px,.76fr); gap: 18px; margin-top: 22px; }.chart-panel,.insight-panel,.macro-panel { padding: 20px; }.panel-heading h2,.insight-panel h2 { margin: 0; font-size: 15px; }.panel-heading p { margin: 4px 0 0; color: var(--ink-3); font-size: 11px; }.chart { height: 260px; }.insight-panel { background: var(--primary-soft); border-color: var(--primary-line); }.insight-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; background: var(--primary); color: #fff; }.insight-panel h2 { margin-top: 14px; }.insight-panel strong { display: block; margin-top: 17px; font-size: 18px; line-height: 1.25; }.insight-panel p { margin: 8px 0 0; color: var(--ink-2); font-size: 12px; }.insight-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 18px; color: var(--primary-deep); font-size: 11px; font-weight: 750; }.donut-wrap { position: relative; height: 260px; }.donut-center { position: absolute; inset: 0 0 42px; display: grid; place-content: center; text-align: center; pointer-events: none; }.donut-center b { font-size: 23px; }.donut-center span { margin-top: 3px; color: var(--ink-3); font-size: 10px; }.compact-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 220px; color: var(--ink-3); font-size: 11px; }.compact-empty .el-icon { color: var(--line-strong); font-size: 26px; }
+.energy-ring::after { content: ''; position: absolute; width: 101px; height: 101px; border-radius: 50%; background: var(--bg-elevated); }
+.energy-ring div { position: relative; z-index: 1; text-align: center; }.energy-ring b { display: block; font-size: 28px; line-height: 1; }.energy-ring span { display: block; max-width: 70px; margin-top: 4px; color: var(--ink-3); font-size: 11px; line-height: 1.25; }
+.energy-main dl { flex: 1; min-width: 0; margin: 0; }.energy-main dl div { display: flex; justify-content: space-between; gap: 8px; padding: 9px 0; border-bottom: 1px solid #edf2ee; font-size: 13px; }.energy-main dl div:last-child { border: 0; }.energy-main dt { color: var(--ink-3); }.energy-main dd { margin: 0; font-weight: 700; }
+.macro-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-top: 18px; }.macro-grid div { padding: 10px 5px; border-radius: 6px; background: #f2f8f3; text-align: center; }.macro-grid b,.macro-grid span { display: block; }.macro-grid b { font-size: 14px; }.macro-grid span { margin-top: 3px; color: var(--ink-3); font-size: 11px; }.protein { color: var(--primary-deep); }.carbs { color: var(--info); }.fat { color: var(--warn); }
+.quick-actions { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-top: 18px; }.quick-action { display: flex; align-items: center; gap: 11px; padding: 16px; transition: transform .16s, border-color .16s, box-shadow .16s; }.quick-action:hover { transform: translateY(-2px); border-color: var(--primary-line); box-shadow: var(--shadow); }.quick-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 7px; background: var(--primary-soft); color: var(--primary-deep); }.quick-icon.exercise { background: #eef6ff; color: var(--info); }.quick-icon.plan { background: #f3f0ff; color: #7565bd; }.quick-action b,.quick-action small { display: block; }.quick-action b { color: var(--ink); font-size: 14px; }.quick-action small { margin-top: 2px; color: var(--ink-3); font-size: 12px; }.quick-arrow { margin-left: auto; color: var(--ink-3); }
+.dashboard-lower { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(220px,.62fr) minmax(280px,.76fr); gap: 18px; margin-top: 22px; }.chart-panel,.insight-panel,.macro-panel { padding: 22px; }.panel-heading h2,.insight-panel h2 { margin: 0; font-size: 17px; }.panel-heading p { margin: 4px 0 0; color: var(--ink-3); font-size: 12px; }.chart { height: 260px; }.insight-panel { background: var(--primary-soft); border-color: var(--primary-line); }.insight-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 7px; background: var(--primary); color: #fff; }.insight-panel h2 { margin-top: 14px; }.insight-panel strong { display: block; margin-top: 17px; font-size: 20px; line-height: 1.25; }.insight-panel p { margin: 8px 0 0; color: var(--ink-2); font-size: 13px; }.insight-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 18px; color: var(--primary-deep); font-size: 12px; font-weight: 750; }.donut-wrap { position: relative; height: 260px; }.donut-center { position: absolute; inset: 0 0 42px; display: grid; place-content: center; text-align: center; pointer-events: none; }.donut-center b { font-size: 25px; }.donut-center span { margin-top: 3px; color: var(--ink-3); font-size: 11px; }.compact-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 220px; color: var(--ink-3); font-size: 12px; }.compact-empty .el-icon { color: var(--line-strong); font-size: 26px; }
 @media (max-width: 1080px) { .status-grid,.dashboard-lower { grid-template-columns: 1fr; }.insight-panel { min-height: 190px; } }
-@media (max-width: 680px) { .dashboard-head { display: block; }.date-pick { margin-top: 14px; }.status-grid { margin-top: 18px; }.daily-status { min-height: 270px; padding: 22px; }.daily-status h2 { font-size: 25px; }.energy-main { gap: 12px; }.energy-ring { width: 108px; height: 108px; }.energy-ring::after { width: 78px; height: 78px; }.energy-ring b { font-size: 21px; }.quick-actions { grid-template-columns: 1fr; }.chart { height: 230px; } }
+@media (max-width: 680px) { .dashboard-head { display: block; }.today-stamp { width: fit-content; margin-top: 14px; text-align: left; }.status-grid { margin-top: 18px; }.daily-status { min-height: 290px; padding: 22px; }.daily-status h2 { font-size: 27px; }.energy-main { gap: 12px; }.energy-ring { width: 114px; height: 114px; }.energy-ring::after { width: 82px; height: 82px; }.energy-ring b { font-size: 22px; }.quick-actions { grid-template-columns: 1fr; }.chart { height: 230px; } }
 </style>

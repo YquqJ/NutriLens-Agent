@@ -54,7 +54,13 @@ def _turn_reset(state: AgentState) -> dict:
     agent_trace / tool_calls 不重置则跨轮无限累积。
     resume（Command 恢复中断）不会重新经过 START，不受影响。
     """
-    return {"hop_count": 0, "agent_trace": [], "tool_calls": [], "citations": []}
+    return {
+        "hop_count": 0,
+        "plan_requested": False,
+        "agent_trace": [],
+        "tool_calls": [],
+        "citations": [],
+    }
 
 
 def build_graph(

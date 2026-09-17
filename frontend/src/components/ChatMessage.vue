@@ -7,7 +7,10 @@ import { computed } from 'vue'
 import type { ChatMessage, Citation } from '@/types'
 
 const props = defineProps<{ message: ChatMessage }>()
-const emit = defineEmits<{ (e: 'citation-click', citation: Citation): void }>()
+const emit = defineEmits<{
+  (e: 'citation-click', citation: Citation): void
+  (e: 'sync-plan', message: ChatMessage): void
+}>()
 
 type ContentPart = { type: 'text'; value: string } | { type: 'citation'; citation: Citation }
 
@@ -113,6 +116,12 @@ function formatTime(iso: string | null | undefined) {
             </span>
             <span v-else-if="message.thinkingMs !== undefined">耗时 {{ formatDuration(message.thinkingMs) }}</span>
           </template>
+          <button
+            v-if="message.agentName === 'plan_agent' && message.content && !message.streaming"
+            class="sync-plan"
+            type="button"
+            @click="emit('sync-plan', message)"
+          >同步到饮食计划</button>
           <!-- <button v-if="message.content" class="copy" title="复制" @click="copy">
             <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
           </button> -->
@@ -291,6 +300,7 @@ function formatTime(iso: string | null | undefined) {
   color: var(--muted);
   background: var(--surface-hover);
 }
+.sync-plan { padding: 2px 7px; border: 1px solid var(--primary-line); border-radius: 4px; background: var(--primary-soft); color: var(--primary-deep); font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; }.sync-plan:hover { border-color: var(--primary); background: #e8faed; }
 
 /* ---- 用户：淡绿气泡 ---- */
 .user {
