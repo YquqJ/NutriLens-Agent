@@ -5,6 +5,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Close, Loading, Picture, Plus, Promotion } from '@element-plus/icons-vue'
 import { getToken } from '@/api/http'
 import { listConversations, createConversation, getMessages, deleteConversation } from '@/api/conversations'
 import { uploadImage } from '@/api/uploads'

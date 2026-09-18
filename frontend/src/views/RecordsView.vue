@@ -3,7 +3,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ArrowLeft, ArrowRight, Bicycle, Dish, Lightning } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getSummary } from '@/api/dashboard'
+import { getMonthlySummary, getSummary } from '@/api/dashboard'
 import {
   deleteDietRecord,
   deleteExerciseRecord,
@@ -28,6 +28,7 @@ const dietRecords = ref<DietRecord[]>([])
 const exerciseRecords = ref<ExerciseRecord[]>([])
 const summary = ref<DailySummary | null>(null)
 const monthStates = ref<Record<string, CalendarDayState>>({})
+const monthlySummaries = ref<Record<string, DailySummary>>({})
 const editingDiet = ref<number | null>(null)
 const dietDraft = ref<DietRecord | null>(null)
 const editingEx = ref<number | null>(null)
@@ -55,10 +56,6 @@ const MEAL_COLORS: Record<string, string> = {
 }
 const mealColor = (mealType: string) => MEAL_COLORS[mealType] || '#76857b'
 
-function currentMonthDays() {
-  return calendarDates.value.filter((value) => value.startsWith(month.value))
-}
-
 function monthLabel(value: string) {
   const [year, monthValue] = value.split('-')
   return `${year} 年 ${Number(monthValue)} 月`
@@ -71,11 +68,11 @@ function isFutureDate(value: string) {
 async function loadSelected() {
   loading.value = true
   try {
-    const [nextDiet, nextExercise, nextSummary] = await Promise.all([
+    const [nextDiet, nextExercise] = await Promise.all([
       listDietRecords(date.value),
       listExerciseRecords(date.value),
-      getSummary(date.value),
     ])
+    const nextSummary = monthlySummaries.value[date.value] ?? await getSummary(date.value)
     dietRecords.value = nextDiet
     exerciseRecords.value = nextExercise
     summary.value = nextSummary
@@ -90,28 +87,26 @@ async function loadSelected() {
 async function loadMonth() {
   monthLoading.value = true
   monthWarning.value = ''
-  const dates = currentMonthDays()
-  const results = await Promise.allSettled(dates.map((value) => getSummary(value)))
   const nextStates: Record<string, CalendarDayState> = {}
-  let failures = 0
-
-  results.forEach((result, index) => {
-    const value = dates[index]
-    if (result.status === 'rejected') {
-      failures += 1
-      nextStates[value] = deriveCalendarDayState(value, null, [], [])
-      return
-    }
-    const daily = result.value
-    // 当前 API 没有月度 records 聚合；有摄入/消耗即可准确呈现绝大多数食/动状态。
-    const diet = daily.intake > 0 ? ([{}] as DietRecord[]) : []
-    const exercise = daily.burned > 0 ? ([{}] as ExerciseRecord[]) : []
-    nextStates[value] = deriveCalendarDayState(value, daily, diet, exercise)
-  })
-
-  monthStates.value = nextStates
-  if (failures > 0) monthWarning.value = `有 ${failures} 天的汇总暂时无法读取`
-  monthLoading.value = false
+  try {
+    const result = await getMonthlySummary(month.value)
+    const summaries: Record<string, DailySummary> = {}
+    result.days.forEach((daily) => {
+      summaries[daily.date] = daily
+      nextStates[daily.date] = deriveCalendarDayState(
+        daily.date,
+        daily,
+        daily.has_diet ? ([{}] as DietRecord[]) : [],
+        daily.has_exercise ? ([{}] as ExerciseRecord[]) : [],
+      )
+    })
+    monthlySummaries.value = { ...monthlySummaries.value, ...summaries }
+    monthStates.value = nextStates
+  } catch (error) {
+    monthWarning.value = getErrorMessage(error, '月份汇总暂时无法读取')
+  } finally {
+    monthLoading.value = false
+  }
 }
 
 async function navigateMonth(offset: number) {
@@ -122,7 +117,8 @@ async function navigateMonth(offset: number) {
   month.value = nextMonth
   const selectedInMonth = date.value.startsWith(nextMonth)
   if (!selectedInMonth) date.value = nextMonth === currentMonth ? today : `${nextMonth}-01`
-  await Promise.all([loadMonth(), loadSelected()])
+  await loadMonth()
+  await loadSelected()
 }
 
 async function selectDate(value: string) {
@@ -130,7 +126,8 @@ async function selectDate(value: string) {
   date.value = value
   const switchedMonth = !value.startsWith(month.value)
   if (switchedMonth) month.value = value.slice(0, 7)
-  await (switchedMonth ? Promise.all([loadMonth(), loadSelected()]) : loadSelected())
+  if (switchedMonth) await loadMonth()
+  await loadSelected()
 }
 
 function startEditDiet(record: DietRecord) {
@@ -148,7 +145,8 @@ async function saveDiet(record: DietRecord) {
     const index = dietRecords.value.findIndex((item) => item.id === record.id)
     if (index >= 0) dietRecords.value[index] = updated
     cancelEditDiet()
-    await Promise.all([loadSelected(), loadMonth()])
+    await loadMonth()
+    await loadSelected()
     ElMessage.success('饮食记录已保存')
   } catch (error) {
     ElMessage.error(getErrorMessage(error))
@@ -158,7 +156,8 @@ async function removeDiet(record: DietRecord) {
   try {
     await ElMessageBox.confirm('删除这条饮食记录？', '删除记录', { type: 'warning' })
     await deleteDietRecord(record.id)
-    await Promise.all([loadSelected(), loadMonth()])
+    await loadMonth()
+    await loadSelected()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(getErrorMessage(error))
   }
@@ -179,7 +178,8 @@ async function saveEx(record: ExerciseRecord) {
     const index = exerciseRecords.value.findIndex((item) => item.id === record.id)
     if (index >= 0) exerciseRecords.value[index] = updated
     cancelEditEx()
-    await Promise.all([loadSelected(), loadMonth()])
+    await loadMonth()
+    await loadSelected()
     ElMessage.success('运动记录已保存')
   } catch (error) {
     ElMessage.error(getErrorMessage(error))
@@ -195,7 +195,10 @@ async function removeEx(record: ExerciseRecord) {
   }
 }
 
-onMounted(() => void Promise.all([loadMonth(), loadSelected()]))
+onMounted(async () => {
+  await loadMonth()
+  await loadSelected()
+})
 </script>
 
 <template>

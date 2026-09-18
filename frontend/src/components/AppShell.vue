@@ -3,17 +3,18 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { Calendar, ChatDotRound, Notebook, Odometer, SwitchButton, User } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
 const nav = [
-  { path: '/dashboard', label: '今日', icon: 'Odometer' },
-  { path: '/records', label: '记录', icon: 'Notebook' },
-  { path: '/chat', label: '对话', icon: 'ChatDotRound' },
-  { path: '/plan', label: '计划', icon: 'Calendar' },
-  { path: '/profile', label: '档案', icon: 'User' },
+  { path: '/dashboard', label: '今日', icon: Odometer },
+  { path: '/records', label: '记录', icon: Notebook },
+  { path: '/chat', label: '对话', icon: ChatDotRound },
+  { path: '/plan', label: '计划', icon: Calendar },
+  { path: '/profile', label: '档案', icon: User },
 ]
 
 // 当前一级路径（/chat → chat），用于高亮激活项

@@ -38,7 +38,7 @@ function formatTime(iso: string | null | undefined) {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const startOfMsgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
   const diffDays = Math.round((startOfToday.getTime() - startOfMsgDay.getTime()) / 86400000)
-  if (diffDays === 0) return hm
+  if (diffDays === 0) return `今天 ${hm}`
   if (diffDays === 1) return `昨天 ${hm}`
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hm}`
 }
@@ -259,6 +259,7 @@ function formatTime(iso: string | null | undefined) {
   align-items: center;
   gap: 6px;
   margin-top: 6px;
+  margin-left: 2px;
   font-size: 12px;
   color: var(--muted-2);
 }

@@ -6,10 +6,11 @@
 // 用 disabled 实现并覆盖样式回正常观感。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { EditPen } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getProfile, updateProfile } from '@/api/profile'
 import { getErrorMessage } from '@/utils/error'
-import type { UserProfile } from '@/types'
+import type { Gender, Goal, UserProfile } from '@/types'
 
 type RequiredProfileField =
   | 'gender'
@@ -31,7 +32,7 @@ const PROFILE_REQUIRED_MESSAGES: Record<RequiredProfileField, string> = {
 
 const loading = ref(false)
 const saving = ref(false)
-const editing = ref(true) // 编辑态：未填过默认开启，填过后默认只读
+const editing = ref(false)
 const profileFormRef = ref<FormInstance>()
 // 计算结果（后端回填，前端只读展示）
 const result = reactive<{ bmr: number | null; tdee: number | null; calorie_target: number | null }>({
@@ -48,6 +49,15 @@ const form = reactive<ProfileDraft & Pick<UserProfile, 'goal_note'>>({
   activity_level: null,
   goal: null,
   goal_note: '',
+})
+
+const genderModel = computed<Gender | ''>({
+  get: () => form.gender ?? '',
+  set: (value) => { form.gender = value || null },
+})
+const goalModel = computed<Goal | ''>({
+  get: () => form.goal ?? '',
+  set: (value) => { form.goal = value || null },
 })
 
 const profileRules = Object.fromEntries(
@@ -93,6 +103,7 @@ async function load() {
   try {
     const p = await getProfile()
     fill(p)
+    editing.value = !p.gender
   } catch (e) {
     ElMessage.error(getErrorMessage(e))
   } finally {
@@ -162,7 +173,7 @@ onMounted(load)
           scroll-to-error
         >
           <el-form-item label="性别" prop="gender">
-            <el-radio-group v-model="form.gender" :disabled="!editing">
+            <el-radio-group v-model="genderModel" :disabled="!editing">
               <el-radio-button value="male">男</el-radio-button>
               <el-radio-button value="female">女</el-radio-button>
             </el-radio-group>
@@ -192,7 +203,7 @@ onMounted(load)
           </el-form-item>
 
           <el-form-item label="目标" prop="goal">
-            <el-radio-group v-model="form.goal" :disabled="!editing">
+            <el-radio-group v-model="goalModel" :disabled="!editing">
               <el-radio-button v-for="o in goalOptions" :key="o.value" :value="o.value">{{ o.label }}</el-radio-button>
             </el-radio-group>
           </el-form-item>

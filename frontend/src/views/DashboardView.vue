@@ -1,10 +1,9 @@
 <script setup lang="ts">
 // 今日健康操作台：基于既有 summary/trend API 呈现能量状态、宏量与历史趋势。
-import { computed, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ArrowRight, Food, MagicStick, PieChart, Timer } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { EChartsCoreOption } from 'echarts/core'
-import EChart from '@/components/EChart.vue'
 import { getSummary, getTrend } from '@/api/dashboard'
 import type { DailySummary, TrendPoint } from '@/types'
 import { getErrorMessage } from '@/utils/error'
@@ -12,6 +11,12 @@ import { getErrorMessage } from '@/utils/error'
 const summary = ref<DailySummary | null>(null)
 const trend = ref<TrendPoint[]>([])
 const loading = ref(false)
+const chartsVisible = ref(false)
+const trendLoading = ref(false)
+const chartSection = ref<HTMLElement | null>(null)
+let chartObserver: IntersectionObserver | null = null
+
+const EChart = defineAsyncComponent(() => import('@/components/EChart.vue'))
 
 const css = getComputedStyle(document.documentElement)
 const C = {
@@ -89,9 +94,7 @@ const macroOption = computed<EChartsCoreOption>(() => {
 async function load() {
   loading.value = true
   try {
-    const [nextSummary, nextTrend] = await Promise.all([getSummary(), getTrend(7)])
-    summary.value = nextSummary
-    trend.value = nextTrend.series
+    summary.value = await getSummary()
   } catch (error) {
     ElMessage.error(getErrorMessage(error))
   } finally {
@@ -99,7 +102,44 @@ async function load() {
   }
 }
 
-onMounted(load)
+async function loadTrend() {
+  if (trendLoading.value || trend.value.length) return
+  trendLoading.value = true
+  try {
+    const nextTrend = await getTrend(7)
+    trend.value = nextTrend.series
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '趋势数据加载失败'))
+  } finally {
+    trendLoading.value = false
+  }
+}
+
+function enableCharts() {
+  if (chartsVisible.value) return
+  chartsVisible.value = true
+  void nextTick(loadTrend)
+}
+
+onMounted(() => {
+  void load()
+  if (typeof IntersectionObserver === 'undefined') {
+    enableCharts()
+    return
+  }
+  chartObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        enableCharts()
+        chartObserver?.disconnect()
+      }
+    },
+    { rootMargin: '240px 0px' },
+  )
+  if (chartSection.value) chartObserver.observe(chartSection.value)
+})
+
+onBeforeUnmount(() => chartObserver?.disconnect())
 </script>
 
 <template>
@@ -151,10 +191,13 @@ onMounted(load)
       <router-link class="quick-action panel" to="/plan"><span class="quick-icon plan"><el-icon><MagicStick /></el-icon></span><span><b>生成计划</b><small>饮食与运动一起安排</small></span><el-icon class="quick-arrow"><ArrowRight /></el-icon></router-link>
     </section>
 
-    <section class="dashboard-lower">
+    <section ref="chartSection" class="dashboard-lower">
       <article class="panel chart-panel">
         <div class="panel-heading"><div><h2>近 7 日能量平衡</h2><p>薄荷绿代表摄入，珊瑚色代表运动消耗。</p></div><router-link to="/records">打开记录 →</router-link></div>
-        <div class="chart"><EChart :option="trendOption" /></div>
+        <div class="chart">
+          <div v-if="!chartsVisible || trendLoading" class="chart-placeholder" aria-hidden="true"><span /></div>
+          <EChart v-else :option="trendOption" />
+        </div>
       </article>
       <article class="panel insight-panel">
         <span class="insight-icon"><el-icon><MagicStick /></el-icon></span>
@@ -165,7 +208,11 @@ onMounted(load)
       </article>
       <article class="panel macro-panel">
         <div class="panel-heading"><div><h2>营养摄入构成</h2><p>蛋白质、碳水、脂肪的已记录摄入量（克）</p></div></div>
-        <div v-if="macroTotal > 0" class="donut-wrap"><EChart :option="macroOption" /><div class="donut-center"><b class="num">{{ fmt(macroTotal) }}</b><span>克 · 合计</span></div></div>
+        <div v-if="macroTotal > 0" class="donut-wrap">
+          <div v-if="!chartsVisible" class="chart-placeholder" aria-hidden="true"><span /></div>
+          <EChart v-else :option="macroOption" />
+          <div class="donut-center"><b class="num">{{ fmt(macroTotal) }}</b><span>克 · 合计</span></div>
+        </div>
         <div v-else class="compact-empty"><el-icon><PieChart /></el-icon><span>记录饮食后，显示三种营养素的克数与占比</span></div>
       </article>
     </section>
@@ -512,6 +559,27 @@ onMounted(load)
 .chart {
   height: 260px;
 }
+.chart-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, #f0f6f1 25%, #f8fbf8 37%, #f0f6f1 63%);
+  background-size: 400% 100%;
+  animation: chart-shimmer 1.4s ease-in-out infinite;
+}
+.chart-placeholder span {
+  width: 62%;
+  height: 38%;
+  border-top: 2px solid var(--primary-line);
+  border-bottom: 2px solid var(--primary-line);
+  opacity: 0.8;
+}
+@keyframes chart-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
 .insight-panel {
   background: var(--primary-soft);
   border-color: var(--primary-line);
@@ -551,6 +619,10 @@ onMounted(load)
 .donut-wrap {
   position: relative;
   height: 260px;
+}
+.donut-wrap > .chart-placeholder {
+  position: absolute;
+  inset: 0;
 }
 .donut-center {
   position: absolute;

@@ -1,5 +1,5 @@
 import http from './http'
-import type { DailySummary, TrendSeries } from '@/types'
+import type { DailySummary, MonthlySummary, TrendSeries } from '@/types'
 
 export const getSummary = (date?: string) =>
   http
@@ -8,3 +8,8 @@ export const getSummary = (date?: string) =>
 
 export const getTrend = (days = 7) =>
   http.get<TrendSeries>('/dashboard/trend', { params: { days } }).then((r) => r.data)
+
+export const getMonthlySummary = (month?: string) =>
+  http
+    .get<MonthlySummary>('/dashboard/monthly-summary', { params: { month } })
+    .then((r) => r.data)

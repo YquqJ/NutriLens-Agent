@@ -80,6 +80,16 @@ export interface TrendSeries {
   series: TrendPoint[]
 }
 
+export interface MonthlySummaryDay extends DailySummary {
+  has_diet: boolean
+  has_exercise: boolean
+}
+
+export interface MonthlySummary {
+  month: string
+  days: MonthlySummaryDay[]
+}
+
 // ---- 当前健康计划 ----
 export interface HealthPlan {
   id: number
