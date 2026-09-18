@@ -1,22 +1,46 @@
 <script setup lang="ts">
 // 登录 / 注册页。左右分栏：左侧品牌说明，右侧表单。
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { getErrorMessage } from '@/utils/error'
+
+type RememberedCredentials = { username: string; password: string }
+const REMEMBERED_CREDENTIALS_KEY = 'nutrilens.rememberedCredentials'
+
+function getRememberedCredentials(): RememberedCredentials | null {
+  try {
+    const value = localStorage.getItem(REMEMBERED_CREDENTIALS_KEY)
+    if (!value) return null
+    const credentials = JSON.parse(value) as Partial<RememberedCredentials>
+    if (!credentials.username || !credentials.password) return null
+    return { username: credentials.username, password: credentials.password }
+  } catch {
+    return null
+  }
+}
+
+function saveRememberedCredentials(credentials: RememberedCredentials) {
+  localStorage.setItem(REMEMBERED_CREDENTIALS_KEY, JSON.stringify(credentials))
+}
+
+function clearRememberedCredentials() {
+  localStorage.removeItem(REMEMBERED_CREDENTIALS_KEY)
+}
 
 const router = useRouter()
 const auth = useAuthStore()
 
 const mode = ref<'login' | 'register'>('login')
 const loading = ref(false)
+const rememberCredentials = ref(false)
 const form = reactive({ username: '', password: '' })
 
 const features = [
-  '拍照识别饮食，自动换算热量与宏量',
-  '记录运动消耗，看板呈现每日收支',
-  '基于知识库的营养与运动问答',
+  '从一段对话开始，记下饮食与运动',
+  '看懂每天的能量收支和营养构成',
+  '让 AI 把饮食与训练安排成可执行的计划',
 ]
 
 async function submit() {
@@ -28,7 +52,12 @@ async function submit() {
   try {
     if (mode.value === 'login') await auth.login(form.username, form.password)
     else await auth.register(form.username, form.password)
-    router.push('/chat')
+    if (mode.value === 'login' && rememberCredentials.value) {
+      saveRememberedCredentials({ username: form.username, password: form.password })
+    } else {
+      clearRememberedCredentials()
+    }
+    router.push('/dashboard')
   } catch (e) {
     ElMessage.error(getErrorMessage(e))
   } finally {
@@ -39,7 +68,16 @@ async function submit() {
 function switchMode() {
   mode.value = mode.value === 'login' ? 'register' : 'login'
   form.password = ''
+  rememberCredentials.value = false
 }
+
+onMounted(() => {
+  const remembered = getRememberedCredentials()
+  if (!remembered) return
+  form.username = remembered.username
+  form.password = remembered.password
+  rememberCredentials.value = true
+})
 </script>
 
 <template>
@@ -49,7 +87,8 @@ function switchMode() {
         <span class="brand-mark">N</span>
         <span class="brand-name">NutriLens</span>
       </div>
-      <div class="tagline">记录饮食与运动<br />让每一口、每一步都算数</div>
+      <div class="tagline">把健康计划<br />变成每天做得到的事</div>
+      <p class="brand-copy">NutriLens 帮你把日常记录、能量变化与 AI 建议收在同一个轻松的工作台里。</p>
       <ul class="features">
         <li v-for="f in features" :key="f">
           <span class="dot" />{{ f }}
@@ -85,6 +124,11 @@ function switchMode() {
             />
           </el-form-item>
 
+          <div v-if="mode === 'login'" class="remember-row">
+            <el-checkbox v-model="rememberCredentials">记住账号和密码</el-checkbox>
+            <span>仅在当前设备保存</span>
+          </div>
+
           <el-button
             type="primary"
             class="submit"
@@ -106,15 +150,16 @@ function switchMode() {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .login {
   display: flex;
   height: 100%;
+  background: #effaf2;
 }
 .brand-panel {
   width: 44%;
   flex: none;
-  background: var(--primary-deep);
+  background: #138a40;
   color: #eaf3ef;
   padding: 48px 56px;
   display: flex;
@@ -131,7 +176,7 @@ function switchMode() {
   display: grid;
   place-items: center;
   background: #fff;
-  color: var(--primary-deep);
+  color: var(--primary);
   font-weight: 700;
   font-size: 17px;
   border-radius: 8px;
@@ -142,12 +187,19 @@ function switchMode() {
   color: #fff;
 }
 .tagline {
-  margin-top: 72px;
-  font-size: 26px;
+  margin-top: 82px;
+  font-size: 32px;
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: -0.01em;
   color: #fff;
+}
+.brand-copy {
+  max-width: 380px;
+  margin: 18px 0 0;
+  color: #d6f4df;
+  font-size: 16px;
+  line-height: 1.75;
 }
 .features {
   margin-top: 36px;
@@ -161,7 +213,7 @@ function switchMode() {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 14px;
+  font-size: 15px;
   color: #cfe3db;
 }
 .dot {
@@ -176,30 +228,89 @@ function switchMode() {
   flex: 1;
   display: grid;
   place-items: center;
-  padding: 40px;
+  padding: 48px;
+  background: #effaf2;
 }
 .form-box {
   width: 100%;
-  max-width: 360px;
+  max-width: 470px;
+  min-height: 490px;
+  padding: 44px;
+  border: 1px solid var(--primary-line);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  box-shadow: 0 18px 42px rgba(21, 128, 61, 0.08);
 }
 .form-box h1 {
   margin: 0;
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 30px;
+  font-weight: 650;
 }
 .sub {
-  margin: 6px 0 24px;
+  margin: 8px 0 30px;
+  color: var(--ink-3);
+  font-size: 15px;
+}
+.form-box :deep(.el-form-item__label) {
+  padding-bottom: 7px;
+  font-size: 15px;
+  font-weight: 650;
+}
+.form-box :deep(.el-input__wrapper) {
+  min-height: 44px;
+  padding: 0 13px;
+}
+.form-box :deep(.el-input__inner) {
+  font-size: 15px;
+}
+.remember-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -2px 0 18px;
   color: var(--ink-3);
   font-size: 13px;
+}
+.remember-row :deep(.el-checkbox__label) {
+  font-size: 14px;
+  color: var(--ink-2);
 }
 .submit {
   width: 100%;
+  min-height: 44px;
   margin-top: 4px;
+  font-size: 16px;
 }
 .switch {
-  margin-top: 20px;
-  font-size: 13px;
+  margin-top: 24px;
+  font-size: 14px;
   color: var(--ink-3);
   text-align: center;
+}
+@media (max-width: 760px) {
+  .login {
+    min-height: 100%;
+    display: block;
+  }
+  .brand-panel {
+    width: auto;
+    padding: 28px 24px;
+  }
+  .tagline {
+    margin-top: 36px;
+    font-size: 27px;
+  }
+  .brand-copy,
+  .features {
+    display: none;
+  }
+  .form-panel {
+    padding: 24px 16px 36px;
+  }
+  .form-box {
+    min-height: 0;
+    padding: 30px 22px;
+  }
 }
 </style>

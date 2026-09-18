@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NutriLens Lesson 7: Interrupt Control Flow</title>
+  <style>
+    :root{--ink:#1d2733;--muted:#5e6b78;--line:#d9e0e7;--accent:#176b87;--paper:#fbfcfd}body{margin:0;background:#eef2f5;color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:860px;margin:40px auto;padding:42px 52px;background:var(--paper);box-shadow:0 8px 30px #20304016}h1{font-size:30px;line-height:1.2;margin:0 0 8px;color:#123b4a}h2{margin-top:34px;color:#176b87;border-bottom:1px solid var(--line);padding-bottom:6px}code{background:#eaf1f4;padding:2px 5px;border-radius:3px}pre{background:#17242c;color:#e7f1f3;padding:18px;overflow:auto;border-radius:5px}.note{border-left:4px solid var(--accent);padding:10px 16px;background:#edf6f8}.warn{border-left:4px solid #b36a00;padding:10px 16px;background:#fff8e6}.muted{color:var(--muted)}li{margin:7px 0}
+  </style>
+</head>
+<body><main>
+  <p class="muted">NutriLens Agent 求职学习 · 第 7 课</p>
+  <h1>Interrupt 的真实控制流</h1>
+  <p>对应 <code>tools/diet.py:create_diet_record</code>、<code>api/chat.py:_run_graph_and_stream</code> 和 <code>resume_chat</code>。目标：分清“流式输出”“图暂停”“新请求恢复”三件事。</p>
+  <h2>第一次请求</h2>
+  <pre>POST /chat
+  → StreamingResponse 开始消费 _run_graph_and_stream
+  → for 迭代 graph.stream 产生的事件
+  → search_food 的 token / updates 逐帧 yield
+  → create_diet_record 调到 interrupt(payload)
+  → LangGraph 保存 checkpoint，发出 __interrupt__
+  → 后端 yield interrupt 事件与 done(interrupted=true)
+  → 本次 HTTP 响应结束；没有 Python 调用栈继续等待</pre>
+  <h2>for 和 yield</h2>
+  <p><code>for</code> 逐个取图事件；<code>yield</code> 把当前转换后的 SSE 字符串交给 HTTP 响应，然后暂停生成器。客户端继续读取时，生成器从上次 <code>yield</code> 后面继续。它表示“增量产生”，不是“永不结束”。</p>
+  <h2>第二次请求</h2>
+  <pre>POST /chat/resume
+  → 使用同一 thread_id 读取 checkpoint
+  → Command(resume=value)
+  → 从保存的中断节点重新开始
+  → create_diet_record 前置计算再次执行
+  → 执行到同一个 interrupt(payload)
+  → 这次 interrupt() 返回 value
+  → 从 if confirmed is False 继续后面的代码
+  → 最终 service 写库，ReAct 生成汇报，图结束</pre>
+  <div class="note">“从第 157 行继续”是理解结果，不是底层执行方式。准确说法是：节点从头重跑；重新遇到 interrupt 时，运行时把 resume 值作为该调用的返回值，因此 Python 逻辑随后自然走到第 157 行。</div>
+  <h2>为什么不能保存 Python 调用栈</h2>
+  <p>用户可能几分钟、几小时后才点击确认，期间服务进程可能重启、请求线程也早已释放。LangGraph 保存的是可序列化的状态、线程指针和中断信息，而不是某个 Python 函数的内存栈。checkpointer 因此是 HITL 和故障恢复的基础。</p>
+  <h2>哪些代码会重跑</h2>
+  <ul><li>中断所在节点之前的代码会重跑：本项目包括组装 draft、重新检查过敏风险、重新构造 payload。</li><li>不会从整个外层图的 <code>START</code> 重新跑；恢复从 checkpoint 指向的中断节点开始。</li><li>写库必须放在 interrupt 之后；否则重放可能造成重复副作用。</li></ul>
+  <h2>工程重点</h2>
+  <ol><li><b>Durable execution</b>：状态持久化后，长流程可跨请求继续。</li><li><b>事件协议</b>：token、tool_calls、interrupt、done 分开，前端才能正确渲染。</li><li><b>幂等与重放</b>：中断前代码应无副作用；生产写入还应考虑幂等键。</li><li><b>不可信恢复值</b>：resume 来自浏览器，服务端要重新校验和计算。</li><li><b>异常边界</b>：不要用裸 <code>except Exception</code> 包住 <code>interrupt()</code>，否则可能吞掉框架的中断信号。</li></ol>
+  <h2>自测</h2>
+  <ol><li>第一次请求在 interrupt 后，HTTP 连接会一直保持到用户确认吗？</li><li>resume 时为什么不会从 <code>START</code> 重新执行图片分析？</li><li>如果在 interrupt 前先写库，可能出现什么重复问题？</li></ol>
+  <p class="muted">主参考：<a href="https://docs.langchain.com/oss/python/langgraph/interrupts">LangGraph Interrupts</a> 与项目中的三个文件。继续学习时可把这条时序图画成面试白板答案。</p>
+</main></body></html>

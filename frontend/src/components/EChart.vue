@@ -41,7 +41,7 @@ watch(
   <div ref="el" class="echart" />
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .echart {
   width: 100%;
   height: 100%;

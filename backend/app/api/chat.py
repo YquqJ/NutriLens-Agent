@@ -50,6 +50,7 @@ from app.agents.llm import get_text_llm
 from app.core.deps import get_current_user
 from app.db.models import Conversation, Message, User
 from app.db.session import SessionLocal, get_db
+from app.services import plan as plan_service
 
 router = APIRouter(prefix="/api/conversations", tags=["chat"])
 
@@ -258,8 +259,9 @@ def _run_graph_and_stream(
             return
 
         # ---- 流结束：取最终 state 里最后一条 AI 消息作为 assistant 汇报 ----
+        final_state = graph.get_state(cfg).values
         content = ""
-        for m in reversed(graph.get_state(cfg).values.get("messages") or []):
+        for m in reversed(final_state.get("messages") or []):
             if m.type == "ai":
                 content = m.content if isinstance(m.content, str) else ""
                 break
@@ -268,6 +270,16 @@ def _run_graph_and_stream(
         if content:
             db = SessionLocal()
             try:
+                # 计划的来源是 plan_agent 的最终交付，不依赖模型额外调用保存工具。
+                # 路由到 plan_agent 时由 supervisor 写 plan_requested，避免其收尾
+                # 再次改写 task 后丢失“这是计划生成”的判断依据。
+                if current_agent == "plan_agent" and final_state.get("plan_requested"):
+                    plan_service.save_active_plan(
+                        db,
+                        user_id=int(cfg["configurable"]["user_id"]),
+                        conversation_id=conversation_id,
+                        content=content,
+                    )
                 db.add(
                     Message(
                         conversation_id=conversation_id,

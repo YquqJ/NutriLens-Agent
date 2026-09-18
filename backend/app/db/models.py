@@ -23,6 +23,7 @@ from datetime import date, datetime, timezone
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Float,
@@ -59,6 +60,9 @@ class User(Base):
     )
 
     profile: Mapped["UserProfile | None"] = relationship(back_populates="user")
+    plans: Mapped[list["Plan"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class UserProfile(Base):
@@ -149,6 +153,33 @@ class Message(Base):
     )
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+
+
+class Plan(Base):
+    """用户当前启用的健康计划，由 plan_agent 的最终交付自动归档。"""
+
+    __tablename__ = "plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    conversation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL")
+    )
+    title: Mapped[str] = mapped_column(String(128), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    user: Mapped[User] = relationship(back_populates="plans")
+
+    __table_args__ = (Index("ix_plans_user_active", "user_id", "is_active", "updated_at"),)
 
 
 class DietRecord(Base):

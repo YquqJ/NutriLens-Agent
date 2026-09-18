@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NutriLens Lesson 5: HITL Interrupt and Resume</title>
+  <style>
+    :root{--ink:#1d2733;--muted:#5e6b78;--line:#d9e0e7;--accent:#176b87;--paper:#fbfcfd}body{margin:0;background:#eef2f5;color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:860px;margin:40px auto;padding:42px 52px;background:var(--paper);box-shadow:0 8px 30px #20304016}h1{font-size:30px;line-height:1.2;margin:0 0 8px;color:#123b4a}h2{margin-top:34px;color:#176b87;border-bottom:1px solid var(--line);padding-bottom:6px}code{background:#eaf1f4;padding:2px 5px;border-radius:3px}pre{background:#17242c;color:#e7f1f3;padding:18px;overflow:auto;border-radius:5px}.note{border-left:4px solid var(--accent);padding:10px 16px;background:#edf6f8}.muted{color:var(--muted)}li{margin:7px 0}
+  </style>
+</head>
+<body><main>
+  <p class="muted">NutriLens Agent 求职学习 · 第 5 课</p>
+  <h1>HITL：interrupt 暂停，resume 继续</h1>
+  <p>对应 <code>tools/diet.py:create_diet_record</code> 与 <code>api/chat.py:resume_chat</code>。目标：理解确认卡片如何阻止写库、如何恢复，以及为什么恢复时前置代码必须可重复执行。</p>
+  <h2>一次完整往返</h2>
+  <pre>LLM tool call
+  → create_diet_record 生成 draft
+  → assess allergy risks
+  → interrupt(payload)
+  → GraphInterrupt，整张图暂停并写 checkpoint
+  → SSE 把 payload 发给前端
+  → 用户确认/改克数/取消
+  → Command(resume=value)，必须使用同一 thread_id
+  → interrupt() 返回 value
+  → 取消则返回 cancelled；否则最终校验并写库</pre>
+  <h2>payload 不是 AgentState</h2>
+  <p><code>interrupt_payload</code> 是给前端渲染确认卡片的数据：餐次、日期、食物草稿、过敏风险。它通过 <code>__interrupt__</code> 暴露，不是通过 <code>update</code> 写入 State。checkpoint 仍会保存图当前的 State 与暂停位置。</p>
+  <h2>为什么写库在 interrupt 之后</h2>
+  <p>第一次执行到 <code>interrupt()</code> 会暂停；恢复时，LangGraph 可能从包含 interrupt 的节点重新执行。若写库放在 interrupt 前，第一次暂停前就可能已写入；恢复重跑又可能重复写入。因此 interrupt 前只能做可重复、无副作用的计算：组装草稿、查风险、构造 payload。</p>
+  <div class="note">经验法则：任何可能被 resume 重放的代码，都不要直接发送邮件、扣款、写数据库。把副作用放在确认之后，并让 service 层继续做最终校验。</div>
+  <h2>两种 resume</h2>
+  <ul><li><code>Command(resume={"items": items})</code>：用户确认，也可以带修改后的克数。</li><li><code>Command(resume=False)</code>：用户取消；工具立即返回 <code>cancelled</code>，不执行写库。</li></ul>
+  <h2>过敏确认是第二道闸</h2>
+  <p>第一次确认后，如果有风险但没有 <code>allergy_acknowledged=True</code>，工具再次 <code>interrupt()</code>。用户删除风险食物后，代码还会重新评估最终条目。即使客户端绕过工具层，service 仍应拒绝未确认的风险写入。</p>
+  <h2>面试表达</h2>
+  <p>“HITL 不是让模型自己问一句确认，而是让图运行时真正暂停并持久化 checkpoint。前端提交后，以相同 thread_id 发送 Command(resume=...) 恢复；确认前不产生写库副作用，确认后再用最终用户编辑结果落库。”</p>
+  <h2>自测</h2>
+  <ol><li>为什么恢复请求必须使用原来的 <code>conversation_id</code>？</li><li>用户把 100g 改成 500g 后，最终应以哪份数据计算和汇报？</li><li>为什么 <code>assess_user_food_allergy_risks</code> 在确认前和确认后各执行一次？</li></ol>
+  <p class="muted">主参考：项目中的 <code>tools/diet.py</code>、<code>api/chat.py</code>、<code>tests/test_diet_agent.py</code>。下一课可继续拆 SSE 事件如何把 interrupt 送到前端。</p>
+</main></body></html>

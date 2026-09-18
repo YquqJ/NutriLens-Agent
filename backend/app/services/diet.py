@@ -6,7 +6,7 @@
 2. LangGraph 工具（Agent 通过 create_diet_record 等工具间接调用）。
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -269,3 +269,90 @@ def get_daily_summary(db: Session, user_id: int, day: date) -> dict:
             "carbs": round(float(totals[3]), 1),
         },
     }
+
+
+def get_monthly_summaries(db: Session, user_id: int, month_start: date) -> list[dict]:
+    """一次聚合返回指定月份的每日热量、运动和宏量营养素汇总。"""
+    if month_start.day != 1:
+        raise ValueError("month_start must be the first day of a month")
+
+    next_month = (
+        date(month_start.year + 1, 1, 1)
+        if month_start.month == 12
+        else date(month_start.year, month_start.month + 1, 1)
+    )
+    last_day = next_month - timedelta(days=1)
+
+    diet_rows = db.execute(
+        select(
+            DietRecord.record_date,
+            func.coalesce(func.sum(DietRecord.total_calories), 0.0),
+            func.coalesce(func.sum(DietRecord.total_protein), 0.0),
+            func.coalesce(func.sum(DietRecord.total_fat), 0.0),
+            func.coalesce(func.sum(DietRecord.total_carbs), 0.0),
+            func.count(DietRecord.id),
+        )
+        .where(
+            DietRecord.user_id == user_id,
+            DietRecord.record_date >= month_start,
+            DietRecord.record_date <= last_day,
+        )
+        .group_by(DietRecord.record_date)
+    ).all()
+    diet_by_day = {
+        day: {
+            "intake": float(intake or 0),
+            "protein": float(protein or 0),
+            "fat": float(fat or 0),
+            "carbs": float(carbs or 0),
+            "has_diet": count > 0,
+        }
+        for day, intake, protein, fat, carbs, count in diet_rows
+    }
+
+    exercise_rows = db.execute(
+        select(
+            ExerciseRecord.record_date,
+            func.coalesce(func.sum(ExerciseRecord.calories_burned), 0.0),
+            func.count(ExerciseRecord.id),
+        )
+        .where(
+            ExerciseRecord.user_id == user_id,
+            ExerciseRecord.record_date >= month_start,
+            ExerciseRecord.record_date <= last_day,
+        )
+        .group_by(ExerciseRecord.record_date)
+    ).all()
+    burned_by_day = {
+        day: {"burned": float(burned or 0), "has_exercise": count > 0}
+        for day, burned, count in exercise_rows
+    }
+
+    profile = db.get(UserProfile, user_id)
+    target = profile.calorie_target if profile else None
+    days: list[dict] = []
+    current = month_start
+    while current <= last_day:
+        diet = diet_by_day.get(current, {})
+        intake = diet.get("intake", 0.0)
+        exercise = burned_by_day.get(current, {})
+        burned = exercise.get("burned", 0.0)
+        days.append(
+            {
+                "date": current.isoformat(),
+                "intake": round(intake, 1),
+                "burned": round(burned, 1),
+                "net": round(intake - burned, 1),
+                "calorie_target": target,
+                "remaining": round(target - intake + burned, 1) if target else None,
+                "macros": {
+                    "protein": round(diet.get("protein", 0.0), 1),
+                    "fat": round(diet.get("fat", 0.0), 1),
+                    "carbs": round(diet.get("carbs", 0.0), 1),
+                },
+                "has_diet": bool(diet.get("has_diet", False)),
+                "has_exercise": bool(exercise.get("has_exercise", False)),
+            }
+        )
+        current += timedelta(days=1)
+    return days

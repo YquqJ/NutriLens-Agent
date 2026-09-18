@@ -1,0 +1,25 @@
+.el-button {
+  font-weight: 500;
+
+  &--primary {
+    --el-button-hover-bg-color: var(--primary-deep);
+    --el-button-hover-border-color: var(--primary-deep);
+  }
+
+  &.is-link {
+    font-weight: 500;
+  }
+}
+
+.el-card {
+  --el-card-padding: 20px;
+
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: none;
+}
+
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--primary) inset !important;
+}

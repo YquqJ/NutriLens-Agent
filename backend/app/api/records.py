@@ -33,6 +33,18 @@ def _parse_date(s: str | None) -> date:
         raise HTTPException(status_code=422, detail="日期格式应为 YYYY-MM-DD") from exc
 
 
+def _parse_month(s: str | None) -> date:
+    """Query 参数月份解析（YYYY-MM），缺省当前月。"""
+    if not s:
+        today = date.today()
+        return today.replace(day=1)
+    try:
+        year, month = (int(part) for part in s.split("-"))
+        return date(year, month, 1)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail="月份格式应为 YYYY-MM") from exc
+
+
 # ----------------------------------------------------------------------
 # 编辑请求体（M6.6：记录管理页的编辑能力）
 # ----------------------------------------------------------------------
@@ -194,3 +206,17 @@ def dashboard_trend(
             }
         )
     return {"days": days, "series": series}
+
+
+@router.get("/dashboard/monthly-summary")
+def dashboard_monthly_summary(
+    month: str | None = Query(default=None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """整月每日汇总，供记录日历一次性加载。"""
+    month_start = _parse_month(month)
+    return {
+        "month": month_start.strftime("%Y-%m"),
+        "days": diet_service.get_monthly_summaries(db, user.id, month_start),
+    }

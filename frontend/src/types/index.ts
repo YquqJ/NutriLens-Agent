@@ -80,6 +80,26 @@ export interface TrendSeries {
   series: TrendPoint[]
 }
 
+export interface MonthlySummaryDay extends DailySummary {
+  has_diet: boolean
+  has_exercise: boolean
+}
+
+export interface MonthlySummary {
+  month: string
+  days: MonthlySummaryDay[]
+}
+
+// ---- 当前健康计划 ----
+export interface HealthPlan {
+  id: number
+  title: string
+  content: string
+  conversation_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 // ---- 会话 / 消息 ----
 export interface Conversation {
   id: string
@@ -96,6 +116,14 @@ export interface Message {
   tool_trace: string | null // JSON 字符串，前端解析
   citations: string | null // JSON 字符串，QA 证据定位与切片正文
   created_at: string
+}
+
+export interface MessagePage {
+  items: Message[]
+  total: number
+  pageNo: number
+  pageSize: number
+  hasMore: boolean
 }
 
 // 工具轨迹单条（tool_trace 解析后的元素）

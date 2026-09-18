@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NutriLens Lesson 18: RAG Ablation and Metrics</title>
+  <style>
+    :root{--ink:#1d2733;--muted:#5e6b78;--line:#d9e0e7;--accent:#176b87;--paper:#fbfcfd}body{margin:0;background:#eef2f5;color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:880px;margin:40px auto;padding:42px 52px;background:var(--paper);box-shadow:0 8px 30px #20304016}h1{font-size:30px;line-height:1.2;margin:0 0 8px;color:#123b4a}h2{margin-top:34px;color:#176b87;border-bottom:1px solid var(--line);padding-bottom:6px}code{background:#eaf1f4;padding:2px 5px;border-radius:3px}.note{border-left:4px solid var(--accent);padding:10px 16px;background:#edf6f8}.warn{border-left:4px solid #b36a00;padding:10px 16px;background:#fff8e6}.muted{color:var(--muted)}li{margin:7px 0}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}th{color:#176b87}pre{background:#17242c;color:#e7f1f3;padding:18px;overflow:auto;border-radius:5px}
+  </style>
+</head>
+<body><main>
+  <p class="muted">NutriLens Agent 求职学习 · 第 18 课 · 前置：<a href="0015-agent-testing-and-evaluation.html">第 15 课</a></p>
+  <h1>RAG 量化提升：不要追数字，要做可复现的消融实验</h1>
+  <p>目标：设计一条能写进简历、也经得起面试追问的 RAG 优化过程。核心词是 <strong>baseline、固定评测集、一次只改一个变量、记录代价</strong>。</p>
+
+  <h2>先校正当前项目状态</h2>
+  <p>你的代码现在已经不是最初级版本：</p>
+  <pre>document_loader.py：按页码/章节识别，再以 600 字符 + 80 重叠切片
+retriever.py：向量检索 + BM25 → RRF
+retrieve()：混合候选 → rerank → top-k
+eval.py：Recall@K / MRR / nDCG + 正负例观察</pre>
+  <p>因此简历故事不应是“我准备实现 RRF 和 rerank”，而应是“我把检索管线拆成可对比阶段，并用 golden set 量化每个阶段的收益与代价”。</p>
+
+  <h2>推荐的实验版本</h2>
+  <table><thead><tr><th>版本</th><th>变化</th><th>目的</th></tr></thead><tbody>
+  <tr><td>B0</td><td>固定字符切分 + 向量检索</td><td>建立最初基线</td></tr>
+  <tr><td>B1</td><td>章节感知切分 + 向量检索</td><td>验证边界和上下文是否改善</td></tr>
+  <tr><td>B2</td><td>B1 + BM25 候选</td><td>验证精确术语召回能力</td></tr>
+  <tr><td>B3</td><td>B2 + RRF 融合</td><td>验证两路排名融合收益</td></tr>
+  <tr><td>B4</td><td>B3 + rerank</td><td>验证精排对 top-k 准确性的收益</td></tr>
+  </tbody></table>
+  <div class="warn">这里的 B2 “+ BM25 候选”和 B3 “+ RRF”需要在代码中提供实验模式。当前正式入口已经在 <code>hybrid_search()</code> 中做了 RRF，在 <code>retrieve()</code> 中做了 rerank；不能把现有实现误报成尚未完成。</div>
+
+  <h2>PDF 要不要增加？</h2>
+  <p><strong>需要增加，但不是越多越好，也不能在每个版本随意增加。</strong></p>
+  <ol>
+    <li>当前 1 份 PDF、13 页、约 66 个 chunk，足以验证代码链路，但容易让指标看起来过于乐观。</li>
+    <li>最终评测可准备 3～5 份同领域、不同主题和写作风格的权威文档，并加入容易混淆的相邻主题作为干扰项。</li>
+    <li>一旦开始比较 B0～B4，语料库必须冻结。不能 B0 用 1 份 PDF，B4 再加 5 份，然后把差异全算给 rerank。</li>
+    <li>新增文档后要重新生成 chunk、embedding 和相关 hash；旧评测集中的证据标识也要校验。</li>
+  </ol>
+
+  <h2>评测集才是数字的地基</h2>
+  <p>当前 <code>rag_queries.json</code> 有 47 条问题：42 条正例、5 条库外负例。它已经是起点，但建议扩充并分类：</p>
+  <table><thead><tr><th>类别</th><th>例子</th><th>为什么需要</th></tr></thead><tbody>
+  <tr><td>直接问法</td><td>“TDEE 由什么组成？”</td><td>基础召回</td></tr>
+  <tr><td>同义改写</td><td>“每天消耗总热量怎么算？”</td><td>测试语义检索</td></tr>
+  <tr><td>术语精确匹配</td><td>“DIAAS 和 PDCAAS”</td><td>测试 BM25/关键词路</td></tr>
+  <tr><td>多证据问题</td><td>同时需要碳水和蛋白质两片段</td><td>测试 Recall 与 nDCG</td></tr>
+  <tr><td>库外问题</td><td>股票、汽车、Python</td><td>测试误召回和拒答</td></tr>
+  </tbody></table>
+  <p>调参时使用开发集；最终数字使用冻结的测试集。否则你会不断根据题目调系统，最后得到的是“记住题目”，不是泛化能力。</p>
+
+  <h2>“召回率 90%”到底是什么意思？</h2>
+  <p>必须写完整口径，例如：</p>
+  <pre>Recall@8 = 0.90
+语料版本：nutrition-v2
+评测集：rag-test-v1，正例 50 条
+相关证据：人工标注的 relevant_hashes
+统计方式：所有正例 Recall@8 的平均值</pre>
+  <p>不要只写“召回率达到 90%”。还要说明是 <code>Recall@4</code> 还是 <code>Recall@8</code>，是平均值还是命中率，以及评测集有多少题。</p>
+
+  <h2>“准确率提升 30%”为什么容易被追问？</h2>
+  <p>“准确率”可能指检索命中、最终回答正确、引用正确或拒答正确。建议改成可验证的表述：</p>
+  <pre>向量基线：Recall@8 = 0.72
+RRF 版本：Recall@8 = 0.86
+绝对提升：+14 个百分点
+相对提升：(0.86 - 0.72) / 0.72 = 19.4%</pre>
+  <p>如果你测的是答案，应使用“答案正确率”或“引用支持率”，并给出人工标注规则。没有真实前后数据，不要提前承诺“提升 30%”。</p>
+
+  <h2>别只看分数：记录成本和副作用</h2>
+  <table><thead><tr><th>改动</th><th>可能收益</th><th>可能代价</th></tr></thead><tbody>
+  <tr><td>切片更小/更多重叠</td><td>减少边界漏召回</td><td>chunk 数、索引和上下文 token 增长</td></tr>
+  <tr><td>BM25 + RRF</td><td>术语召回更稳</td><td>两路检索耗时、重复候选</td></tr>
+  <tr><td>rerank</td><td>top-k 精度更高</td><td>额外 API 延迟、费用、失败降级</td></tr>
+  <tr><td>增加 PDF</td><td>覆盖面更广</td><td>干扰项增加，错误召回可能上升</td></tr>
+  </tbody></table>
+  <p>面试里说出“指标提升但 p95 延迟、token 和成本也要记录”，比只报一个漂亮百分比更像真正做过工程优化。</p>
+
+  <h2>推荐落地顺序</h2>
+  <ol>
+    <li>冻结一套最终语料和 <code>rag-test-v1</code>，先跑出 B0 基线。</li>
+    <li>给检索器增加实验模式，输出每个版本的 Recall@4/8、MRR、nDCG、负例 top1 分数、延迟。</li>
+    <li>只改切分策略，跑 B1；只改关键词候选，跑 B2；再启用 RRF，跑 B3；最后启用 rerank，跑 B4。</li>
+    <li>对每次变化保存配置、指标、逐题结果和失败案例。</li>
+    <li>最后再做答案级评测，区分“检索找到了”与“回答说对了”。</li>
+  </ol>
+
+  <h2>简历表达模板</h2>
+  <p>只有拿到真实数据后才替换占位符：</p>
+  <pre>设计可复现的 RAG 消融评测管线，在固定语料与 50 条 golden queries 上，
+对比章节感知切分、BM25、RRF 与 rerank；Recall@8 从 XX 提升至 YY，
+MRR 从 XX 提升至 YY，并同步记录 p95 延迟与 rerank 降级策略。</pre>
+  <p class="muted">主参考：<a href="https://docs.langchain.com/">LangChain / LangSmith 官方文档</a>，其将 Agent 的数据集评估、测试和持续改进作为完整开发生命周期的一部分。</p>
+</main></body></html>

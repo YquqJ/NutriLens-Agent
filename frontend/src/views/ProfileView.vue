@@ -6,14 +6,34 @@
 // 用 disabled 实现并覆盖样式回正常观感。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { EditPen } from '@element-plus/icons-vue'
+import type { FormInstance, FormRules } from 'element-plus'
 import { getProfile, updateProfile } from '@/api/profile'
 import { getErrorMessage } from '@/utils/error'
-import type { UserProfile } from '@/types'
+import type { Gender, Goal, UserProfile } from '@/types'
+
+type RequiredProfileField =
+  | 'gender'
+  | 'age'
+  | 'height_cm'
+  | 'weight_kg'
+  | 'activity_level'
+  | 'goal'
+type ProfileDraft = Pick<UserProfile, RequiredProfileField>
+
+const PROFILE_REQUIRED_MESSAGES: Record<RequiredProfileField, string> = {
+  gender: '请选择性别',
+  age: '请输入年龄',
+  height_cm: '请输入身高',
+  weight_kg: '请输入体重',
+  activity_level: '请选择活动水平',
+  goal: '请选择目标',
+}
 
 const loading = ref(false)
 const saving = ref(false)
-const filled = ref(false) // 是否已填过资料
-const editing = ref(true) // 编辑态：未填过默认开启，填过后默认只读
+const editing = ref(false)
+const profileFormRef = ref<FormInstance>()
 // 计算结果（后端回填，前端只读展示）
 const result = reactive<{ bmr: number | null; tdee: number | null; calorie_target: number | null }>({
   bmr: null,
@@ -21,15 +41,31 @@ const result = reactive<{ bmr: number | null; tdee: number | null; calorie_targe
   calorie_target: null,
 })
 
-const form = reactive({
-  gender: null as string | null,
-  age: null as number | null,
-  height_cm: null as number | null,
-  weight_kg: null as number | null,
-  activity_level: null as string | null,
-  goal: null as string | null,
+const form = reactive<ProfileDraft & Pick<UserProfile, 'goal_note'>>({
+  gender: null,
+  age: null,
+  height_cm: null,
+  weight_kg: null,
+  activity_level: null,
+  goal: null,
   goal_note: '',
 })
+
+const genderModel = computed<Gender | ''>({
+  get: () => form.gender ?? '',
+  set: (value) => { form.gender = value || null },
+})
+const goalModel = computed<Goal | ''>({
+  get: () => form.goal ?? '',
+  set: (value) => { form.goal = value || null },
+})
+
+const profileRules = Object.fromEntries(
+  Object.entries(PROFILE_REQUIRED_MESSAGES).map(([field, message]) => [
+    field,
+    [{ required: true, message, trigger: 'change' }],
+  ]),
+) as FormRules<ProfileDraft>
 
 const activityOptions = [
   { value: 'sedentary', label: '久坐（几乎不运动）' },
@@ -67,8 +103,7 @@ async function load() {
   try {
     const p = await getProfile()
     fill(p)
-    filled.value = !!(p.gender || p.age || p.height_cm || p.weight_kg || p.activity_level || p.goal)
-    editing.value = !filled.value
+    editing.value = !p.gender
   } catch (e) {
     ElMessage.error(getErrorMessage(e))
   } finally {
@@ -77,10 +112,19 @@ async function load() {
 }
 
 function startEdit() {
+  profileFormRef.value?.clearValidate()
   editing.value = true
 }
 
+function cancelEdit() {
+  profileFormRef.value?.clearValidate()
+  editing.value = false
+}
+
 async function save() {
+  const valid = await profileFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
   saving.value = true
   try {
     // partial update：过滤掉 null / 空串，避免覆盖未填字段
@@ -90,7 +134,6 @@ async function save() {
     }
     const updated = await updateProfile(patch as Partial<UserProfile>)
     fill(updated)
-    filled.value = true
     editing.value = false
     ElMessage.success('档案已保存')
   } catch (e) {
@@ -104,8 +147,9 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div class="page-wrapper">
     <div class="page-head">
+      <span class="page-kicker">个人健康档案</span>
       <h1>身体档案</h1>
       <p>填写身体数据与目标，系统据此计算你的每日热量目标。</p>
     </div>
@@ -115,32 +159,39 @@ onMounted(load)
       <section class="panel form-card" :class="{ 'is-editing': editing }">
         <div class="card-head">
           <h2 class="card-title">基础数据</h2>
-          <el-button v-if="filled && !editing" class="edit-btn" text @click="startEdit">
+          <el-button v-if="!editing" class="edit-btn" text @click="startEdit">
             <el-icon><EditPen /></el-icon>&nbsp;编辑
           </el-button>
         </div>
 
-        <el-form class="profile-form" label-position="top">
-          <el-form-item label="性别">
-            <el-radio-group v-model="form.gender" :disabled="!editing">
+        <el-form
+          ref="profileFormRef"
+          :model="form"
+          :rules="profileRules"
+          class="profile-form"
+          label-position="top"
+          scroll-to-error
+        >
+          <el-form-item label="性别" prop="gender">
+            <el-radio-group v-model="genderModel" :disabled="!editing">
               <el-radio-button value="male">男</el-radio-button>
               <el-radio-button value="female">女</el-radio-button>
             </el-radio-group>
           </el-form-item>
 
           <div class="row-3">
-            <el-form-item label="年龄">
+            <el-form-item label="年龄" prop="age">
               <el-input-number v-model="form.age" :min="10" :max="100" :readonly="!editing" controls-position="right" />
             </el-form-item>
-            <el-form-item label="身高（cm）">
+            <el-form-item label="身高（cm）" prop="height_cm">
               <el-input-number v-model="form.height_cm" :min="80" :max="250" :precision="0" :readonly="!editing" controls-position="right" />
             </el-form-item>
-            <el-form-item label="体重（kg）">
+            <el-form-item label="体重（kg）" prop="weight_kg">
               <el-input-number v-model="form.weight_kg" :min="25" :max="300" :precision="1" :readonly="!editing" controls-position="right" />
             </el-form-item>
           </div>
 
-          <el-form-item label="活动水平">
+          <el-form-item label="活动水平" prop="activity_level">
             <el-select
               v-model="form.activity_level"
               :disabled="!editing"
@@ -151,8 +202,8 @@ onMounted(load)
             </el-select>
           </el-form-item>
 
-          <el-form-item label="目标">
-            <el-radio-group v-model="form.goal" :disabled="!editing">
+          <el-form-item label="目标" prop="goal">
+            <el-radio-group v-model="goalModel" :disabled="!editing">
               <el-radio-button v-for="o in goalOptions" :key="o.value" :value="o.value">{{ o.label }}</el-radio-button>
             </el-radio-group>
           </el-form-item>
@@ -167,7 +218,10 @@ onMounted(load)
             />
           </el-form-item>
 
-          <el-button v-if="editing" type="primary" :loading="saving" @click="save">保存档案</el-button>
+          <div v-if="editing">
+            <el-button type="primary" :loading="saving" @click="save">保存档案</el-button>
+            <el-button @click="cancelEdit">取消</el-button>
+          </div>
         </el-form>
       </section>
 
@@ -206,7 +260,7 @@ onMounted(load)
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 /* 两卡等高：默认 stretch，去除 top 对齐 */
 .layout {
   display: grid;
@@ -218,6 +272,11 @@ onMounted(load)
 .result-card {
   padding: 24px;
 }
+.result-card {
+  display: flex;
+  flex-direction: column;
+  border-top: 3px solid var(--primary);
+}
 
 /* ---- 卡片头：标题 + 右上角编辑按钮 ---- */
 .card-head {
@@ -227,9 +286,11 @@ onMounted(load)
   margin-bottom: 16px;
 }
 .card-title {
+  height: 32px;
   margin: 0;
   font-size: 15px;
   font-weight: 600;
+  color: var(--ink);
 }
 .edit-btn {
   flex: none;
@@ -249,6 +310,20 @@ onMounted(load)
 /* 表单限宽，避免输入框在宽卡片里被拉得过长 */
 .profile-form {
   max-width: 520px;
+}
+.profile-form :deep(.el-form-item) {
+  margin-bottom: 18px;
+}
+.profile-form :deep(.el-form-item__label) {
+  padding-bottom: 6px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.profile-form :deep(.el-input-number),
+.profile-form :deep(.el-input-number .el-input__wrapper),
+.field-select {
+  width: 100%;
 }
 
 /* 年龄 / 身高 / 体重：一行三列，三等分短宽 */
@@ -296,7 +371,7 @@ onMounted(load)
 
 /* ---- 测算结果 ---- */
 .target-box {
-  padding: 18px 20px;
+  padding: 20px;
   border-radius: var(--radius-sm);
   background: var(--primary-soft);
   border: 1px solid var(--primary-line);
@@ -314,7 +389,7 @@ onMounted(load)
   color: var(--primary-deep);
 }
 .tb-value .num {
-  font-size: 34px;
+  font-size: 38px;
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1;
@@ -333,11 +408,13 @@ onMounted(load)
 .split {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 12px;
 }
 .mini {
-  padding: 14px 0;
-  border-top: 1px solid var(--line);
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
 }
 .mini-label {
   font-size: 12px;
@@ -355,7 +432,8 @@ onMounted(load)
 }
 
 .empty-note {
-  margin-top: 16px;
+  margin-top: auto;
+  padding-top: 16px;
   padding: 12px;
   background: var(--bg);
   border-radius: var(--radius-sm);

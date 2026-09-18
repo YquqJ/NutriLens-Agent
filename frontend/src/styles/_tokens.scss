@@ -1,0 +1,68 @@
+/* ============================================================
+   NutriLens design tokens
+   Near-white surfaces, ink text, mint green accents, and fine borders.
+   ============================================================ */
+
+:root {
+  --bg: #f8faf8;
+  --bg-elevated: #ffffff;
+  --ink: #17241b;
+  --ink-2: #46574c;
+  --ink-3: #76857b;
+  --line: #dce8df;
+  --line-strong: #cbdacf;
+
+  --primary: #16a34a;
+  --primary-deep: #15803d;
+  --primary-soft: #f0fdf4;
+  --primary-line: #bbf7d0;
+  --warn: #dd6f5b;
+  --info: #4d8ccb;
+
+  --text: #17241b;
+  --muted: #6c7a70;
+  --muted-2: #9aa79f;
+  --border: #dce8df;
+  --surface: #f7fbf8;
+  --surface-hover: #edf8f0;
+
+  --viz-intake: #16a34a;
+  --viz-burned: #dd6f5b;
+  --viz-carbs: #4d8ccb;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 2px rgba(20, 79, 45, 0.04), 0 10px 26px rgba(20, 79, 45, 0.05);
+
+  --font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  --font-num: 'SF Mono', ui-monospace, 'JetBrains Mono', 'Menlo', Consolas, monospace;
+
+  // Element Plus 按需样式会在路由组件载入后注入；提高优先级以保持全局主题不被默认蓝覆盖。
+  --el-color-primary: var(--primary) !important;
+  --el-color-primary-light-3: #5cc67c !important;
+  --el-color-primary-light-5: #8dde9f !important;
+  --el-color-primary-light-7: #b7edc1 !important;
+  --el-color-primary-light-8: #cef5d5 !important;
+  --el-color-primary-light-9: var(--primary-soft) !important;
+  --el-color-primary-dark-2: var(--primary-deep) !important;
+  --el-color-success: var(--primary) !important;
+  --el-color-warning: #d69342 !important;
+  --el-color-danger: var(--warn) !important;
+  --el-color-error: var(--warn) !important;
+  --el-text-color-primary: var(--ink) !important;
+  --el-text-color-regular: var(--ink-2) !important;
+  --el-text-color-secondary: var(--ink-3) !important;
+  --el-text-color-placeholder: var(--ink-3) !important;
+  --el-border-color: var(--line) !important;
+  --el-border-color-light: var(--line) !important;
+  --el-border-color-lighter: var(--line) !important;
+  --el-fill-color-blank: var(--bg-elevated) !important;
+  --el-bg-color: var(--bg-elevated) !important;
+  --el-bg-color-page: var(--bg) !important;
+  --el-border-radius-base: var(--radius-sm) !important;
+  --el-border-radius-small: 4px !important;
+  --el-border-radius-round: 999px !important;
+  --el-font-family: var(--font) !important;
+}

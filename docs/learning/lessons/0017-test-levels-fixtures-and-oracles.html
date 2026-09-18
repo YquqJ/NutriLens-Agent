@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NutriLens Lesson 17: Test Levels, Fixtures and Oracles</title>
+  <style>
+    :root{--ink:#1d2733;--muted:#5e6b78;--line:#d9e0e7;--accent:#176b87;--paper:#fbfcfd}body{margin:0;background:#eef2f5;color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:860px;margin:40px auto;padding:42px 52px;background:var(--paper);box-shadow:0 8px 30px #20304016}h1{font-size:30px;line-height:1.2;margin:0 0 8px;color:#123b4a}h2{margin-top:34px;color:#176b87;border-bottom:1px solid var(--line);padding-bottom:6px}code{background:#eaf1f4;padding:2px 5px;border-radius:3px}pre{background:#17242c;color:#e7f1f3;padding:18px;overflow:auto;border-radius:5px}.note{border-left:4px solid var(--accent);padding:10px 16px;background:#edf6f8}.muted{color:var(--muted)}li{margin:7px 0}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}th{color:#176b87}
+  </style>
+</head>
+<body><main>
+  <p class="muted">NutriLens Agent 求职学习 · 第 17 课 · 前置：<a href="0016-testing-foundations.html">第 16 课</a></p>
+  <h1>测试层级、Fixture 与“预期答案”</h1>
+  <p>目标：看懂项目中为什么有的测试只调用一个函数，有的要创建用户和数据库，还有的要跑完整 Graph。</p>
+
+  <h2>三种测试层级</h2>
+  <table><thead><tr><th>层级</th><th>检查什么</th><th>依赖</th><th>速度</th><th>项目例子</th></tr></thead><tbody>
+  <tr><td>Unit 单元测试</td><td>一个函数/类的逻辑</td><td>尽量无 DB、无 LLM</td><td>最快</td><td><code>test_eval_metrics.py</code> 测 MRR</td></tr>
+  <tr><td>Integration 集成测试</td><td>多个模块能否正确协作</td><td>真实或测试数据库</td><td>中等</td><td><code>test_allergy_guard.py</code> 测 Service + DB</td></tr>
+  <tr><td>E2E 端到端测试</td><td>从入口到最终结果的完整链路</td><td>Graph、Checkpoint、可能还有 LLM</td><td>最慢</td><td><code>test_interrupt_resume_through_graph</code></td></tr>
+  </tbody></table>
+  <p>用前端类比：Unit 像只测一个 reducer；Integration 像测表单提交和 API 是否配合；E2E 像启动页面、输入文字、点击按钮，再检查数据库最终状态。</p>
+
+  <h2>逐段拆一条项目测试</h2>
+  <pre>def test_service_blocks_agent_write_without_explicit_ack(allergy_user):
+    db = SessionLocal()
+    try:
+        with pytest.raises(diet_service.AllergyConfirmationRequired):
+            diet_service.create_diet_record(...)
+        assert diet_service.get_diet_records(db, allergy_user, date.today()) == []
+    finally:
+        db.close()</pre>
+  <ol>
+    <li><code>allergy_user</code> 是 Fixture，提前创建一个带“对海鲜过敏”档案的测试用户。</li>
+    <li><code>SessionLocal()</code> 打开数据库会话。</li>
+    <li><code>pytest.raises(...)</code> 表示这里预期必须抛出指定异常；不抛或抛错异常，测试失败。</li>
+    <li>第二个 <code>assert</code> 检查副作用：异常发生后，数据库中仍然没有饮食记录。</li>
+    <li><code>finally: db.close()</code> 清理资源，避免一个测试污染后面的测试。</li>
+  </ol>
+  <div class="note">这条测试比“只检查返回错误文案”更可靠：它同时验证了安全规则和数据库没有被偷偷写入。</div>
+
+  <h2>Fixture 是什么？</h2>
+  <p>Fixture 就是测试专用的准备函数。它把重复的 Arrange 抽出来，让每条测试专注于自己的行为。测试函数声明参数名，pytest 就会自动调用同名 Fixture，并把结果注入进来。它很像前端测试里的 <code>beforeEach</code>，但可以有清晰的“准备 / 清理”。</p>
+
+  <h2>Stub、Mock 与真实依赖</h2>
+  <table><thead><tr><th>方式</th><th>目的</th><th>Supervisor 例子</th></tr></thead><tbody>
+  <tr><td>真实依赖</td><td>确认真实系统能联通</td><td>真实 LLM、Postgres</td></tr>
+  <tr><td>Stub 桩</td><td>返回预先指定的简单结果</td><td><code>RunnableLambda(lambda _: decision)</code></td></tr>
+  <tr><td>Mock 模拟</td><td>记录依赖是否被调用、参数是什么</td><td>检查工具是否被调用一次</td></tr>
+  </tbody></table>
+  <p>Supervisor 测试使用 Stub，是为了把“模型会不会正确路由”和“拿到路由结果后图代码是否正确”拆开。否则失败时不知道该查 Prompt 还是查 <code>goto</code>。</p>
+
+  <h2>怎样判断测试的预期答案可靠？</h2>
+  <ol>
+    <li><strong>有独立来源：</strong>公式来自定义，权限来自业务规则，数据库结果直接查询真实状态。</li>
+    <li><strong>不要复制实现：</strong>如果测试和生产代码使用同一段计算逻辑，可能一起错；MRR 测试应先手算。</li>
+    <li><strong>覆盖反例：</strong>不仅测“确认后能写”，还测“未确认不能写”；不仅测正常路由，还测 hop 上限。</li>
+    <li><strong>故意制造错误：</strong>临时把生产代码中的 <code>+ 1</code> 改成 <code>+ 2</code>，测试应该失败。</li>
+    <li><strong>避免过度 Mock：</strong>把所有函数都 Mock 掉，可能全绿，但真实模块根本没有连接。</li>
+  </ol>
+
+  <h2>测试金字塔</h2>
+  <pre>        E2E：少量，慢，验证完整链路
+     Integration：适量，验证 DB / 模块协作
+          Unit：大量，快，锁定纯逻辑</pre>
+  <p>大多数规则应在 Unit 或 Integration 层快速捕获，少量关键链路再用 E2E 验收。真实 LLM 更像单独的质量评估，不应成为每次改一行代码都必须等待的唯一防线。</p>
+
+  <h2>自测</h2>
+  <ol>
+    <li>为什么过敏测试不仅要断言异常，还要查询数据库为空？</li>
+    <li><code>allergy_user</code> Fixture 主要替你解决了什么问题？</li>
+    <li>若把 Supervisor 的 LLM 换成 Stub，测试还剩下什么价值？</li>
+    <li>怎样故意改一处生产代码，验证某条测试真的能抓 bug？</li>
+  </ol>
+  <p class="muted">下一步可以继续拆 pytest 的 Fixture 生命周期、Mock 调用断言，或回到 Agent 专题学习如何测试 SSE 与 interrupt/resume。</p>
+</main></body></html>

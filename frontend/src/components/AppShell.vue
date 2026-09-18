@@ -1,19 +1,20 @@
 <script setup lang="ts">
-// 应用外壳：左侧固定导航栏 + 右侧内容区。
-// 导航四入口对应四大功能域：对话 / 看板 / 记录 / 档案。
+// 应用外壳：桌面端浅色侧栏，窄屏退化为顶部快捷导航。
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { Calendar, ChatDotRound, Notebook, Odometer, SwitchButton, User } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
 const nav = [
-  { path: '/chat', label: '对话', icon: 'ChatDotRound' },
-  { path: '/dashboard', label: '看板', icon: 'DataAnalysis' },
-  { path: '/records', label: '记录', icon: 'Notebook' },
-  { path: '/profile', label: '档案', icon: 'User' },
+  { path: '/dashboard', label: '今日', icon: Odometer },
+  { path: '/records', label: '记录', icon: Notebook },
+  { path: '/chat', label: '对话', icon: ChatDotRound },
+  { path: '/plan', label: '计划', icon: Calendar },
+  { path: '/profile', label: '档案', icon: User },
 ]
 
 // 当前一级路径（/chat → chat），用于高亮激活项
@@ -63,10 +64,11 @@ function logout() {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .shell {
   display: flex;
   height: 100%;
+  background: #eef5ef;
 }
 .side {
   width: 216px;
@@ -80,7 +82,8 @@ function logout() {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 22px 20px 18px;
+  padding: 24px 20px 20px;
+  border-bottom: 1px solid var(--line);
 }
 .brand-mark {
   width: 28px;
@@ -101,7 +104,7 @@ function logout() {
 }
 .nav {
   flex: 1;
-  padding: 8px 10px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -110,11 +113,13 @@ function logout() {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
+  padding: 10px 12px;
   border-radius: var(--radius-sm);
   color: var(--ink-2);
   font-weight: 500;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 .nav-item:hover {
   background: var(--bg);
@@ -125,7 +130,7 @@ function logout() {
   color: var(--primary-deep);
 }
 .side-foot {
-  padding: 14px 16px;
+  padding: 16px;
   border-top: 1px solid var(--line);
 }
 .user {
@@ -160,6 +165,56 @@ function logout() {
 .main {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 20px;
+  margin: 16px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.main > .page-wrapper {
+  padding: 32px;
+}
+
+@media (max-width: 760px) {
+  .shell {
+    display: block;
+  }
+  .side {
+    width: auto;
+    height: auto;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    flex-direction: row;
+    align-items: center;
+    padding: 10px 12px;
+  }
+  .brand {
+    padding: 0;
+  }
+  .brand-name,
+  .side-foot {
+    display: none;
+  }
+  .nav {
+    flex: 1;
+    flex-direction: row;
+    justify-content: flex-end;
+    padding: 0;
+    overflow-x: auto;
+  }
+  .nav-item {
+    flex: none;
+    padding: 9px;
+  }
+  .nav-item span {
+    display: none;
+  }
+  .main {
+    overflow: visible;
+    margin: 0;
+    padding: 24px 16px 32px;
+    border: 0;
+    border-radius: 0;
+  }
 }
 </style>

@@ -62,6 +62,7 @@ class AgentState(TypedDict):
     next_agent: str
     task: str  # 改写后的子任务指令（含指代消解，交给专职 agent 独立执行）
     hop_count: int  # 已路由次数，>=2 后强制结束
+    plan_requested: bool  # 本轮是否明确生成计划（供 SSE 出站层归档最终交付）
 
     # ---- HITL：待确认的饮食草稿 ----
     # interrupt() 挂起前由工具写入 state，恢复后由工具消费

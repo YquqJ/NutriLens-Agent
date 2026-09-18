@@ -2,32 +2,15 @@
 // 单条对话消息（对齐 CookHero 观感）：
 // 用户＝蓝色实心气泡白字右对齐（图片内嵌不溢出）；助手＝机器人头像 + 白底细边气泡 + 下方元信息行。
 import { agentLabel } from '@/utils/labels'
+import MarkdownContent from './MarkdownContent.vue'
 import ToolTracePanel from './ToolTracePanel.vue'
-import { computed } from 'vue'
 import type { ChatMessage, Citation } from '@/types'
 
-const props = defineProps<{ message: ChatMessage }>()
-const emit = defineEmits<{ (e: 'citation-click', citation: Citation): void }>()
-
-type ContentPart = { type: 'text'; value: string } | { type: 'citation'; citation: Citation }
-
-// 不使用 v-html：只把后端结构化 citations 中存在的 [n] 渲染成按钮，避免回答文本注入 HTML。
-const contentParts = computed<ContentPart[]>(() => {
-  const citations = new Map(props.message.citations.map((citation) => [citation.index, citation]))
-  const parts: ContentPart[] = []
-  const pattern = /\[(\d+)]/g
-  let start = 0
-  for (const match of props.message.content.matchAll(pattern)) {
-    const index = Number(match[1])
-    const citation = citations.get(index)
-    if (!citation || match.index === undefined) continue
-    if (match.index > start) parts.push({ type: 'text', value: props.message.content.slice(start, match.index) })
-    parts.push({ type: 'citation', citation })
-    start = match.index + match[0].length
-  }
-  if (start < props.message.content.length) parts.push({ type: 'text', value: props.message.content.slice(start) })
-  return parts.length ? parts : [{ type: 'text', value: props.message.content }]
-})
+defineProps<{ message: ChatMessage }>()
+const emit = defineEmits<{
+  (e: 'citation-click', citation: Citation): void
+  (e: 'sync-plan', message: ChatMessage): void
+}>()
 
 // 各 agent 标签配色（淡底 + 深字 + 圆点），通过 CSS 变量注入
 const AGENT_TONES: Record<string, string> = {
@@ -55,7 +38,7 @@ function formatTime(iso: string | null | undefined) {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const startOfMsgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
   const diffDays = Math.round((startOfToday.getTime() - startOfMsgDay.getTime()) / 86400000)
-  if (diffDays === 0) return hm
+  if (diffDays === 0) return `今天 ${hm}`
   if (diffDays === 1) return `昨天 ${hm}`
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hm}`
 }
@@ -81,18 +64,12 @@ function formatTime(iso: string | null | undefined) {
         <span v-if="message.agentName" class="agent" :class="toneClass(message.agentName)">{{ agentLabel(message.agentName) }}</span>
 
         <div v-if="message.content || message.streaming" class="bubble assistant-bubble">
-          <template v-if="message.content">
-            <template v-for="(part, index) in contentParts" :key="index">
-              <button
-                v-if="part.type === 'citation'"
-                class="citation-link"
-                type="button"
-                :title="`查看 ${part.citation.label}`"
-                @click="emit('citation-click', part.citation)"
-              >[{{ part.citation.index }}]</button>
-              <template v-else>{{ part.value }}</template>
-            </template>
-          </template>
+          <MarkdownContent
+            v-if="message.content"
+            :content="message.content"
+            :citations="message.citations"
+            @citation-click="emit('citation-click', $event)"
+          />
           <span v-else class="typing">
             <svg class="spin" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M21 12a9 9 0 1 1-6.2-8.56" />
@@ -113,9 +90,12 @@ function formatTime(iso: string | null | undefined) {
             </span>
             <span v-else-if="message.thinkingMs !== undefined">耗时 {{ formatDuration(message.thinkingMs) }}</span>
           </template>
-          <!-- <button v-if="message.content" class="copy" title="复制" @click="copy">
-            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-          </button> -->
+          <button
+            v-if="message.agentName === 'plan_agent' && message.content && !message.streaming"
+            class="sync-plan"
+            type="button"
+            @click="emit('sync-plan', message)"
+          >同步到饮食计划</button>
         </div>
       </div>
     </div>
@@ -123,20 +103,26 @@ function formatTime(iso: string | null | undefined) {
     <!-- 用户 -->
     <div v-else class="user">
       <div class="bubble user-bubble">
-        <img v-if="message.imageUrl" :src="message.imageUrl" class="pic" alt="食物图片" />
+        <el-image
+          v-if="message.imageUrl"
+          :src="message.imageUrl"
+          :preview-src-list="[message.imageUrl]"
+          :initial-index="0"
+          class="pic"
+          fit="cover"
+          alt="食物图片"
+          preview-teleported
+        />
         <span v-if="message.content" class="content">{{ message.content }}</span>
       </div>
       <div class="meta user-meta">
         <span v-if="message.createdAt" class="time">{{ formatTime(message.createdAt) }}</span>
-        <!-- <button v-if="message.content" class="copy" title="复制" @click="copy">
-          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-        </button> -->
       </div>
     </div>
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .msg {
   display: flex;
   margin-bottom: 20px;
@@ -204,11 +190,36 @@ function formatTime(iso: string | null | undefined) {
   border-radius: 50%;
   background: var(--tone-dot, var(--primary));
 }
-.tone-diet { --tone-bg: #e7f6ee; --tone-fg: #15803d; --tone-line: #c9ecd6; --tone-dot: #16a34a; }
-.tone-exercise { --tone-bg: #fdf1e7; --tone-fg: #b4542a; --tone-line: #f0d7c4; --tone-dot: #e07b39; }
-.tone-plan { --tone-bg: #e8f1fb; --tone-fg: #2563eb; --tone-line: #c9dcf5; --tone-dot: #3b82f6; }
-.tone-qa { --tone-bg: #f3ecfb; --tone-fg: #7c3aed; --tone-line: #e0d1f5; --tone-dot: #8b5cf6; }
-.tone-supervisor { --tone-bg: #f1f3f5; --tone-fg: #4a5568; --tone-line: #e2e6ea; --tone-dot: #718096; }
+.tone-diet {
+  --tone-bg: #e7f6ee;
+  --tone-fg: #15803d;
+  --tone-line: #c9ecd6;
+  --tone-dot: #16a34a;
+}
+.tone-exercise {
+  --tone-bg: #fdf1e7;
+  --tone-fg: #b4542a;
+  --tone-line: #f0d7c4;
+  --tone-dot: #e07b39;
+}
+.tone-plan {
+  --tone-bg: #e8f1fb;
+  --tone-fg: #2563eb;
+  --tone-line: #c9dcf5;
+  --tone-dot: #3b82f6;
+}
+.tone-qa {
+  --tone-bg: #f3ecfb;
+  --tone-fg: #7c3aed;
+  --tone-line: #e0d1f5;
+  --tone-dot: #8b5cf6;
+}
+.tone-supervisor {
+  --tone-bg: #f1f3f5;
+  --tone-fg: #4a5568;
+  --tone-line: #e2e6ea;
+  --tone-dot: #718096;
+}
 .assistant-bubble {
   max-width: 100%;
   padding: 11px 16px;
@@ -218,24 +229,8 @@ function formatTime(iso: string | null | undefined) {
   color: var(--text);
   font-size: 14px;
   line-height: 1.7;
-  white-space: pre-wrap;
   word-break: break-word;
 }
-.citation-link {
-  display: inline;
-  padding: 0 1px;
-  border: none;
-  background: none;
-  color: #60a5fa;
-  font: inherit;
-  font-weight: 650;
-  cursor: pointer;
-  text-decoration: underline;
-  text-decoration-color: #bfdbfe;
-  text-underline-offset: 2px;
-}
-.citation-link:hover { color: #3b82f6; text-decoration-color: currentColor; }
-.citation-link:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; border-radius: 3px; }
 .typing {
   display: inline-flex;
   align-items: center;
@@ -253,7 +248,9 @@ function formatTime(iso: string | null | undefined) {
   animation: rot 0.9s linear infinite;
 }
 @keyframes rot {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ---- 元信息行（时间 · 耗时 · 复制）---- */
@@ -262,6 +259,7 @@ function formatTime(iso: string | null | undefined) {
   align-items: center;
   gap: 6px;
   margin-top: 6px;
+  margin-left: 2px;
   font-size: 12px;
   color: var(--muted-2);
 }
@@ -290,6 +288,21 @@ function formatTime(iso: string | null | undefined) {
 .copy:hover {
   color: var(--muted);
   background: var(--surface-hover);
+}
+.sync-plan {
+  padding: 2px 7px;
+  border: 1px solid var(--primary-line);
+  border-radius: 4px;
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.sync-plan:hover {
+  border-color: var(--primary);
+  background: #e8faed;
 }
 
 /* ---- 用户：淡绿气泡 ---- */
@@ -321,6 +334,14 @@ function formatTime(iso: string | null | undefined) {
   max-width: 100%;
   max-height: 240px;
   border-radius: 10px;
+  cursor: zoom-in;
+  object-fit: cover;
+}
+.pic :deep(.el-image__inner) {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: inherit;
   object-fit: cover;
 }
 .pic + .content {

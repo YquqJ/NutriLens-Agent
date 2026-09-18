@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NutriLens Lesson 8: QA Agent RAG</title>
+  <style>
+    :root{--ink:#1d2733;--muted:#5e6b78;--line:#d9e0e7;--accent:#176b87;--paper:#fbfcfd}body{margin:0;background:#eef2f5;color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:860px;margin:40px auto;padding:42px 52px;background:var(--paper);box-shadow:0 8px 30px #20304016}h1{font-size:30px;line-height:1.2;margin:0 0 8px;color:#123b4a}h2{margin-top:34px;color:#176b87;border-bottom:1px solid var(--line);padding-bottom:6px}code{background:#eaf1f4;padding:2px 5px;border-radius:3px}pre{background:#17242c;color:#e7f1f3;padding:18px;overflow:auto;border-radius:5px}.note{border-left:4px solid var(--accent);padding:10px 16px;background:#edf6f8}.warn{border-left:4px solid #b36a00;padding:10px 16px;background:#fff8e6}.muted{color:var(--muted)}li{margin:7px 0}
+  </style>
+</head>
+<body><main>
+  <p class="muted">NutriLens Agent 求职学习 · 第 8 课</p>
+  <h1>QA Agent：可控的 Agentic RAG</h1>
+  <p>对应 <code>agents/qa_agent.py</code>、<code>rag/retriever.py</code>、<code>rag/citations.py</code>。目标：掌握“检索质量、回答生成、引用可信度”三层边界。</p>
+  <h2>它不是 ReAct 子图</h2>
+  <pre>普通 LangGraph 节点 qa_agent(state)
+  → retrieve(query)
+  → LLM 自检（QaSelfCheck）
+  → 不足：query 改写 + 再 retrieve
+  → 合并去重
+  → 再自检
+  → 充分：带证据生成
+  → 清理并重编引用
+  → 返回 messages/tool_calls/citations</pre>
+  <p>检索轮数由代码控制，最多两轮。这样比让模型自由决定“是否一直搜索”更容易限流、测试和解释。</p>
+  <h2>逐段职责</h2>
+  <ol><li><code>_question_from</code>：优先使用 Supervisor 改写后的 <code>task</code>，解决指代和默认值；没有 task 才取最后一条 HumanMessage。</li><li><code>retrieve</code>：向量召回负责语义，BM25 负责字面；RRF 融合后再 rerank。前者求全，后者求准。</li><li><code>QaSelfCheck</code>：让另一个非流式模型判断证据是否真的够用，并在不足时产出 rewritten_query。</li><li><code>_context_block</code>：把切片格式化成带编号的证据上下文，保证模型看到正文和来源定位。</li><li><code>gen_llm</code>：只有证据足够时才生成最终答案；生成模型不负责发现知识库缺口。</li><li><code>normalize_answer_citations</code>：只保留正文真正引用的证据，删除无效 [n]，重新连续编号。</li></ol>
+  <h2>为什么要拒答</h2>
+  <p>如果第一轮和改写后的第二轮都不足，返回固定的 <code>_NO_EVIDENCE_REPLY</code>，并且不调用生成模型。这个“宁可拒答，不用通用知识补全”的策略，是 RAG 降低幻觉的核心护栏。</p>
+  <h2>引用不是装饰</h2>
+  <p>检索结果只是候选证据；最终引用必须来自回答正文实际使用的编号。后端把结构化 citations 同时放进 AgentState、SSE、<code>messages.citations</code>，前端据此把正文中的 <code>[1]</code> 渲染为可点击证据，而不是自己解析来源字符串。</p>
+  <div class="note">面试要说清：引用编号校验只能证明“引用的切片属于本轮召回结果”，还不能完全证明回答中的每句话都被切片蕴含。后者需要 entailment 评估或人工/模型评审。</div>
+  <h2>当前实现的工程亮点</h2>
+  <ul><li>检索、自检、生成三阶段职责分离。</li><li>向量 + 关键词混合召回，减少单一路径漏召回。</li><li>rerank 失败时回退粗排结果，不让非核心服务故障拖垮整条问答链。</li><li>无证据时硬拒答，且测试断言生成模型没有被调用。</li><li>检索轨迹结构化返回，支持 SSE、历史回放和调试。</li></ul>
+  <h2>需要继续改进</h2>
+  <div class="warn">当前自检仍依赖 LLM，可能误判“充分”；引用校验也没有验证事实蕴含。生产可增加最低相关度阈值、领域分类器、答案-证据 entailment 检查和离线评估集。知识库内容还应视为不可信数据，提示词中明确要求忽略切片里的指令，防止检索内容注入。</div>
+  <h2>自测</h2>
+  <ol><li>为什么要先混合召回，再 rerank，而不是直接把所有命中喂给模型？</li><li>为什么第一轮自检不足后，第二轮检索完成还要再次自检？</li><li>无证据时为什么不能让生成模型“凭常识回答”？</li><li>当前引用校验解决了什么问题，又没有解决什么问题？</li></ol>
+  <p class="muted">主参考：项目中的 <code>qa_agent.py</code>、<code>retriever.py</code>、<code>citations.py</code>。下一步可做一次手动 RAG 调试：给出 query，逐层检查召回、重排、引用和最终回答。</p>
+</main></body></html>

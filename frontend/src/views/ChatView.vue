@@ -2,12 +2,16 @@
 // 对话页：会话列表 + SSE 流式渲染 + HITL 确认卡片。
 // 流式协议：POST /chat 返回 SSE 分帧（token/agent_trace/tool_calls/interrupt/done），
 // fetch + ReadableStream 逐帧解析；interrupt 挂起后经 /chat/resume 恢复。
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Close, Loading, Picture, Plus, Promotion } from '@element-plus/icons-vue'
 import { getToken } from '@/api/http'
 import { listConversations, createConversation, getMessages, deleteConversation } from '@/api/conversations'
 import { uploadImage } from '@/api/uploads'
 import { getErrorMessage } from '@/utils/error'
+import { saveCurrentPlan } from '@/api/plans'
+import { MESSAGE_PAGE_SIZE } from '@/api/conversations'
 import ChatMessage from '@/components/ChatMessage.vue'
 import CitationDrawer from '@/components/CitationDrawer.vue'
 import HitlCard from '@/components/HitlCard.vue'
@@ -22,8 +26,15 @@ import type {
 } from '@/types'
 
 const convs = ref<Conversation[]>([])
+const route = useRoute()
+const router = useRouter()
 const activeId = ref<string | null>(null)
 const messages = ref<ChatMsg[]>([])
+const loadingMessages = ref(true)
+const messageLoadError = ref(false)
+const currentMessagePage = ref(1)
+const hasMoreMessages = ref(false)
+const loadingOlderMessages = ref(false)
 const input = ref('')
 const streaming = ref(false)
 const pendingMsg = ref<ChatMsg | null>(null)
@@ -42,7 +53,28 @@ const EXAMPLES = ['帮我记录午餐：一碗牛肉面', '我今天吃了多少
 
 // ---- 工具 ----
 let seq = 0
+let messageRequestId = 0
 const uid = () => `t${Date.now()}_${seq++}`
+
+type KeyedMessage = { key: string }
+
+function mergeOlderMessages<T extends KeyedMessage>(current: T[], older: T[]) {
+  const seenKeys = new Set(current.map((message) => message.key))
+  const uniqueOlder = older.filter((message) => {
+    if (seenKeys.has(message.key)) return false
+    seenKeys.add(message.key)
+    return true
+  })
+  return [...uniqueOlder, ...current]
+}
+
+function getPrependedScrollTop(
+  previousScrollTop: number,
+  previousScrollHeight: number,
+  nextScrollHeight: number,
+) {
+  return previousScrollTop + nextScrollHeight - previousScrollHeight
+}
 
 function toChatMessage(m: Message): ChatMsg {
   let toolTrace: ToolTraceEntry[] = []
@@ -182,21 +214,44 @@ async function streamRequest(
 
 // ---- 会话管理 ----
 async function loadConversations() {
-  convs.value = await listConversations()
-  if (convs.value.length) await selectConversation(convs.value[0].id)
-  else await newConversation()
+  try {
+    convs.value = await listConversations()
+    if (convs.value.length) await selectConversation(convs.value[0].id)
+    else await newConversation()
+  } catch (error) {
+    loadingMessages.value = false
+    messageLoadError.value = true
+    ElMessage.error(getErrorMessage(error, '会话加载失败'))
+  }
 }
 
 async function selectConversation(id: string) {
+  const requestId = ++messageRequestId
   activeId.value = id
   pendingMsg.value = null
   streaming.value = false
+  loadingMessages.value = true
+  messageLoadError.value = false
+  loadingOlderMessages.value = false
+  currentMessagePage.value = 1
+  hasMoreMessages.value = false
+  messages.value = []
   try {
-    messages.value = (await getMessages(id)).map(toChatMessage)
+    const page = await getMessages(id)
+    if (requestId !== messageRequestId) return
+    messages.value = page.items.map(toChatMessage)
+    messageLoadError.value = false
+    currentMessagePage.value = page.pageNo
+    hasMoreMessages.value = page.hasMore
   } catch (e) {
+    if (requestId !== messageRequestId) return
+    messageLoadError.value = true
     ElMessage.error(getErrorMessage(e))
+  } finally {
+    if (requestId !== messageRequestId) return
+    loadingMessages.value = false
+    scrollBottom()
   }
-  scrollBottom()
 }
 
 async function newConversation() {
@@ -204,7 +259,56 @@ async function newConversation() {
   convs.value.unshift(c)
   activeId.value = c.id
   messages.value = []
+  loadingMessages.value = false
+  messageLoadError.value = false
+  loadingOlderMessages.value = false
+  currentMessagePage.value = 1
+  hasMoreMessages.value = false
   pendingMsg.value = null
+}
+
+async function loadOlderMessages() {
+  const id = activeId.value
+  const list = listEl.value
+  if (!id || !list || loadingOlderMessages.value || !hasMoreMessages.value) return
+
+  const requestId = messageRequestId
+  loadingOlderMessages.value = true
+  await nextTick()
+  const previousScrollTop = list.scrollTop
+  const previousScrollHeight = list.scrollHeight
+
+  try {
+    const page = await getMessages(id, currentMessagePage.value + 1, MESSAGE_PAGE_SIZE)
+    if (requestId !== messageRequestId || id !== activeId.value) return
+
+    messages.value = mergeOlderMessages(messages.value, page.items.map(toChatMessage))
+    currentMessagePage.value = page.pageNo
+    hasMoreMessages.value = page.hasMore
+
+    await nextTick()
+    list.scrollTop = getPrependedScrollTop(
+      previousScrollTop,
+      previousScrollHeight,
+      list.scrollHeight,
+    )
+  } catch (error) {
+    if (requestId === messageRequestId && id === activeId.value) {
+      ElMessage.error(getErrorMessage(error, '历史消息加载失败'))
+    }
+  } finally {
+    if (requestId === messageRequestId && id === activeId.value) {
+      loadingOlderMessages.value = false
+    }
+  }
+}
+
+function onMessageScroll() {
+  if (listEl.value && listEl.value.scrollTop <= 24) void loadOlderMessages()
+}
+
+function retryLoadMessages() {
+  if (activeId.value) void selectConversation(activeId.value)
 }
 
 async function removeConversation(id: string) {
@@ -345,105 +449,154 @@ async function refreshList() {
   convs.value = await listConversations()
 }
 
-onMounted(loadConversations)
+async function syncPlan(message: ChatMsg) {
+  if (!message.content) return
+  try {
+    await saveCurrentPlan({
+      content: message.content,
+      conversation_id: activeId.value,
+    })
+    ElMessage.success('计划已同步到饮食计划')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '计划同步失败'))
+  }
+}
+
+function applyPlanPrompt() {
+  const prompt = typeof route.query.prompt === 'string' ? route.query.prompt.trim() : ''
+  if (!prompt || !activeId.value) return
+  input.value = prompt
+  router.replace({ query: {} })
+}
+
+onMounted(async () => {
+  await loadConversations()
+  applyPlanPrompt()
+})
+
+watch(
+  () => route.query.prompt,
+  () => applyPlanPrompt(),
+)
 </script>
 
 <template>
-  <div class="chat">
-    <!-- 会话列表 -->
-    <aside class="convs">
-      <el-button class="new-btn" type="primary" @click="newConversation">
-        <el-icon><Plus /></el-icon>&nbsp;新会话
-      </el-button>
-      <div class="conv-list">
-        <div v-if="convs.length" class="conv-label">最近会话</div>
-        <div
-          v-for="c in convs"
-          :key="c.id"
-          class="conv-item"
-          :class="{ active: c.id === activeId }"
-          @click="selectConversation(c.id)"
-        >
-          <span class="conv-title">{{ c.title }}</span>
-          <span class="conv-time">{{ formatTime(c.updated_at) }}</span>
-          <el-icon class="conv-del" @click.stop="removeConversation(c.id)"><Close /></el-icon>
-        </div>
-      </div>
-    </aside>
+  <div class="chat-page">
+    <header class="page-head chat-topbar">
+      <div><span class="page-kicker">AI 健康助手</span><h1>智能健康对话</h1></div>
+      <span class="chat-status">饮食、运动与计划都可以在这里完成</span>
+    </header>
 
-    <!-- 消息区 -->
-    <section class="main">
-      <div ref="listEl" class="messages">
-        <div class="col">
-          <div v-if="!messages.length" class="empty">
-            <p class="empty-title">记录你吃了什么、做了什么运动</p>
-            <p class="empty-sub">直接描述，或从下面的问题开始：</p>
-            <div class="examples">
-              <button v-for="ex in EXAMPLES" :key="ex" class="chip" @click="send(ex)">{{ ex }}</button>
-            </div>
+    <div class="page-body">
+      <!-- 会话列表 -->
+      <aside class="convs">
+        <el-button class="new-btn" type="primary" @click="newConversation">
+          <el-icon><Plus /></el-icon>&nbsp;新会话
+        </el-button>
+        <div class="conv-list">
+          <div v-if="convs.length" class="conv-label">最近会话</div>
+          <div
+            v-for="c in convs"
+            :key="c.id"
+            class="conv-item"
+            :class="{ active: c.id === activeId }"
+            @click="selectConversation(c.id)"
+          >
+            <span class="conv-title">{{ c.title }}</span>
+            <span class="conv-time">{{ formatTime(c.updated_at) }}</span>
+            <el-icon class="conv-del" @click.stop="removeConversation(c.id)"><Close /></el-icon>
           </div>
+        </div>
+      </aside>
 
-          <template v-for="m in messages" :key="m.key">
-            <ChatMessage :message="m" @citation-click="openCitation($event, m)" />
-            <div v-if="m.interrupt" class="hitl-slot">
-              <HitlCard
-                :payload="m.interrupt"
-                @confirm="confirmDiet"
-                @cancel="cancelDiet"
+      <!-- 消息区 -->
+      <section class="main">
+        <div ref="listEl" class="messages" @scroll.passive="onMessageScroll">
+          <div class="col">
+            <div v-if="messages.length && (loadingOlderMessages || !hasMoreMessages)" class="history-state" aria-live="polite">
+              <span v-if="loadingOlderMessages" class="history-loading">
+                <el-icon class="is-loading"><Loading /></el-icon>
+                正在加载历史消息…
+              </span>
+              <span v-else>已加载全部消息</span>
+            </div>
+            <div v-if="loadingMessages" class="message-loading" role="status" aria-live="polite">
+              <el-icon class="message-loading-icon is-loading"><Loading /></el-icon>
+              <span>正在加载消息…</span>
+            </div>
+            <div v-else-if="messageLoadError" class="message-error" role="alert">
+              <span>消息加载失败，请稍后重试</span>
+              <el-button text type="primary" @click="retryLoadMessages">重新加载</el-button>
+            </div>
+            <div v-else-if="!loadingMessages && !messageLoadError && !messages.length" class="empty">
+              <p class="empty-title">记录你吃了什么、做了什么运动</p>
+              <p class="empty-sub">直接描述，或从下面的问题开始：</p>
+              <div class="examples">
+                <button v-for="ex in EXAMPLES" :key="ex" class="chip" @click="send(ex)">{{ ex }}</button>
+              </div>
+            </div>
+
+            <template v-for="m in messages" :key="m.key">
+              <ChatMessage :message="m" @citation-click="openCitation($event, m)" @sync-plan="syncPlan" />
+              <div v-if="m.interrupt" class="hitl-slot">
+                <HitlCard
+                  :payload="m.interrupt"
+                  @confirm="confirmDiet"
+                  @cancel="cancelDiet"
+                />
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- 输入区 -->
+        <div class="composer-wrap">
+          <div class="col">
+            <div v-if="imageUrl" class="preview">
+              <img :src="imageUrl" alt="待发送图片" />
+              <button class="preview-rm" title="移除图片" @click="clearImage">
+                <el-icon><Close /></el-icon>
+              </button>
+            </div>
+
+            <div class="composer">
+              <input ref="fileInput" type="file" accept="image/*" hidden @change="onFileChange" />
+              <el-button
+                class="img-btn"
+                :disabled="busy"
+                :loading="uploading"
+                title="上传食物照片"
+                @click="pickImage"
+              >
+                <el-icon style="font-size: 18px;"><Picture /></el-icon>
+              </el-button>
+              <el-input
+                v-model="input"
+                type="textarea"
+                class="composer-input"
+                :rows="1"
+                :autosize="{ minRows: 1, maxRows: 5 }"
+                resize="none"
+                placeholder="描述你的饮食或运动，如「午餐吃了一碗牛肉面 / 今天跑了30分钟」"
+                :disabled="busy"
+                @keydown.enter.exact.prevent="send()"
               />
+              <el-button
+                type="primary"
+                class="send-btn"
+                circle
+                :disabled="!canSend"
+                :loading="streaming"
+                title="发送"
+                @click="send()"
+              >
+                <el-icon v-if="!streaming"><Promotion /></el-icon>
+              </el-button>
             </div>
-          </template>
-        </div>
-      </div>
-
-      <!-- 输入区 -->
-      <div class="composer-wrap">
-        <div class="col">
-          <div v-if="imageUrl" class="preview">
-            <img :src="imageUrl" alt="待发送图片" />
-            <button class="preview-rm" title="移除图片" @click="clearImage">
-              <el-icon><Close /></el-icon>
-            </button>
           </div>
-
-          <div class="composer">
-            <input ref="fileInput" type="file" accept="image/*" hidden @change="onFileChange" />
-            <el-button
-              class="img-btn"
-              :disabled="busy"
-              :loading="uploading"
-              title="上传食物照片"
-              @click="pickImage"
-            >
-              <el-icon style="font-size: 18px;"><Picture /></el-icon>
-            </el-button>
-            <el-input
-              v-model="input"
-              type="textarea"
-              class="composer-input"
-              :rows="1"
-              :autosize="{ minRows: 1, maxRows: 5 }"
-              resize="none"
-              placeholder="描述你的饮食或运动，如「午餐吃了一碗牛肉面」"
-              :disabled="busy"
-              @keydown.enter.exact.prevent="send()"
-            />
-            <el-button
-              type="primary"
-              class="send-btn"
-              circle
-              :disabled="!canSend"
-              :loading="streaming"
-              title="发送"
-              @click="send()"
-            >
-              <el-icon v-if="!streaming"><Promotion /></el-icon>
-            </el-button>
-          </div>
-          <!-- <div class="hint">Enter 发送 · Shift+Enter 换行</div> -->
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
 
     <CitationDrawer
       v-model:visible="citationDrawerVisible"
@@ -453,12 +606,19 @@ onMounted(loadConversations)
   </div>
 </template>
 
-<style scoped>
-.chat {
+<style scoped lang="scss">
+.chat-page {
   display: flex;
+  flex-direction: column;
   height: 100%;
   gap: 0;
   background: var(--bg-elevated);
+}
+.page-body {
+  flex: 1;
+  display: flex;
+  width: 100%;
+  overflow: hidden;
 }
 .convs {
   width: 224px;
@@ -466,13 +626,15 @@ onMounted(loadConversations)
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
+  padding: 16px 12px;
   border-right: 1px solid var(--border);
+  background: #fff;
 }
 .new-btn {
   width: 100%;
-  height: 36px;
+  height: 40px;
   border-radius: 10px;
+  font-size: 14px;
   font-weight: 600;
 }
 .conv-list {
@@ -483,8 +645,8 @@ onMounted(loadConversations)
   gap: 2px;
 }
 .conv-label {
-  padding: 6px 10px 4px;
-  font-size: 11px;
+  padding: 12px 10px 4px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   color: var(--muted-2);
 }
@@ -492,11 +654,13 @@ onMounted(loadConversations)
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 10px;
+  padding: 11px 10px;
   border-radius: 10px;
   cursor: pointer;
   color: var(--muted);
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 .conv-item:hover {
   background: var(--surface-hover);
@@ -514,7 +678,7 @@ onMounted(loadConversations)
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 500;
 }
 .conv-time {
@@ -550,28 +714,71 @@ onMounted(loadConversations)
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 8px 24px;
-  background: linear-gradient(180deg, var(--bg-elevated), var(--surface));
+  padding: 28px 24px;
+  background: var(--surface);
 }
 /* 居中阅读列：消息与输入框共用同一宽度，避免超长行与两侧空旷 */
 .col {
-  max-width: 800px;
+  max-width: 80%;
   margin: 0 auto;
   width: 100%;
 }
+.history-state {
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-2);
+  font-size: 12px;
+}
+.history-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.message-loading {
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.message-loading-icon {
+  font-size: 24px;
+  color: var(--primary);
+}
+.message-error {
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
 .empty {
   max-width: 520px;
-  margin: 12vh auto 0;
+  margin: 10vh auto 0;
+  padding: 30px;
+  border: 1px solid var(--primary-line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 26px rgba(20, 79, 45, 0.04);
   text-align: center;
 }
 .empty-title {
-  font-size: 17px;
+  color: var(--ink);
+  font-size: 21px;
   font-weight: 600;
   margin: 0 0 4px;
 }
 .empty-sub {
   color: var(--ink-3);
-  font-size: 13px;
+  font-size: 14px;
   margin: 0 0 16px;
 }
 .examples {
@@ -581,7 +788,7 @@ onMounted(loadConversations)
   justify-content: center;
 }
 .chip {
-  padding: 7px 14px;
+  padding: 8px 14px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   background: var(--bg-elevated);
@@ -589,7 +796,9 @@ onMounted(loadConversations)
   font-size: 13px;
   cursor: pointer;
   font-family: var(--font);
-  transition: border-color 0.12s, color 0.12s;
+  transition:
+    border-color 0.12s,
+    color 0.12s;
 }
 .chip:hover {
   border-color: var(--primary);
@@ -598,7 +807,8 @@ onMounted(loadConversations)
 
 .composer-wrap {
   border-top: 1px solid var(--line);
-  padding: 12px 0 12px;
+  padding: 14px 24px;
+  background: var(--bg-elevated);
 }
 /* HITL 卡片对齐到助手内容列（头像 32 + 间距 12），并限制宽度 */
 .hitl-slot {
@@ -643,10 +853,10 @@ onMounted(loadConversations)
   align-items: center;
   gap: 6px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--bg-elevated);
   padding: 8px 10px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 5px 18px rgba(20, 79, 45, 0.06);
 }
 .composer-input {
   flex: 1;
@@ -700,5 +910,71 @@ onMounted(loadConversations)
   --el-button-disabled-bg-color: var(--border);
   --el-button-disabled-border-color: var(--border);
   --el-button-disabled-text-color: var(--muted-2);
+}
+
+.chat-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+  padding: 22px 24px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elevated);
+}
+.chat-topbar h1 {
+  margin: 0;
+  font-size: 32px;
+  line-height: 1.22;
+}
+.chat-topbar .page-kicker {
+  margin-bottom: 7px;
+}
+.chat-status {
+  padding: 7px 11px;
+  border: 1px solid var(--primary-line);
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+  font-size: 13px;
+}
+@media (max-width: 760px) {
+  .chat-page {
+    height: calc(100dvh - 57px);
+    min-height: 560px;
+  }
+  .convs {
+    display: none;
+  }
+  .messages {
+    padding: 18px 0;
+  }
+  .chat-topbar {
+    padding: 14px 0;
+    background: transparent;
+  }
+  .chat-topbar h1 {
+    font-size: 27px;
+  }
+  .chat-status {
+    display: none;
+  }
+  .col {
+    max-width: none;
+  }
+  .empty {
+    margin: 8vh 0 0;
+    padding: 24px 14px;
+  }
+  .composer-wrap {
+    padding: 10px 0;
+  }
+  .composer {
+    border-radius: 12px;
+    padding: 6px 8px;
+  }
+  .hitl-slot {
+    margin-left: 0;
+  }
 }
 </style>
