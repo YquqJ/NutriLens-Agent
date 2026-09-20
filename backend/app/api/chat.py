@@ -179,6 +179,30 @@ def _extract_tool_calls(update: dict) -> list[dict]:
     return list(calls.values())
 
 
+def _collect_turn_final_reports(messages: list) -> list[str]:
+    """提取本轮每个 worker 的终态汇报，供多领域请求合并展示。
+
+    同一轮可能按“饮食 → 运动”接力执行。messages 是 append-only 的，若出站层
+    只取最后一条 AIMessage，后一个 worker 的汇报会遮住前一个 worker 的结果。
+    工具调用对应的 AIMessage 带 tool_calls，不属于用户可见的终态汇报，需排除。
+    """
+    start = 0
+    for i in range(len(messages) - 1, -1, -1):
+        if getattr(messages[i], "type", None) == "human":
+            start = i + 1
+            break
+
+    reports: list[str] = []
+    for message in messages[start:]:
+        if getattr(message, "type", None) != "ai" or getattr(message, "tool_calls", None):
+            continue
+        content = message.content if isinstance(message.content, str) else ""
+        content = content.strip()
+        if content and content not in reports:
+            reports.append(content)
+    return reports
+
+
 def _run_graph_and_stream(
     graph_input: Any, cfg: dict, conversation_id: str
 ) -> Iterator[str]:
@@ -258,14 +282,11 @@ def _run_graph_and_stream(
             )
             return
 
-        # ---- 流结束：取最终 state 里最后一条 AI 消息作为 assistant 汇报 ----
+        # ---- 流结束：合并本轮各 worker 的终态汇报 ----
         final_state = graph.get_state(cfg).values
-        content = ""
-        for m in reversed(final_state.get("messages") or []):
-            if m.type == "ai":
-                content = m.content if isinstance(m.content, str) else ""
-                break
-        content = _normalize_assistant_content(content or "".join(token_buffer))
+        reports = _collect_turn_final_reports(final_state.get("messages") or [])
+        content = "\n\n".join(_normalize_assistant_content(report) for report in reports)
+        content = content or _normalize_assistant_content("".join(token_buffer))
 
         if content:
             db = SessionLocal()

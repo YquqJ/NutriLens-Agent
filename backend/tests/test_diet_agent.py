@@ -68,6 +68,19 @@ def test_diet_prompt_injects_today_date():
     assert date.today().isoformat() in system
 
 
+def test_diet_prompt_replaces_mixed_user_request_with_scoped_task():
+    """饮食 worker 不能因看到原始复合请求而尝试调用运动 agent。"""
+    state = {
+        "messages": [HumanMessage("昨天我吃了方便面，又跑了半小时")],
+        "task": "记录 2026-09-19 的晚餐：方便面一份",
+    }
+
+    messages = _diet_prompt(state)
+
+    assert messages[1].content == "记录 2026-09-19 的晚餐：方便面一份"
+    assert "跑了半小时" not in messages[1].content
+
+
 @pytest.mark.skipif(not settings.dashscope_api_key, reason="未配置 DASHSCOPE_API_KEY")
 def test_diet_agent_full_flow_with_hitl(test_user):
     agent = make_diet_agent(checkpointer=MemorySaver())

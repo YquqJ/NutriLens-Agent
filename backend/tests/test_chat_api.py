@@ -23,6 +23,7 @@ from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, Too
 from openai import APITimeoutError
 
 from app.api.chat import (
+    _collect_turn_final_reports,
     _extract_tool_calls,
     _normalize_assistant_content,
     _run_graph_and_stream,
@@ -94,6 +95,32 @@ def test_extract_tool_calls_only_returns_current_turn():
     }
     names = [t["name"] for t in _extract_tool_calls(update)]
     assert names == ["get_daily_summary"]
+
+
+def test_collect_turn_final_reports_keeps_each_worker_result_in_mixed_turn():
+    """同一轮跨 worker 接力时，后一个汇报不能覆盖前一个汇报。"""
+    messages = [
+        HumanMessage(content="上一轮消息"),
+        AIMessage(content="上一轮回复"),
+        HumanMessage(content="昨天我吃了方便面，又跑了半小时"),
+        AIMessage(
+            content="",
+            tool_calls=[{"id": "diet-tool", "name": "create_diet_record", "args": {}}],
+        ),
+        AIMessage(content="已记录晚餐方便面，共 760 千卡。"),
+        AIMessage(
+            content="",
+            tool_calls=[{"id": "exercise-tool", "name": "create_exercise_record", "args": {}}],
+        ),
+        AIMessage(content="已记录跑步 30 分钟，消耗 343 千卡。"),
+    ]
+
+    reports = _collect_turn_final_reports(messages)
+
+    assert reports == [
+        "已记录晚餐方便面，共 760 千卡。",
+        "已记录跑步 30 分钟，消耗 343 千卡。",
+    ]
 
 
 def test_resume_without_pending_interrupt_returns_400(auth_headers):

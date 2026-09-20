@@ -21,7 +21,7 @@ diet_agent —— 饮食记录专职 worker。
 from datetime import date
 from typing import Optional
 
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import create_react_agent
 
@@ -74,6 +74,8 @@ DIET_SYSTEM_PROMPT = """你是饮食记录员，负责用户饮食的记录与�
    禁止在汇报中复述你自己的估算草稿。
 6.【过程纪律】调用工具前和工具调用之间，不要输出任何解释、计划或过程文字——直接调用工具，
    让每一步在工具轨迹里体现，不要在文本里复述指令或过程。只在全部完成后按第 5 条汇报。
+6a.【任务边界】只执行“当前任务”中属于饮食领域的部分。你不能调用其他 agent；
+   若原始对话还包含运动、计划或问答需求，不要处理、不要尝试把 agent 名当作工具调用。
 7.【热量缺口】用户问"今天还剩多少热量/热量缺口/还能吃多少/今天吃超标了吗"时，
    用 get_daily_summary 查当日收支：remaining=剩余可摄入（目标−已摄入+运动消耗）、
    intake=已摄入、burned=运动消耗、calorie_target=每日目标、net=净收支。
@@ -137,7 +139,16 @@ def _diet_prompt(state: AgentState) -> list:
         if getattr(messages[i], "type", None) == "human":
             current_turn_start = i
             break
-    return [system] + messages[current_turn_start:]
+    current_turn_messages = messages[current_turn_start:]
+    # supervisor 的 task 已是本 worker 可独立执行的单域指令。不能把用户原始复合
+    # 请求再交给模型，否则它会试图在饮食子图里处理运动，并把 exercise_agent 误当工具。
+    if task:
+        scoped_task = HumanMessage(content=task)
+        if current_turn_messages and getattr(current_turn_messages[0], "type", None) == "human":
+            current_turn_messages = [scoped_task, *current_turn_messages[1:]]
+        else:
+            current_turn_messages = [scoped_task, *current_turn_messages]
+    return [system] + current_turn_messages
 
 
 def make_analyze_image_node(recognizer: Optional[callable] = None) -> callable:

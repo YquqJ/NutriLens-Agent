@@ -10,7 +10,7 @@ exercise_agent —— 运动记录专职 worker。
 from datetime import date
 from typing import Optional
 
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import create_react_agent
 
@@ -43,7 +43,9 @@ EXERCISE_SYSTEM_PROMPT = """你是运动记录员，负责用户运动的记录�
    同一运动禁止反复重试不同 met 值；
 2. 消耗热量由工具按用户体重计算，不要自己心算报数；
 3. 用户没说时长就先追问，禁止自行假定时长；
-4. 未说明日期默认今天；完成后用一两句话汇报（运动、时长、消耗了多少千卡）。"""
+4. 未说明日期默认今天；完成后用一两句话汇报（运动、时长、消耗了多少千卡）。
+5.【任务边界】只执行“当前任务”中属于运动领域的部分。你不能调用其他 agent；
+   若原始对话还包含饮食、计划或问答需求，不要处理、不要尝试把 agent 名当作工具调用。"""
 
 
 def _exercise_prompt(state: AgentState) -> list:
@@ -60,7 +62,23 @@ def _exercise_prompt(state: AgentState) -> list:
             f"【当前任务】{task}"
         )
     )
-    return [system] + state["messages"]
+    messages = state.get("messages") or []
+    current_turn_start = 0
+    for i in range(len(messages) - 1, -1, -1):
+        if getattr(messages[i], "type", None) == "human":
+            current_turn_start = i
+            break
+
+    current_turn_messages = messages[current_turn_start:]
+    # task 是 supervisor 分配给运动 worker 的独立子任务。用它替换原始用户文本，
+    # 使复合请求的饮食部分不会重新干扰运动子图的工具选择。
+    if task:
+        scoped_task = HumanMessage(content=task)
+        if current_turn_messages and getattr(current_turn_messages[0], "type", None) == "human":
+            current_turn_messages = [scoped_task, *current_turn_messages[1:]]
+        else:
+            current_turn_messages = [scoped_task, *current_turn_messages]
+    return [system] + current_turn_messages
 
 
 def make_exercise_agent(checkpointer: Optional[BaseCheckpointSaver] = None):

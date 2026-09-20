@@ -12,7 +12,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from app.agents.exercise_agent import make_exercise_agent
+from app.agents.exercise_agent import _exercise_prompt, make_exercise_agent
 from app.agents.plan_agent import make_plan_agent
 from app.core.config import settings
 from app.core.security import hash_password
@@ -42,6 +42,19 @@ def _cfg(test_user: int) -> dict:
             "user_id": test_user,
         }
     }
+
+
+def test_exercise_prompt_replaces_mixed_user_request_with_scoped_task():
+    """运动 worker 只执行已分配的运动子任务。"""
+    state = {
+        "messages": [HumanMessage("昨天我吃了方便面，又跑了半小时")],
+        "task": "记录 2026-09-19 的跑步，时长 30 分钟",
+    }
+
+    messages = _exercise_prompt(state)
+
+    assert messages[1].content == "记录 2026-09-19 的跑步，时长 30 分钟"
+    assert "方便面" not in messages[1].content
 
 
 @pytest.mark.skipif(not settings.dashscope_api_key, reason="未配置 DASHSCOPE_API_KEY")
