@@ -97,4 +97,4 @@ def _apply_langsmith_env() -> None:
     logger.info("LangSmith 追踪已开启：project=%s", settings.langsmith_project)
 
 
-_apply_langsmith_env()
+# _apply_langsmith_env()

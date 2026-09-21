@@ -1,7 +1,10 @@
 """
 FastAPI 应用入口。
 
-启动：uv run uvicorn app.main:app --reload
+开发启动：uv run python scripts/run_dev.py
+
+该脚本优先绑定 PORT（默认 8000），被占用时自动顺延，并把实际端口同步给
+前端 Vite 开发代理。生产环境仍由进程管理器显式指定监听地址与端口。
 """
 
 from fastapi import FastAPI

@@ -39,11 +39,14 @@ cp ../.env.example .env          # 填入 DASHSCOPE_API_KEY / OSS 配置
 uv sync                          # 首次安装依赖（固定 Python 3.12）
 uv run python -m app.db.init_db  # 建表 + 向量索引
 uv run python -m app.db.seed_knowledge # 导入注册表中的全部营养运动知识 PDF
-uv run uvicorn app.main:app --reload
+uv run python scripts/run_dev.py  # 默认 8000；若被占用自动顺延到 8001、8002…
 
 # 3. 前端（M6 后提供）
 cd frontend && npm install && npm run dev
 ```
+
+开发后端启动后会把实际端口写入 `backend/.runtime-port`，Vite 会自动读取并将
+`/api` 请求代理到该端口。也可以通过 `BACKEND_PORT=9000 npm run dev` 临时覆盖代理目标。
 
 ## RAG 评测
 

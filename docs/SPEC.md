@@ -31,6 +31,7 @@ worker 分工：
 - [x] `core/config.py`：pydantic-settings 统一读 .env
 - [x] `db/session.py` + `db/init_db.py`：建表与向量索引
 - [x] `main.py`：FastAPI 入口 + CORS
+- [x] 开发启动脚本：优先监听 `PORT`（默认 8000），端口占用时自动顺延；实际端口写入运行时文件供 Vite 开发代理读取
 
 ## M1 认证与用户 `[x]`（2026-09-08 完成）
 
