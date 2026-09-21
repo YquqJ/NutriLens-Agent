@@ -1,5 +1,5 @@
 """
-RAG / 问答链路延迟压测脚本（简历性能 bullet 用）。
+RAG / 问答链路延迟与 Token 压测脚本（简历性能 bullet 用）。
 
 为什么要有这个脚本：
 - 面试官默认「没有数字 ≈ 没做过」。项目目前只有检索质量指标（Recall/MRR/nDCG），
@@ -12,7 +12,9 @@ RAG / 问答链路延迟压测脚本（简历性能 bullet 用）。
 1. 检索管线（默认，便宜）：embed_query → vector/keyword 两路 → RRF → rerank，
    即 `retriever.retrieve(..., mode="hybrid_rerank")`，与 qa_agent 实际调用一致；
 2. 端到端问答（--e2e，较贵）：完整跑 `qa_agent` 节点（检索 + 自检 + 生成），
-   含真实 LLM 调用，会消耗 token，默认限制查询条数。
+   含真实 LLM 调用，会消耗 Token，默认限制查询条数。每个 episode 汇总所有
+   LLM 调用的 input/output/total Token；任一调用未返回 usage 时，该 episode
+   不计入 Token 分位数，并在覆盖率中显式披露。
 
 用法（backend/ 目录下，需先 docker compose up -d 起 pg 并已 seed 知识库）：
     uv run python -m scripts.bench_latency                       # 只测检索管线
@@ -20,7 +22,7 @@ RAG / 问答链路延迟压测脚本（简历性能 bullet 用）。
     uv run python -m scripts.bench_latency --e2e --max-queries 5  # 加测端到端问答
     uv run python -m scripts.bench_latency --top-k 8              # 自定义检索 top_k
 
-输出：终端打印分位摘要 + 写入 reports/bench-latency-<时间戳>.json。
+输出：终端打印延迟和 Token 分位摘要 + 写入 reports/bench-latency-<时间戳>.json。
 """
 
 import argparse
@@ -32,6 +34,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.core.config import settings
+from app.agents.eval import TokenUsageCollector
 from app.db.seed_knowledge import seed_all_knowledge
 from app.db.session import SessionLocal
 from app.rag.embedding import embed_query
@@ -74,6 +77,22 @@ def _summarize(name: str, values: list[float]) -> dict:
         "p99_ms": round(_percentile(vals, 99), 2),
         "max_ms": round(max(vals), 2),
         "mean_ms": round(statistics.fmean(vals), 2),
+    }
+
+
+def _summarize_tokens(name: str, values: list[int]) -> dict:
+    """一组完整 episode 的真实 Token 用量 → 分位摘要 dict。"""
+    vals = sorted(values)
+    return {
+        "metric": name,
+        "n": len(vals),
+        "min_tokens": min(vals),
+        "p50_tokens": _percentile(vals, 50),
+        "p90_tokens": _percentile(vals, 90),
+        "p95_tokens": _percentile(vals, 95),
+        "p99_tokens": _percentile(vals, 99),
+        "max_tokens": max(vals),
+        "mean_tokens": round(statistics.fmean(vals), 2),
     }
 
 
@@ -127,21 +146,22 @@ def _measure_with_retry(fn, *args, retries: int = 3, **kwargs):
 
 
 def _bench_e2e(db, query: str, top_k: int):
-    """端到端跑一次 qa_agent 节点（含 LLM 自检 + 生成），返回耗时。"""
+    """端到端跑一次 qa_agent，返回耗时和本次全部 LLM 调用的 Token 用量。"""
     from langchain_core.messages import HumanMessage
 
     from app.agents.qa_agent import make_qa_agent
 
     # qa_agent 内部自己开 SessionLocal 读知识库，这里传入的 db 仅用于占位一致；
     # 直接复用 make_qa_agent() 的节点函数（与图上执行等价，省掉 supervisor 路由）。
-    qa = make_qa_agent()
+    collector = TokenUsageCollector()
+    qa = make_qa_agent(callbacks=[collector])
     state = {
         "messages": [HumanMessage(query)],
         "task": f"回答知识问题：{query}",
         "hop_count": 1,
     }
     _, ms = _time_ms(qa, state)
-    return ms
+    return ms, collector.summary()
 
 
 def main() -> None:
@@ -193,7 +213,20 @@ def main() -> None:
         "retrieval_total": [],
     }
     e2e_samples: list[float] = []
+    token_samples: dict[str, list[int]] = {
+        "qa_input_tokens": [],
+        "qa_output_tokens": [],
+        "qa_total_tokens": [],
+    }
+    token_usage_coverage = {
+        "episodes": 0,
+        "complete_episodes": 0,
+        "incomplete_episodes": 0,
+        "llm_calls": 0,
+        "calls_without_usage": 0,
+    }
     skipped = 0  # 整条 query 采样失败被丢弃的次数
+    e2e_skipped = 0
 
     db = SessionLocal()
     try:
@@ -211,20 +244,48 @@ def main() -> None:
                     stage_samples[key].append(val)
                 if args.e2e:
                     try:
-                        e2e_samples.append(
-                            _measure_with_retry(_bench_e2e, db, q, args.top_k)
+                        e2e_ms, token_usage = _measure_with_retry(
+                            _bench_e2e, db, q, args.top_k
                         )
+                        e2e_samples.append(e2e_ms)
+                        token_usage_coverage["episodes"] += 1
+                        token_usage_coverage["llm_calls"] += int(
+                            token_usage["llm_calls"]
+                        )
+                        token_usage_coverage["calls_without_usage"] += int(
+                            token_usage["calls_without_usage"]
+                        )
+                        if token_usage["complete"]:
+                            token_usage_coverage["complete_episodes"] += 1
+                            token_samples["qa_input_tokens"].append(
+                                int(token_usage["input_tokens"])
+                            )
+                            token_samples["qa_output_tokens"].append(
+                                int(token_usage["output_tokens"])
+                            )
+                            token_samples["qa_total_tokens"].append(
+                                int(token_usage["total_tokens"])
+                            )
+                        else:
+                            token_usage_coverage["incomplete_episodes"] += 1
                     except Exception:
-                        pass
+                        e2e_skipped += 1
     finally:
         db.close()
 
     if skipped:
         print(f"提示：有 {skipped} 条采样因瞬时网络/DB 异常被丢弃。\n")
+    if e2e_skipped:
+        print(f"提示：有 {e2e_skipped} 条端到端采样因瞬时异常被丢弃。\n")
 
     summary = [_summarize(name, vals) for name, vals in stage_samples.items()]
     if args.e2e:
         summary.append(_summarize("qa_e2e", e2e_samples))
+    token_metrics = [
+        _summarize_tokens(name, values)
+        for name, values in token_samples.items()
+        if values
+    ]
 
     # 打印可读摘要
     print("=" * 64)
@@ -247,6 +308,32 @@ def main() -> None:
             f"{s['p95_ms']:>9.1f}{s['p99_ms']:>9.1f}{s['mean_ms']:>9.1f}{s['max_ms']:>9.1f}"
         )
     print("=" * 64)
+    if args.e2e:
+        print("\nToken 用量（仅统计 usage 完整的端到端 episode）")
+        print("=" * 64)
+        print(
+            f"覆盖：{token_usage_coverage['complete_episodes']}/"
+            f"{token_usage_coverage['episodes']} episodes 完整；"
+            f"{token_usage_coverage['calls_without_usage']}/"
+            f"{token_usage_coverage['llm_calls']} 次 LLM 调用缺 usage"
+        )
+        if token_metrics:
+            token_header = (
+                f"{'指标':<20}{'n':>5}{'P50':>10}{'P95':>10}{'P99':>10}"
+                f"{'均值':>10}{'max':>10}"
+            )
+            print(token_header)
+            print("-" * 80)
+            for metric in token_metrics:
+                print(
+                    f"{metric['metric']:<20}{metric['n']:>5}"
+                    f"{metric['p50_tokens']:>10}{metric['p95_tokens']:>10}"
+                    f"{metric['p99_tokens']:>10}{metric['mean_tokens']:>10.1f}"
+                    f"{metric['max_tokens']:>10}"
+                )
+        else:
+            print("没有可统计的完整 Token 样本；请检查模型响应 usage。")
+        print("=" * 64)
     print("环境：本地单机 · PostgreSQL+pgvector · DashScope(qwen/embedding/gte-rerank) · 无线上流量")
 
     # 落盘 JSON 报告（可复现）
@@ -263,6 +350,8 @@ def main() -> None:
                 "top_k": args.top_k,
                 "e2e": args.e2e,
                 "metrics": summary,
+                "token_metrics": token_metrics,
+                "token_usage_coverage": token_usage_coverage if args.e2e else None,
             },
             ensure_ascii=False,
             indent=2,

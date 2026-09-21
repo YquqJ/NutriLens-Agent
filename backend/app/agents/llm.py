@@ -26,6 +26,8 @@ def get_text_llm(streaming: bool = True) -> ChatOpenAI:
         api_key=settings.dashscope_api_key,
         base_url=settings.dashscope_base_url,
         streaming=streaming,
+        # 流式生成默认不附带 usage；显式开启后才能在流结束时统计真实 Token。
+        stream_usage=True,
         temperature=0.3,  # 健康建议需要一点表达多样性，但事实类回答不宜太发散
         max_retries=2,
         # timeout 传给 OpenAI 兼容客户端的 request_timeout；stream_chunk_timeout

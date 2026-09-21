@@ -17,8 +17,9 @@ qa_agent —— 知识问答专职 worker（M4.5：Agentic RAG 形态）。
 同构，chat.py 统一收集。
 """
 
-from typing import Optional
+from typing import Optional, Sequence
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
@@ -101,26 +102,34 @@ def _context_block(results: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def make_qa_agent():
+def make_qa_agent(callbacks: Sequence[BaseCallbackHandler] | None = None):
     """构造 qa_agent 节点函数（Agentic RAG：混合检索 + 重排 + 迭代自检）。"""
     gen_llm = get_text_llm()  # 生成路：流式（SSE 打字机）
     check_llm = get_text_llm(streaming=False).with_structured_output(
         QaSelfCheck
     )  # 自检路：一次性结构化输出，关流式（与 supervisor 路由同理由）
+    callback_config = {"callbacks": list(callbacks)} if callbacks else None
+
+    def invoke_llm(llm, messages):
+        """评测注入回调；生产路径不传 config，兼容现有调用和测试替身。"""
+        if callback_config is None:
+            return llm.invoke(messages)
+        return llm.invoke(messages, config=callback_config)
 
     def qa_agent(state: AgentState) -> dict:
         question = _question_from(state)
         trace: list[dict] = []
 
         def run_self_check(results_to_check: list[dict], round_no: int) -> QaSelfCheck:
-            check = check_llm.invoke(
+            check = invoke_llm(
+                check_llm,
                 [
                     ("system", _SELF_CHECK_PROMPT),
                     (
                         "user",
                         f"用户问题：{question}\n\n知识库切片：\n{_context_block(results_to_check)}",
                     ),
-                ]
+                ],
             )
             trace.append(
                 {
@@ -179,7 +188,7 @@ def make_qa_agent():
                     for i, r in enumerate(results, start=1)
                 )
             )
-            response = gen_llm.invoke([system] + state["messages"])
+            response = invoke_llm(gen_llm, [system] + state["messages"])
         finally:
             db.close()
 

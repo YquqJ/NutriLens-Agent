@@ -15,6 +15,7 @@ def test_llm_clients_have_finite_request_timeouts():
         assert settings.llm_timeout_seconds == 60.0
         assert text_llm.request_timeout == settings.llm_timeout_seconds
         assert text_llm.stream_chunk_timeout == settings.llm_timeout_seconds
+        assert text_llm.stream_usage is True
         assert vision_llm.request_timeout == settings.llm_timeout_seconds
     finally:
         # 其他测试不复用本测试构造的客户端实例，避免缓存污染。

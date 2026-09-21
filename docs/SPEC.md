@@ -85,6 +85,8 @@ worker 分工：
 - [x] **M4.4** 知识库 PDF 导入：`backend/data/knowledge/通用营养与运动科学常识知识库.pdf` → 文本提取 → 页码/章节切片 → SHA-256 幂等向量化入库；文档标题只存 document 表，切片通过 `document_id + section + page_number + chunk_index` 生成可核验引用；旧手工常量 seed 切片按 `document_id IS NULL` 精确清理，保留用户业务数据
 - [x] **M4.5** `agents/qa_agent.py`：迭代自检（检索结果不足 → 改写 query 重检，≤2 轮）
       验收：问"减脂期每天吃多少蛋白质"，回答带来源且检索轨迹可见
+- [x] **M4.6** QA 性能与 Token 离线评测：`scripts/bench_latency.py --e2e` 对完整 QA 链路统计延迟与每个 episode 的真实 input/output/total Token；覆盖自检与最终生成两次调用，任一调用缺 usage 即排除 Token 分位数并披露覆盖率
+      验收：10 条固定问题各运行 3 次（30 episodes），Token usage 覆盖率 30/30、60/60 次 LLM 调用完整；总 Token P50 2344、P95 2898（本机离线环境，报告保存在本地忽略目录 `backend/reports/`）
 
 ## M5 热量看板 API `[x]`（2026-09-08 完成，冒烟验证）
 

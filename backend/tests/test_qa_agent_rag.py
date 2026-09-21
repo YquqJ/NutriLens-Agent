@@ -12,6 +12,62 @@ from app.core.config import settings
 from app.db.seed_knowledge import seed_knowledge
 
 
+def test_qa_agent_forwards_callbacks_to_every_llm_call(monkeypatch):
+    """Token 评测回调必须同时覆盖自检与最终回答，不能只统计生成阶段。"""
+    class FakeChecker:
+        def __init__(self):
+            self.configs = []
+
+        def with_structured_output(self, _schema):
+            return self
+
+        def invoke(self, _messages, config=None):
+            from app.agents.qa_agent import QaSelfCheck
+
+            self.configs.append(config)
+            return QaSelfCheck(sufficient=True, reason="切片直接覆盖问题")
+
+    class FakeGenerator:
+        def __init__(self):
+            self.configs = []
+
+        def invoke(self, _messages, config=None):
+            self.configs.append(config)
+            return AIMessage(content="建议按知识库范围执行。[1]")
+
+    checker = FakeChecker()
+    generator = FakeGenerator()
+    callback = object()
+    result_item = {
+        "id": 1,
+        "source_title": "营养指南",
+        "section": "蛋白质",
+        "page_number": 2,
+        "chunk_index": 0,
+        "content": "减脂期间可根据体重安排蛋白质摄入。",
+    }
+
+    def fake_get_text_llm(*, streaming=True):
+        return generator if streaming else checker
+
+    class FakeDb:
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.agents.qa_agent.get_text_llm", fake_get_text_llm)
+    monkeypatch.setattr("app.agents.qa_agent.SessionLocal", lambda: FakeDb())
+    monkeypatch.setattr(
+        "app.agents.qa_agent.retrieve", lambda *_args, **_kwargs: [result_item]
+    )
+
+    make_qa_agent(callbacks=[callback])(
+        {"messages": [HumanMessage("减脂期蛋白质怎么安排？")], "task": ""}
+    )
+
+    assert checker.configs == [{"callbacks": [callback]}]
+    assert generator.configs == [{"callbacks": [callback]}]
+
+
 def test_qa_agent_abstains_when_evidence_is_only_partial(monkeypatch):
     """严格 RAG 下，擦边证据不能支撑受限回答，必须直接拒答。"""
     class FakeChecker:

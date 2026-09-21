@@ -13,6 +13,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
@@ -25,6 +26,58 @@ from app.db.session import SessionLocal
 from app.services import diet as diet_service
 from app.services import exercise as exercise_service
 from app.services import profile as profile_service
+
+
+class TokenUsageCollector(BaseCallbackHandler):
+    """汇总单个评测 episode 内所有 LLM 调用的真实 usage。"""
+
+    def __init__(self) -> None:
+        self._llm_calls = 0
+        self._calls_without_usage = 0
+        self._input_tokens = 0
+        self._output_tokens = 0
+        self._total_tokens = 0
+
+    def on_llm_end(self, response, **kwargs: Any) -> None:  # noqa: ANN001
+        """优先使用标准 usage_metadata，兼容 OpenAI token_usage 回退字段。"""
+        del kwargs
+        self._llm_calls += 1
+        usage: dict[str, Any] | None = None
+        for batch in getattr(response, "generations", []) or []:
+            for generation in batch:
+                message = getattr(generation, "message", None)
+                candidate = getattr(message, "usage_metadata", None)
+                if isinstance(candidate, dict):
+                    usage = candidate
+                    break
+            if usage is not None:
+                break
+
+        if usage is None:
+            llm_output = getattr(response, "llm_output", None) or {}
+            candidate = llm_output.get("token_usage")
+            usage = candidate if isinstance(candidate, dict) else None
+
+        if usage is None:
+            self._calls_without_usage += 1
+            return
+
+        self._input_tokens += int(usage.get("input_tokens", usage.get("prompt_tokens", 0)))
+        self._output_tokens += int(
+            usage.get("output_tokens", usage.get("completion_tokens", 0))
+        )
+        self._total_tokens += int(usage.get("total_tokens", 0))
+
+    def summary(self) -> dict[str, int | bool]:
+        """返回可 JSON 序列化的 episode 汇总；缺失 usage 时显式标为不完整。"""
+        return {
+            "llm_calls": self._llm_calls,
+            "calls_without_usage": self._calls_without_usage,
+            "input_tokens": self._input_tokens,
+            "output_tokens": self._output_tokens,
+            "total_tokens": self._total_tokens,
+            "complete": self._llm_calls > 0 and self._calls_without_usage == 0,
+        }
 
 
 _EVALUATION_WORKER_CONTEXT_MODES = {
