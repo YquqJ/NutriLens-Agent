@@ -12,8 +12,8 @@ from app.core.config import settings
 from app.db.seed_knowledge import seed_knowledge
 
 
-def test_qa_agent_answers_supported_parts_when_evidence_is_partial(monkeypatch):
-    """严格 RAG 下，部分直接证据应支持受限回答，而不是整题拒答。"""
+def test_qa_agent_abstains_when_evidence_is_only_partial(monkeypatch):
+    """严格 RAG 下，擦边证据不能支撑受限回答，必须直接拒答。"""
     class FakeChecker:
         def with_structured_output(self, _schema):
             return self
@@ -22,18 +22,18 @@ def test_qa_agent_answers_supported_parts_when_evidence_is_partial(monkeypatch):
             from app.agents.qa_agent import QaSelfCheck
 
             return QaSelfCheck(
-                coverage="partial",
+                sufficient=False,
                 rewritten_query="",
                 reason="切片支持有氧运动建议，但未覆盖个性化训练计划",
             )
 
     class FakeGenerator:
         def __init__(self):
-            self.messages = None
+            self.called = False
 
-        def invoke(self, messages):
-            self.messages = messages
-            return AIMessage(content="可以选择快走或慢跑等稳态有氧运动[1]。")
+        def invoke(self, _messages):
+            self.called = True
+            raise AssertionError("证据仅部分覆盖时不应调用回答生成模型")
 
     generator = FakeGenerator()
     result_item = {
@@ -62,10 +62,11 @@ def test_qa_agent_answers_supported_parts_when_evidence_is_partial(monkeypatch):
         {"messages": [HumanMessage("减脂但不做力量训练，适合什么运动？")], "task": ""}
     )
 
-    assert generator.messages is not None
-    assert "部分覆盖" in generator.messages[0].content
-    assert "可以选择快走或慢跑等稳态有氧运动[1]。" in result["messages"][-1].content
-    assert result["citations"][0]["section"] == "有氧运动"
+    assert result["messages"][-1].content == (
+        "知识库中未找到与该问题直接相关的信息，暂时无法可靠回答。"
+    )
+    assert result["citations"] == []
+    assert generator.called is False
 
 
 def test_qa_agent_abstains_when_knowledge_base_has_no_answer(monkeypatch):

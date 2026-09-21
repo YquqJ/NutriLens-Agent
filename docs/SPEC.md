@@ -47,7 +47,7 @@ worker 分工：
 - [x] `services/oss.py`：图片上传 OSS
 - [x] `api/records.py` + `api/uploads.py`：REST 记录端点（查询/删除/看板，手动表单录入路径）
 
-## M3 Agent 编排 ★核心 `[~]`
+## M3 Agent 编排 ★核心 `[x]`
 
 **已完成：**
 - [x] `agents/state.py`：AgentState（messages reducer / HITL 草稿 / hop_count 防死循环）
@@ -74,6 +74,8 @@ worker 分工：
       验收：search_food("西红柿") 命中并带别名"番茄" ✅（foods_data.py 整理 789 条（17 大类：主食/面点/餐食/肉类/水产/豆类/蔬菜/菌藻/水果/坚果/奶类/饮品/零食/调味/菜肴等），seed_foods.py 幂等导入（按 name 去重不覆盖）；tests/test_food_seed.py 覆盖幂等性 + 别名双向命中 + 规模断言。附带修复：search_foods 元组排序平局时比较 Food 对象的 TypeError——全量 seed 后平局常见才暴露）
 - [x] **M3.9** `agents/memory.py`：摘要压缩记忆 —— messages 超阈值(24)时把最旧 KEEP_TAIL(8) 之前的消息折叠成滚动摘要（summary 字段）并用 RemoveMessage 裁剪，防上下文无限累积；supervisor 路由注入摘要做跨轮指代消解
       验收：单测 5 用例全过 ✅（tests/test_memory.py，注入桩 LLM：节点级超阈值/未超阈值、图级 RemoveMessage 真瘦身、supervisor 注入、整图接线流向；不依赖真实模型）
+- [x] **M3.10** Agent 任务评测：`agents/eval.py` 定义版本化任务集、任务完成率和 episode 维度的工具调用准确率口径；`scripts/run_agent_eval.py` 用真实 Qwen、完整 LangGraph、MemorySaver、HITL resume 与隔离测试用户批跑并输出逐例 JSON 报告
+      验收：`agent-tasks-v1` 覆盖 20 条饮食/运动/混合意图/HITL/档案计划任务；qwen-plus 实跑每条 3 次（共 60 episodes），任务完成率与工具调用准确率均为 100% ✅（固定离线集基线，非线上流量指标；报告保存在本地忽略目录 `backend/reports/`）
 
 ## M4 Agentic RAG `[x]`
 

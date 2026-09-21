@@ -43,7 +43,8 @@ def test_diet_prompt_only_exposes_current_turn_to_worker():
 
     prompt = _diet_prompt(state)
     assert len(prompt) == 2
-    assert prompt[1].content == "我午饭吃了虾，请帮我记录"
+    # 当前轮原始消息由 supervisor 的单域 task 替换，避免饮食 worker 被复合请求干扰。
+    assert prompt[1].content == "记录今日午餐：虾"
 
 
 @pytest.fixture
