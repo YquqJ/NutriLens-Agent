@@ -67,6 +67,7 @@ def build_graph(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     supervisor_node: Optional[callable] = None,
     summarize_node: Optional[callable] = None,
+    worker_context_mode: str = "scoped_task",
 ):
     """
     组装并编译 supervisor 图。
@@ -76,12 +77,17 @@ def build_graph(
     参数 supervisor_node：测试注入桩 supervisor（伪造路由决策）用，
     生产默认 qwen-plus 路由。
     参数 summarize_node：测试注入桩摘要器用，生产默认 qwen-plus 非流式。
+    参数 worker_context_mode：生产默认 scoped_task；raw_message 仅供评测复现
+    修复复合请求前 worker 直接读取原始跨域消息的历史基线。
     """
+    if worker_context_mode not in {"scoped_task", "raw_message"}:
+        raise ValueError(f"不支持的 worker_context_mode：{worker_context_mode}")
+    use_scoped_task = worker_context_mode == "scoped_task"
     builder = StateGraph(AgentState)
 
     builder.add_node("supervisor", supervisor_node or make_supervisor_node())
-    builder.add_node("diet_agent", make_diet_agent())
-    builder.add_node("exercise_agent", make_exercise_agent())
+    builder.add_node("diet_agent", make_diet_agent(use_scoped_task=use_scoped_task))
+    builder.add_node("exercise_agent", make_exercise_agent(use_scoped_task=use_scoped_task))
     builder.add_node("qa_agent", make_qa_agent())
     builder.add_node("plan_agent", make_plan_agent())
 

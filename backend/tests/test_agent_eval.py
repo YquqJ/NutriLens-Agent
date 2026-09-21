@@ -16,6 +16,7 @@ from app.agents.eval import (
     evaluate_episode,
     extract_turn_tool_calls,
     load_agent_task_cases,
+    worker_context_mode_for_evaluation,
 )
 
 
@@ -163,3 +164,11 @@ def test_extract_turn_tool_calls_ignores_previous_turn_and_pairs_tool_result():
     calls = extract_turn_tool_calls(messages)
 
     assert calls == [{"name": "search_food", "args": {"query": "苹果"}, "result": "new result"}]
+
+
+def test_worker_context_mode_for_evaluation_keeps_ablation_names_explicit():
+    """评测报告必须区分生产优化模式与历史基线，拒绝不透明的任意开关。"""
+    assert worker_context_mode_for_evaluation("optimized_scoped_task") == "scoped_task"
+    assert worker_context_mode_for_evaluation("baseline_raw_context") == "raw_message"
+    with pytest.raises(ValueError, match="不支持"):
+        worker_context_mode_for_evaluation("disable_tool_validation")

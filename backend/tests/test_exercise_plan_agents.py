@@ -57,6 +57,18 @@ def test_exercise_prompt_replaces_mixed_user_request_with_scoped_task():
     assert "方便面" not in messages[1].content
 
 
+def test_exercise_prompt_baseline_mode_keeps_raw_mixed_user_request():
+    """消融基线让运动 worker 重新暴露于原始跨域消息。"""
+    state = {
+        "messages": [HumanMessage("昨天我吃了方便面，又跑了半小时")],
+        "task": "记录 2026-09-19 的跑步，时长 30 分钟",
+    }
+
+    messages = _exercise_prompt(state, use_scoped_task=False)
+
+    assert messages[1].content == "昨天我吃了方便面，又跑了半小时"
+
+
 @pytest.mark.skipif(not settings.dashscope_api_key, reason="未配置 DASHSCOPE_API_KEY")
 def test_exercise_agent_records_run(test_user):
     """'我下午慢跑了半小时' → 落库一条运动记录（无 interrupt）。"""

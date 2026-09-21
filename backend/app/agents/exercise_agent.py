@@ -48,7 +48,7 @@ EXERCISE_SYSTEM_PROMPT = """你是运动记录员，负责用户运动的记录�
    若原始对话还包含饮食、计划或问答需求，不要处理、不要尝试把 agent 名当作工具调用。"""
 
 
-def _exercise_prompt(state: AgentState) -> list:
+def _exercise_prompt(state: AgentState, *, use_scoped_task: bool = True) -> list:
     """完整消息列表：SystemMessage(人设+任务) + 对话历史。
 
     callable prompt 的返回值是模型的完整输入（见 diet_agent 踩坑记录），
@@ -72,7 +72,7 @@ def _exercise_prompt(state: AgentState) -> list:
     current_turn_messages = messages[current_turn_start:]
     # task 是 supervisor 分配给运动 worker 的独立子任务。用它替换原始用户文本，
     # 使复合请求的饮食部分不会重新干扰运动子图的工具选择。
-    if task:
+    if task and use_scoped_task:
         scoped_task = HumanMessage(content=task)
         if current_turn_messages and getattr(current_turn_messages[0], "type", None) == "human":
             current_turn_messages = [scoped_task, *current_turn_messages[1:]]
@@ -81,13 +81,17 @@ def _exercise_prompt(state: AgentState) -> list:
     return [system] + current_turn_messages
 
 
-def make_exercise_agent(checkpointer: Optional[BaseCheckpointSaver] = None):
+def make_exercise_agent(
+    checkpointer: Optional[BaseCheckpointSaver] = None,
+    *,
+    use_scoped_task: bool = True,
+):
     """构造 exercise_agent（编译好的子图）。checkpointer 用法同 diet_agent。"""
     llm = get_text_llm()
     return create_react_agent(
         llm,
         EXERCISE_TOOLS,
-        prompt=_exercise_prompt,
+        prompt=lambda state: _exercise_prompt(state, use_scoped_task=use_scoped_task),
         state_schema=ExerciseAgentState,
         checkpointer=checkpointer,
     )

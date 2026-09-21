@@ -81,6 +81,18 @@ def test_diet_prompt_replaces_mixed_user_request_with_scoped_task():
     assert "跑了半小时" not in messages[1].content
 
 
+def test_diet_prompt_baseline_mode_keeps_raw_mixed_user_request():
+    """消融基线只在评测时保留原始复合消息，生产默认不受影响。"""
+    state = {
+        "messages": [HumanMessage("昨天我吃了方便面，又跑了半小时")],
+        "task": "记录 2026-09-19 的晚餐：方便面一份",
+    }
+
+    messages = _diet_prompt(state, use_scoped_task=False)
+
+    assert messages[1].content == "昨天我吃了方便面，又跑了半小时"
+
+
 @pytest.mark.skipif(not settings.dashscope_api_key, reason="未配置 DASHSCOPE_API_KEY")
 def test_diet_agent_full_flow_with_hitl(test_user):
     agent = make_diet_agent(checkpointer=MemorySaver())

@@ -83,7 +83,7 @@ DIET_SYSTEM_PROMPT = """你是饮食记录员，负责用户饮食的记录与�
    此时应引导用户先完善身体档案，而不是只答"尚未记录"。"""
 
 
-def _diet_prompt(state: AgentState) -> list:
+def _diet_prompt(state: AgentState, *, use_scoped_task: bool = True) -> list:
     """动态 prompt：返回完整的模型输入消息列表。
 
     注意（0.2.3 踩坑）：callable prompt 的返回值会"整体"作为模型输入，
@@ -142,7 +142,7 @@ def _diet_prompt(state: AgentState) -> list:
     current_turn_messages = messages[current_turn_start:]
     # supervisor 的 task 已是本 worker 可独立执行的单域指令。不能把用户原始复合
     # 请求再交给模型，否则它会试图在饮食子图里处理运动，并把 exercise_agent 误当工具。
-    if task:
+    if task and use_scoped_task:
         scoped_task = HumanMessage(content=task)
         if current_turn_messages and getattr(current_turn_messages[0], "type", None) == "human":
             current_turn_messages = [scoped_task, *current_turn_messages[1:]]
@@ -200,7 +200,11 @@ def make_analyze_image_node(recognizer: Optional[callable] = None) -> callable:
     return analyze_image
 
 
-def make_diet_agent(checkpointer: Optional[BaseCheckpointSaver] = None):
+def make_diet_agent(
+    checkpointer: Optional[BaseCheckpointSaver] = None,
+    *,
+    use_scoped_task: bool = True,
+):
     """
     构造 diet_agent（编译好的子图，可直接 add_node 进 supervisor 图）。
 
@@ -211,7 +215,7 @@ def make_diet_agent(checkpointer: Optional[BaseCheckpointSaver] = None):
     return create_react_agent(
         llm,
         DIET_TOOLS,
-        prompt=_diet_prompt,
+        prompt=lambda state: _diet_prompt(state, use_scoped_task=use_scoped_task),
         state_schema=DietAgentState,  # 继承全局 state：task/messages 直接可见
         checkpointer=checkpointer,
     )

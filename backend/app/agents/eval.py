@@ -27,6 +27,23 @@ from app.services import exercise as exercise_service
 from app.services import profile as profile_service
 
 
+_EVALUATION_WORKER_CONTEXT_MODES = {
+    "optimized_scoped_task": "scoped_task",
+    "baseline_raw_context": "raw_message",
+}
+
+
+def worker_context_mode_for_evaluation(evaluation_mode: str) -> str:
+    """将可公开说明的评测模式映射为图的 worker 上下文策略。"""
+    try:
+        return _EVALUATION_WORKER_CONTEXT_MODES[evaluation_mode]
+    except KeyError as exc:
+        supported = "、".join(_EVALUATION_WORKER_CONTEXT_MODES)
+        raise ValueError(
+            f"不支持的评测模式：{evaluation_mode}（可选：{supported}）"
+        ) from exc
+
+
 def load_agent_task_cases(path: Path) -> dict[str, Any]:
     """加载并校验最小任务集结构，避免空数据集产生无意义的 100% 指标。"""
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -277,7 +294,11 @@ def run_agent_task_episode(graph, case: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_agent_task_eval(
-    dataset: dict[str, Any], *, repeats: int = 3, case_limit: int | None = None
+    dataset: dict[str, Any],
+    *,
+    repeats: int = 3,
+    case_limit: int | None = None,
+    evaluation_mode: str = "optimized_scoped_task",
 ) -> dict[str, Any]:
     """使用真实 Qwen + LangGraph 批跑固定任务集，并返回可 JSON 序列化报告。"""
     if repeats < 1:
@@ -287,12 +308,15 @@ def run_agent_task_eval(
 
     from app.agents.graph import build_graph
 
+    worker_context_mode = worker_context_mode_for_evaluation(evaluation_mode)
     cases = list(dataset["cases"])
     if case_limit is not None:
         if case_limit < 1:
             raise ValueError("case_limit 必须至少为 1")
         cases = cases[:case_limit]
-    graph = build_graph(checkpointer=MemorySaver())
+    graph = build_graph(
+        checkpointer=MemorySaver(), worker_context_mode=worker_context_mode
+    )
     reports = [
         run_agent_task_episode(graph, case)
         for case in cases
@@ -306,6 +330,8 @@ def run_agent_task_eval(
             "model": settings.text_model,
             "repeats": repeats,
             "case_count": len(cases),
+            "evaluation_mode": evaluation_mode,
+            "worker_context_mode": worker_context_mode,
         }
     )
     return summary

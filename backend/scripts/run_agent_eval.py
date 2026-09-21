@@ -18,12 +18,21 @@ def main() -> None:
     parser.add_argument("--dataset", type=Path, default=_DEFAULT_DATASET)
     parser.add_argument("--repeats", type=int, default=3, help="每条任务的重复执行次数")
     parser.add_argument("--case-limit", type=int, help="仅跑前 N 条，用于冒烟验证")
+    parser.add_argument(
+        "--mode",
+        choices=("optimized_scoped_task", "baseline_raw_context"),
+        default="optimized_scoped_task",
+        help="评测模式：优化生产模式或原始消息上下文消融基线",
+    )
     parser.add_argument("--report-dir", type=Path, default=_DEFAULT_REPORT_DIR)
     args = parser.parse_args()
 
     dataset = load_agent_task_cases(args.dataset)
     report = run_agent_task_eval(
-        dataset, repeats=args.repeats, case_limit=args.case_limit
+        dataset,
+        repeats=args.repeats,
+        case_limit=args.case_limit,
+        evaluation_mode=args.mode,
     )
     args.report_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -33,6 +42,7 @@ def main() -> None:
     print(f"报告：{output}")
     print(f"任务完成率：{report['task_completion_rate']:.2%}")
     print(f"工具调用准确率：{report['tool_call_accuracy']:.2%}")
+    print(f"评测模式：{report['evaluation_mode']}")
     print(f"样例：{report['case_count']} 条 x {report['repeats']} 次 = {report['episodes']} episodes")
 
 
