@@ -193,14 +193,80 @@ def _collect_turn_final_reports(messages: list) -> list[str]:
             break
 
     reports: list[str] = []
+    tool_names: dict[str, str] = {}
+    skip_next_diet_report = False
     for message in messages[start:]:
-        if getattr(message, "type", None) != "ai" or getattr(message, "tool_calls", None):
+        message_type = getattr(message, "type", None)
+        if message_type == "ai":
+            calls = getattr(message, "tool_calls", None) or []
+            if calls:
+                tool_names.update(
+                    {call.get("id"): call.get("name", "") for call in calls}
+                )
+                continue
+            if skip_next_diet_report:
+                skip_next_diet_report = False
+                continue
+        elif message_type == "tool":
+            call_id = getattr(message, "tool_call_id", None)
+            if tool_names.get(call_id) == "create_diet_record":
+                report = _diet_record_report(getattr(message, "content", ""))
+                if report:
+                    reports.append(report)
+                    skip_next_diet_report = True
+            continue
+        if message_type != "ai":
             continue
         content = message.content if isinstance(message.content, str) else ""
         content = content.strip()
         if content and content not in reports:
             reports.append(content)
     return reports
+
+
+def _diet_record_report(raw_result: Any) -> Optional[str]:
+    """用写库工具的确认后结果生成确定性饮食回执，避免模型改写错餐次。"""
+    if not isinstance(raw_result, str):
+        return None
+    try:
+        result = json.loads(raw_result)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(result, dict) or result.get("status") != "created":
+        return None
+
+    meal_labels = {
+        "breakfast": "早餐",
+        "lunch": "午餐",
+        "dinner": "晚餐",
+        "snack": "加餐",
+    }
+    meal_label = meal_labels.get(result.get("meal_type"))
+    record_date = result.get("record_date")
+    items = result.get("items")
+    if not meal_label or not record_date or not isinstance(items, list) or not items:
+        return None
+
+    item_summary = "、".join(
+        f"{item['food_name']}（{item['grams']:g}g）"
+        for item in items
+        if isinstance(item, dict)
+        and isinstance(item.get("food_name"), str)
+        and isinstance(item.get("grams"), (int, float))
+    )
+    if not item_summary:
+        return None
+
+    total_calories = result.get("total_calories")
+    if not isinstance(total_calories, (int, float)):
+        return None
+    report = (
+        f"已为{record_date}添加一条{meal_label}记录：{item_summary}，"
+        f"合计{total_calories:g}千卡。"
+    )
+    if any(item.get("confidence") == "llm_estimate" for item in items if isinstance(item, dict)):
+        report += "食物营养值由模型常识估算，仅供参考。"
+    return report
 
 
 def _run_graph_and_stream(

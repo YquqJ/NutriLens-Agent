@@ -25,6 +25,7 @@ from openai import APITimeoutError
 from app.api.chat import (
     _collect_turn_final_reports,
     _extract_tool_calls,
+    _collect_turn_final_reports,
     _normalize_assistant_content,
     _run_graph_and_stream,
 )
@@ -120,6 +121,51 @@ def test_collect_turn_final_reports_keeps_each_worker_result_in_mixed_turn():
     assert reports == [
         "已记录晚餐方便面，共 760 千卡。",
         "已记录跑步 30 分钟，消耗 343 千卡。",
+    ]
+
+
+def test_collect_turn_final_reports_uses_confirmed_meal_from_tool_result():
+    """最终汇报的餐次必须来自 HITL 后工具结果，而不是模型初始推断。"""
+    messages = [
+        HumanMessage(content="我吃了一碗面"),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "id": "create-diet",
+                    "name": "create_diet_record",
+                    "args": {"meal_type": "dinner"},
+                }
+            ],
+        ),
+        ToolMessage(
+            content=json.dumps(
+                {
+                    "status": "created",
+                    "record_id": 12,
+                    "meal_type": "lunch",
+                    "record_date": "2026-09-19",
+                    "total_calories": 441,
+                    "items": [
+                        {
+                            "food_name": "一碗面",
+                            "grams": 490,
+                            "confidence": "llm_estimate",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            tool_call_id="create-diet",
+        ),
+        AIMessage(content="已为 2026-09-19 添加一条晚餐记录，一碗面 490g，441 千卡。"),
+    ]
+
+    reports = _collect_turn_final_reports(messages)
+
+    assert reports == [
+        "已为2026-09-19添加一条午餐记录：一碗面（490g），合计441千卡。"
+        "食物营养值由模型常识估算，仅供参考。"
     ]
 
 
@@ -305,7 +351,7 @@ def test_chat_stream_interrupt_then_resume(auth_headers):
     with client.stream(
         "POST",
         f"/api/conversations/{cid}/chat/resume",
-        json={"value": {"items": payload["items"]}},
+        json={"value": {"items": payload["items"], "meal_type": "dinner"}},
         headers=headers,
     ) as resp:
         assert resp.status_code == 200
@@ -316,6 +362,7 @@ def test_chat_stream_interrupt_then_resume(auth_headers):
         by_type2.setdefault(ev, []).append(data)
     assert by_type2["done"][0]["interrupted"] is False
     assert by_type2["done"][0]["persisted"] is True
+    assert "晚餐记录" in by_type2["done"][0]["content"]
     # 恢复后应有工具轨迹事件（search_food 等在此补发）与回复 token
     assert "tool_calls" in by_type2 or "token" in by_type2
 
@@ -326,7 +373,7 @@ def test_chat_stream_interrupt_then_resume(auth_headers):
             DietRecord.user_id == auth_headers["user_id"]
         ).all()
         assert len(records) == 1
-        assert records[0].meal_type == "lunch"
+        assert records[0].meal_type == "dinner"
 
         # messages 表：user 一条 + assistant 一条（含 agent_name 与轨迹）
         msgs = db.query(Message).filter(Message.conversation_id == cid).all()

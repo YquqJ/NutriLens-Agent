@@ -146,6 +146,8 @@ export interface Citation {
 }
 
 // ---- HITL 确认卡片（diet_agent 的 create_diet_record 中断载荷）----
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
+
 export interface DietDraftItem {
   food_name: string
   grams: number
@@ -157,7 +159,7 @@ export interface DietDraftItem {
 }
 export interface DietConfirmPayload {
   type: 'diet_confirm'
-  meal_type: string
+  meal_type: MealType
   record_date: string
   items: DietDraftItem[]
   allergy_risks?: AllergyRisk[]

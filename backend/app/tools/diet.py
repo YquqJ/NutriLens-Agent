@@ -13,7 +13,7 @@
 """
 
 from datetime import date
-from typing import Optional
+from typing import Any, Literal, Optional
 
 from langchain_core.tools import tool
 from langgraph.types import interrupt
@@ -23,6 +23,21 @@ from app.agents.llm import get_vision_llm
 from app.services import diet as diet_service
 from app.services.allergy import assess_user_food_allergy_risks
 from app.tools.context import get_current_user_id, get_session
+
+_MEAL_TYPES = {"breakfast", "lunch", "dinner", "snack"}
+MealType = Literal["breakfast", "lunch", "dinner", "snack"]
+
+
+def _confirmed_meal_type(confirmed: Any, default: str) -> str:
+    """读取并校验确认卡片餐次；旧客户端未传时保留 Agent 初判。"""
+    meal_type = (
+        confirmed.get("meal_type", default)
+        if isinstance(confirmed, dict)
+        else default
+    )
+    if not isinstance(meal_type, str) or meal_type not in _MEAL_TYPES:
+        raise ValueError(f"无效餐次：{meal_type}")
+    return meal_type
 
 
 # ======================================================================
@@ -115,7 +130,7 @@ class DietItemIn(BaseModel):
 @tool
 def create_diet_record(
     items: list[DietItemIn],
-    meal_type: str,
+    meal_type: MealType,
     record_date: Optional[str] = None,
 ) -> dict:
     """
@@ -156,6 +171,7 @@ def create_diet_record(
 
     if confirmed is False:
         return {"status": "cancelled", "message": "用户取消了本次记录"}
+    confirmed_meal_type = _confirmed_meal_type(confirmed, meal_type)
 
     # 有风险时要求前端明确传回知悉标记。兼容旧客户端/恶意调用时，
     # 再挂起一次同样的确认卡片，而不是静默写入或让模型自行决定。
@@ -167,11 +183,13 @@ def create_diet_record(
         confirmed = interrupt(
             {
                 **interrupt_payload,
+                "meal_type": confirmed_meal_type,
                 "confirmation_error": "请先勾选“我已知悉过敏风险，仍要记录”。",
             }
         )
         if confirmed is False:
             return {"status": "cancelled", "message": "用户取消了本次记录"}
+        confirmed_meal_type = _confirmed_meal_type(confirmed, confirmed_meal_type)
         allergy_acknowledged = (
             isinstance(confirmed, dict)
             and confirmed.get("allergy_acknowledged") is True
@@ -195,19 +213,26 @@ def create_diet_record(
         }
 
     # ---- 3. 落库 ----
+    final_record_date = date.fromisoformat(record_date) if record_date else date.today()
     with get_session() as db:
         result = diet_service.create_diet_record(
             db,
             user_id=user_id,
-            meal_type=meal_type,
+            meal_type=confirmed_meal_type,
             items=final_items,
-            record_date=date.fromisoformat(record_date) if record_date else None,
+            record_date=final_record_date,
             source="agent",
             allergy_acknowledged=allergy_acknowledged,
         )
     # 结果带上确认后的条目明细：用户可能在 HITL 卡片改过克数，
     # 模型只看 {record_id, total_calories} 会照抄自己草稿里的原估算值汇报
-    return {"status": "created", **result, "items": final_items}
+    return {
+        "status": "created",
+        **result,
+        "meal_type": confirmed_meal_type,
+        "record_date": final_record_date.isoformat(),
+        "items": final_items,
+    }
 
 
 # ======================================================================

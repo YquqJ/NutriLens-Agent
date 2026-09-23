@@ -24,6 +24,7 @@ from app.core.security import hash_password
 from app.db.models import User
 from app.db.session import SessionLocal
 from app.services import diet as diet_service
+from app.tools.diet import _confirmed_meal_type
 
 
 @pytest.fixture
@@ -93,6 +94,14 @@ def test_diet_prompt_baseline_mode_keeps_raw_mixed_user_request():
     assert messages[1].content == "昨天我吃了方便面，又跑了半小时"
 
 
+def test_confirmed_meal_type_uses_user_selection_and_rejects_unknown_values():
+    """确认卡片选择应覆盖 Agent 初判，非法值不能写入记录。"""
+    assert _confirmed_meal_type({"meal_type": "dinner"}, "lunch") == "dinner"
+    assert _confirmed_meal_type({"items": []}, "lunch") == "lunch"
+    with pytest.raises(ValueError, match="无效餐次"):
+        _confirmed_meal_type({"meal_type": "brunch"}, "lunch")
+
+
 @pytest.mark.skipif(not settings.dashscope_api_key, reason="未配置 DASHSCOPE_API_KEY")
 def test_diet_agent_full_flow_with_hitl(test_user):
     agent = make_diet_agent(checkpointer=MemorySaver())
@@ -119,22 +128,24 @@ def test_diet_agent_full_flow_with_hitl(test_user):
     # ---- 2. 模拟前端确认卡片：编辑克数后提交 ----
     items = payload["items"]
     items[0]["grams"] = 500.0
-    resumed = agent.invoke(Command(resume={"items": items}), cfg)
+    resumed = agent.invoke(
+        Command(resume={"items": items, "meal_type": "dinner"}), cfg
+    )
 
     # ---- 3. Agent 汇报了结果 ----
     final = resumed["messages"][-1].content
     assert final, "Agent 应有最终回复"
 
-    # ---- 4. 落库断言：今天、午餐、克数为用户编辑值 ----
+    # ---- 4. 落库断言：今天、确认时改选的晚餐、克数为用户编辑值 ----
     db = SessionLocal()
     try:
         recs = diet_service.get_diet_records(db, test_user, date.today())
         assert recs, "饮食记录未落库"
-        lunches = [r for r in recs if r["meal_type"] == "lunch"]
-        assert lunches, "餐次应为 lunch"
+        dinners = [r for r in recs if r["meal_type"] == "dinner"]
+        assert dinners, "餐次应采用确认卡片改选的 dinner"
         # resume 后 Agent 不得重复写库（二次调用 create_diet_record 是回归信号）
-        assert len(lunches) == 1, f"午餐记录应恰好 1 条，实际 {len(lunches)} 条（疑似重复落库）"
-        all_items = [it for r in lunches for it in r["items"]]
+        assert len(dinners) == 1, f"晚餐记录应恰好 1 条，实际 {len(dinners)} 条（疑似重复落库）"
+        all_items = [it for r in dinners for it in r["items"]]
         edited = [it for it in all_items if it["grams"] == 500.0]
         assert edited, "应存在克数为用户编辑值(500)的条目"
         assert all(it["calories"] > 0 for it in all_items)

@@ -2,12 +2,12 @@
 // HITL 确认卡片：饮食记录写库前的人工确认（可编辑克数）。
 // 编辑克数时按比例线性重算营养值（营养值 = 每克 × 克数，原条目已含绝对营养值）。
 import { reactive, computed, ref } from 'vue'
-import { confidenceLabel, mealLabel } from '@/utils/labels'
-import type { DietConfirmPayload, DietDraftItem } from '@/types'
+import { confidenceLabel } from '@/utils/labels'
+import type { DietConfirmPayload, DietDraftItem, MealType } from '@/types'
 
 const props = defineProps<{ payload: DietConfirmPayload }>()
 const emit = defineEmits<{
-  (e: 'confirm', items: DietDraftItem[], allergyAcknowledged: boolean): void
+  (e: 'confirm', items: DietDraftItem[], mealType: MealType, allergyAcknowledged: boolean): void
   (e: 'cancel'): void
 }>()
 
@@ -24,6 +24,7 @@ const totalCalories = computed(() =>
 )
 const allergyRisks = computed(() => props.payload.allergy_risks ?? [])
 const allergyAcknowledged = ref(false)
+const mealType = ref<MealType>(props.payload.meal_type)
 
 function confidenceType(c: string) {
   return c === 'llm_estimate' ? 'warning' : c === 'db_exact' ? 'success' : 'info'
@@ -46,6 +47,7 @@ function confirm() {
         confidence: it.confidence,
       }
     }),
+    mealType.value,
     allergyAcknowledged.value,
   )
 }
@@ -55,7 +57,17 @@ function confirm() {
   <div class="hitl">
     <div class="hitl-head">
       <span class="title">确认饮食记录</span>
-      <span class="meta">{{ mealLabel(payload.meal_type) }} · {{ payload.record_date }}</span>
+      <span class="meta">{{ payload.record_date }}</span>
+    </div>
+
+    <div class="meal-picker">
+      <span class="meal-label">餐次</span>
+      <el-radio-group v-model="mealType" size="small" aria-label="选择餐次">
+        <el-radio-button value="breakfast">早餐</el-radio-button>
+        <el-radio-button value="lunch">午餐</el-radio-button>
+        <el-radio-button value="dinner">晚餐</el-radio-button>
+        <el-radio-button value="snack">加餐</el-radio-button>
+      </el-radio-group>
     </div>
 
     <table class="items">
@@ -146,6 +158,19 @@ function confirm() {
   font-size: 12px;
   color: var(--ink-3);
 }
+.meal-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.meal-label {
+  flex: none;
+  color: var(--ink-3);
+  font-size: 13px;
+}
 .items {
   width: 100%;
   border-collapse: collapse;
@@ -207,6 +232,24 @@ function confirm() {
   color: #7a4d00;
   font-size: 12px;
   line-height: 1.6;
+}
+@media (max-width: 520px) {
+  .meal-picker {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .meal-picker :deep(.el-radio-group) {
+    display: flex;
+    max-width: 100%;
+  }
+  .meal-picker :deep(.el-radio-button) {
+    flex: 1;
+  }
+  .meal-picker :deep(.el-radio-button__inner) {
+    width: 100%;
+    padding: 8px 10px;
+  }
 }
 .warning-title {
   font-weight: 600;

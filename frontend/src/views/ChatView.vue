@@ -19,6 +19,7 @@ import type {
   ChatMessage as ChatMsg,
   Citation,
   Conversation,
+  DietConfirmPayload,
   DietDraftItem,
   Message,
   SseEvent,
@@ -405,7 +406,11 @@ async function send(text?: string) {
   if (!live.interrupt) await refreshList()
 }
 
-async function confirmDiet(items: DietDraftItem[], allergyAcknowledged: boolean) {
+async function confirmDiet(
+  items: DietDraftItem[],
+  mealType: DietConfirmPayload['meal_type'],
+  allergyAcknowledged: boolean,
+) {
   const live = pendingMsg.value
   if (!live || !activeId.value) return
   live.interrupt = null
@@ -415,7 +420,7 @@ async function confirmDiet(items: DietDraftItem[], allergyAcknowledged: boolean)
   try {
     await streamRequest(
       `/api/conversations/${activeId.value}/chat/resume`,
-      { value: { items, allergy_acknowledged: allergyAcknowledged } },
+      { value: { items, meal_type: mealType, allergy_acknowledged: allergyAcknowledged } },
       live,
     )
   } catch (e) {
