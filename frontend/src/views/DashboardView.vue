@@ -72,8 +72,8 @@ const trendOption = computed<EChartsCoreOption>(() => ({
   xAxis: { type: 'category', boundaryGap: false, data: trend.value.map((item) => item.date.slice(5)), axisLine: { lineStyle: { color: C.line } }, axisTick: { show: false }, axisLabel: { color: C.muted, fontSize: 11 } },
   yAxis: { type: 'value', splitLine: { lineStyle: { color: '#edf3ee' } }, axisLabel: { color: C.muted, fontSize: 11 } },
   series: [
-    { name: '摄入', type: 'line', data: trend.value.map((item) => item.intake), smooth: true, symbol: 'circle', symbolSize: 5, showSymbol: false, lineStyle: { width: 2.5, color: C.intake }, itemStyle: { color: C.intake }, areaStyle: { color: C.intake, opacity: 0.08 } },
-    { name: '消耗', type: 'line', data: trend.value.map((item) => item.burned), smooth: true, symbol: 'circle', symbolSize: 5, showSymbol: false, lineStyle: { width: 2, color: C.burned }, itemStyle: { color: C.burned } },
+    { name: '摄入', type: 'line', data: trend.value.map((item) => item.intake), smooth: true, symbol: 'circle', symbolSize: 5, showSymbol: false, lineStyle: { width: 2.5, color: C.burned }, itemStyle: { color: C.burned }, areaStyle: { color: C.burned, opacity: 0.08 } },
+    { name: '消耗', type: 'line', data: trend.value.map((item) => item.burned), smooth: true, symbol: 'circle', symbolSize: 5, showSymbol: false, lineStyle: { width: 2, color: C.intake }, itemStyle: { color: C.intake } },
     { name: '目标', type: 'line', data: trend.value.map((item) => item.calorie_target), symbol: 'none', lineStyle: { width: 1.5, type: 'dashed', color: C.muted }, itemStyle: { color: C.muted } },
   ],
 }))
@@ -193,7 +193,7 @@ onBeforeUnmount(() => chartObserver?.disconnect())
 
     <section ref="chartSection" class="dashboard-lower">
       <article class="panel chart-panel">
-        <div class="panel-heading"><div><h2>近 7 日能量平衡</h2><p>薄荷绿代表摄入，珊瑚色代表运动消耗。</p></div><router-link to="/records">打开记录 →</router-link></div>
+        <div class="panel-heading"><div><h2>近 7 日能量平衡</h2><p>珊瑚色代表摄入，薄荷绿代表运动消耗。</p></div><router-link to="/records">打开记录 →</router-link></div>
         <div class="chart">
           <div v-if="!chartsVisible || trendLoading" class="chart-placeholder" aria-hidden="true"><span /></div>
           <EChart v-else :option="trendOption" />
