@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     langsmith_project: str = "nutrilens"
     langsmith_endpoint: str = "https://api.smith.langchain.com"
 
+    # ---- 可观测（Langfuse，可选：LangGraph / Tool / LLM 全链路追踪）----
+    langfuse_enabled: bool = False
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "https://cloud.langfuse.com"
+
     # ---- 服务 ----
     host: str = "0.0.0.0"
     port: int = 8000

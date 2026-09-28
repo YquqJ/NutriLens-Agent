@@ -32,7 +32,9 @@ dependencies = [
                                         # 序列化支持。3.x 对 langgraph<0.5 的 DeprecationWarning
                                         # 是版本嗅探过于保守（见 DESIGN_NOTES），功能实测正常
     "langchain-core>=0.3",
+    "langchain>=0.3,<0.4",            # Langfuse 的 LangChain CallbackHandler 依赖顶层包
     "langchain-openai>=0.3",            # ChatOpenAI 配 DashScope base_url 调 Qwen
+    "langfuse>=3.0",                    # LangGraph / LangChain 全链路可观测
     "rank-bm25>=0.2",                   # BM25 关键词检索（混合检索的其中一路）
     "pypdf>=5.0",                       # PDF 文本层提取（知识文档导入）
 ]

@@ -30,10 +30,9 @@ def get_text_llm(streaming: bool = True) -> ChatOpenAI:
         stream_usage=True,
         temperature=0.3,  # 健康建议需要一点表达多样性，但事实类回答不宜太发散
         max_retries=2,
-        # timeout 传给 OpenAI 兼容客户端的 request_timeout；stream_chunk_timeout
-        # 额外限制流式响应相邻 chunk 的等待，防止上游连接半开后永久卡住。
+        # langchain-openai 0.3 通过 request_timeout 统一约束请求时长。
+        # 不传 stream_chunk_timeout：该版本会把未知参数透传给兼容 API 并导致请求失败。
         timeout=settings.llm_timeout_seconds,
-        stream_chunk_timeout=settings.llm_timeout_seconds,
     )
 
 

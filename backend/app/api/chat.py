@@ -50,6 +50,7 @@ from app.agents.llm import get_text_llm
 from app.core.deps import get_current_user
 from app.db.models import Conversation, Message, User
 from app.db.session import SessionLocal, get_db
+from app.observability.langfuse import add_langfuse_observability
 from app.services import plan as plan_service
 
 router = APIRouter(prefix="/api/conversations", tags=["chat"])
@@ -140,6 +141,17 @@ class ResumeRequest(BaseModel):
     （条目可能被用户编辑过）或 False（取消）。"""
 
     value: Any
+
+
+def _build_graph_config(conversation_id: str, user_id: int, entrypoint: str) -> dict:
+    """构造图执行配置，并按开关注入 Langfuse 全链路追踪。"""
+    config = {"configurable": {"thread_id": conversation_id, "user_id": user_id}}
+    return add_langfuse_observability(
+        config,
+        conversation_id=conversation_id,
+        user_id=user_id,
+        entrypoint=entrypoint,
+    )
 
 
 def _sse(event: str, data: dict) -> str:
@@ -451,7 +463,7 @@ async def chat(
         "user_id": str(user.id),
         "image_url": req.image_url,
     }
-    cfg = {"configurable": {"thread_id": conv.id, "user_id": user.id}}
+    cfg = _build_graph_config(conv.id, user.id, "chat")
 
     return StreamingResponse(
         _run_graph_and_stream(graph_input, cfg, conv.id),
@@ -469,7 +481,7 @@ async def resume_chat(
     """恢复挂起的 interrupt（用户点了确认/取消），继续以 SSE 流式返回。"""
     conv = _get_own_conversation(conversation_id, user, db)
     graph = get_graph()
-    cfg = {"configurable": {"thread_id": conv.id, "user_id": user.id}}
+    cfg = _build_graph_config(conv.id, user.id, "resume")
 
     # state.next 非空 = 图停在某个节点上等 resume；空 = 没有挂起的操作，
     # 此时灌 resume 值会变成往 checkpoint 写一条无意义的 resume 记录，拦掉
