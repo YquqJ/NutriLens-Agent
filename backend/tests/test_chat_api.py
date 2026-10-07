@@ -20,6 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, LLMResult
 from openai import APITimeoutError
 
 from app.api.chat import (
@@ -222,6 +223,37 @@ def test_messages_are_returned_in_page_no_order(auth_headers):
     ]
 
 
+def test_messages_include_persisted_request_metrics(auth_headers):
+    cid = auth_headers["conversation_id"]
+    db = SessionLocal()
+    try:
+        db.add(
+            Message(
+                conversation_id=cid,
+                role="assistant",
+                content="完成",
+                duration_ms=1840,
+                input_tokens=2344,
+                output_tokens=386,
+                total_tokens=2730,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        f"/api/conversations/{cid}/messages",
+        headers=auth_headers["headers"],
+    )
+
+    item = response.json()["items"][0]
+    assert item["duration_ms"] == 1840
+    assert item["input_tokens"] == 2344
+    assert item["output_tokens"] == 386
+    assert item["total_tokens"] == 2730
+
+
 def test_invalid_record_date_returns_422_instead_of_server_error(auth_headers):
     """非法日期是请求参数错误，不能让 ValueError 冒泡成 500。"""
     r = client.get(
@@ -283,6 +315,70 @@ def test_normalize_assistant_content_keeps_normal_reply_unchanged():
     reply = "已为你记录午餐，共 520 千卡。"
 
     assert _normalize_assistant_content(reply) == reply
+
+
+def test_chat_stream_done_contains_request_metrics(monkeypatch):
+    """SSE 完成帧应返回本轮总耗时与输入/输出 Token 汇总。"""
+
+    class MetricsGraph:
+        def stream(self, *_args, **_kwargs):
+            yield "updates", {"qa_agent": {"citations": [], "tool_calls": []}}
+
+        def get_state(self, *_args, **_kwargs):
+            return SimpleNamespace(values={"messages": []})
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: MetricsGraph())
+
+    frames = list(_run_graph_and_stream({}, {}, "test-conversation"))
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+
+    assert payload["duration_ms"] >= 0
+    assert payload["input_tokens"] is None
+    assert payload["output_tokens"] is None
+    assert payload["total_tokens"] is None
+
+
+def test_chat_stream_done_aggregates_actual_model_usage(monkeypatch):
+    """模型回调报告 usage 时，完成帧应携带输入/输出/总 Token。"""
+
+    class MetricsGraph:
+        def stream(self, _input, config, **_kwargs):
+            collector = config["callbacks"][-1]
+            collector.on_llm_start({"name": "qwen-plus"}, ["prompt"], run_id="run-1")
+            collector.on_llm_end(
+                LLMResult(
+                    generations=[
+                        [
+                            ChatGeneration(
+                                message=AIMessage(
+                                    content="answer",
+                                    usage_metadata={
+                                        "input_tokens": 120,
+                                        "output_tokens": 30,
+                                        "total_tokens": 150,
+                                    },
+                                )
+                            )
+                        ]
+                    ]
+                ),
+                run_id="run-1",
+            )
+            yield "updates", {"qa_agent": {"citations": [], "tool_calls": []}}
+
+        def get_state(self, *_args, **_kwargs):
+            return SimpleNamespace(values={"messages": []})
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: MetricsGraph())
+
+    frames = list(_run_graph_and_stream({}, {}, "test-conversation"))
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+
+    assert payload["input_tokens"] == 120
+    assert payload["output_tokens"] == 30
+    assert payload["total_tokens"] == 150
 
 
 def test_image_interrupt_done_contains_normalized_content_without_token_leak(monkeypatch):

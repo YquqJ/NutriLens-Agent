@@ -1,10 +1,17 @@
 <script setup lang="ts">
-// 工具轨迹折叠面板（对齐 CookHero thinking block）：灰底圆角卡片头，流式中显示 spinner，展开列出各工具调用。
+// 工具轨迹折叠面板（对齐 CookHero thinking block）：灰底圆角卡片头，右侧展示请求指标，展开列出各工具调用。
 import { computed, ref } from 'vue'
 import { toolLabel } from '@/utils/labels'
+import { formatRequestMetrics } from '@/utils/metrics'
 import type { ToolTraceEntry } from '@/types'
 
-const props = defineProps<{ entries: ToolTraceEntry[]; streaming?: boolean }>()
+const props = defineProps<{
+  entries: ToolTraceEntry[]
+  streaming?: boolean
+  durationMs?: number
+  inputTokens?: number
+  outputTokens?: number
+}>()
 
 type DisplayEntry = {
   entry: ToolTraceEntry
@@ -38,11 +45,18 @@ const displayEntries = computed<DisplayEntry[]>(() => {
 })
 
 const open = ref(false)
+const traceMetrics = computed(() =>
+  formatRequestMetrics({
+    durationMs: props.durationMs,
+    inputTokens: props.inputTokens,
+    outputTokens: props.outputTokens,
+  }),
+)
 </script>
 
 <template>
-  <div v-if="entries.length || streaming" class="trace" :class="{ open }">
-    <button class="trace-head" @click="open = !open">
+  <div v-if="entries.length || streaming || traceMetrics" class="trace" :class="{ open }">
+    <button class="trace-head" :aria-expanded="open" @click="open = !open">
       <span class="head-left">
         <!-- 流式：旋转 spinner；完成：CPU 图标 -->
         <svg v-if="streaming" class="spin" viewBox="0 0 24 24" aria-hidden="true">
@@ -53,12 +67,15 @@ const open = ref(false)
           <rect x="9.5" y="9.5" width="5" height="5" />
           <path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" />
         </svg>
-        <span class="title">执行过程</span>
+        <span class="title">工具轨迹</span>
         <span v-if="displayEntries.length" class="count">{{ displayEntries.length }}</span>
       </span>
-      <svg class="chev" :class="{ rot: open }" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="m6 9 6 6 6-6" />
-      </svg>
+      <span class="head-right">
+        <span v-if="traceMetrics && open" class="trace-metrics">{{ traceMetrics }}</span>
+        <svg class="chev" :class="{ rot: open }" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </span>
     </button>
 
     <div v-show="open" class="trace-body">
@@ -119,10 +136,29 @@ const open = ref(false)
   display: flex;
   align-items: center;
   gap: 7px;
+  min-width: 0;
   margin-right: 4px;
+}
+.head-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
 }
 .title {
   font-weight: 500;
+  white-space: nowrap;
+}
+.trace-metrics {
+  min-width: 0;
+  color: var(--muted-2);
+  font-family: var(--font-num);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: right;
+  white-space: normal;
 }
 .spin {
   width: 14px;

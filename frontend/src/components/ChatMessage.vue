@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 单条对话消息（对齐 CookHero 观感）：
-// 用户＝蓝色实心气泡白字右对齐（图片内嵌不溢出）；助手＝机器人头像 + 白底细边气泡 + 下方元信息行。
+// 用户＝蓝色实心气泡白字右对齐（图片内嵌不溢出）；助手＝机器人头像 + 白底细边气泡 + 工具轨迹与元信息。
 import { agentLabel } from '@/utils/labels'
 import MarkdownContent from './MarkdownContent.vue'
 import ToolTracePanel from './ToolTracePanel.vue'
@@ -22,10 +22,6 @@ const AGENT_TONES: Record<string, string> = {
 }
 function toneClass(name: string | null) {
   return (name && AGENT_TONES[name]) || 'tone-supervisor'
-}
-
-function formatDuration(ms: number) {
-  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
 }
 
 function formatTime(iso: string | null | undefined) {
@@ -78,18 +74,17 @@ function formatTime(iso: string | null | undefined) {
           </span>
         </div>
 
-        <ToolTracePanel :entries="message.toolTrace" :streaming="message.streaming" />
+        <ToolTracePanel
+          :entries="message.toolTrace"
+          :streaming="message.streaming"
+          :duration-ms="message.durationMs"
+          :input-tokens="message.inputTokens"
+          :output-tokens="message.outputTokens"
+        />
 
-        <!-- 元信息行：时间 · 思考/生成耗时 · 复制 -->
+        <!-- 元信息行：时间 · 复制 -->
         <div class="meta">
           <span v-if="message.createdAt" class="time">{{ formatTime(message.createdAt) }}</span>
-          <template v-if="!message.streaming && (message.thinkingMs !== undefined || message.answerMs !== undefined)">
-            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
-            <span v-if="message.thinkingMs !== undefined && message.answerMs !== undefined">
-              思考 {{ formatDuration(message.thinkingMs) }} · 生成 {{ formatDuration(message.answerMs) }}
-            </span>
-            <span v-else-if="message.thinkingMs !== undefined">耗时 {{ formatDuration(message.thinkingMs) }}</span>
-          </template>
           <button
             v-if="message.agentName === 'plan_agent' && message.content && !message.streaming"
             class="sync-plan"
@@ -265,15 +260,6 @@ function formatTime(iso: string | null | undefined) {
 }
 .time {
   margin-right: 2px;
-}
-.ic {
-  width: 13px;
-  height: 13px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 .copy {
   display: grid;

@@ -102,6 +102,10 @@ function toChatMessage(m: Message): ChatMsg {
     agentName: m.agent_name,
     toolTrace,
     citations,
+    durationMs: m.duration_ms ?? undefined,
+    inputTokens: m.input_tokens ?? undefined,
+    outputTokens: m.output_tokens ?? undefined,
+    totalTokens: m.total_tokens ?? undefined,
     streaming: false,
     interrupt: null,
     createdAt: m.created_at,
@@ -174,6 +178,10 @@ async function streamRequest(
           // react agent 的工具间叙述（"现在我将…"），终稿才是干净的最终回答
           if (e.citations) live.citations = e.citations
         }
+        if (e.duration_ms !== undefined) live.durationMs = e.duration_ms
+        live.inputTokens = e.input_tokens ?? undefined
+        live.outputTokens = e.output_tokens ?? undefined
+        live.totalTokens = e.total_tokens ?? undefined
         break
       case 'error':
         live.content += `\n[出错了] ${e.message}`

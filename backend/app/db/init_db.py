@@ -70,9 +70,28 @@ def _migrate_knowledge_schema() -> None:
 
 
 def _migrate_message_schema() -> None:
-    """为历史消息补充结构化引用载荷，旧消息保持 citations 为 NULL。"""
+    """为历史消息补充引用与性能指标，旧消息保持新增字段为 NULL。"""
     with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE messages ADD COLUMN IF NOT EXISTS citations TEXT"))
+        for statement in (
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS citations TEXT",
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS duration_ms INTEGER",
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS input_tokens INTEGER",
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS output_tokens INTEGER",
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS total_tokens INTEGER",
+        ):
+            conn.execute(text(statement))
+
+
+def _migrate_conversation_schema() -> None:
+    """为挂起确认的会话补充待合并性能指标。"""
+    with engine.begin() as conn:
+        for statement in (
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS pending_duration_ms INTEGER",
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS pending_input_tokens INTEGER",
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS pending_output_tokens INTEGER",
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS pending_total_tokens INTEGER",
+        ):
+            conn.execute(text(statement))
 
 
 def init_db() -> None:
@@ -83,6 +102,7 @@ def init_db() -> None:
     # 2. 建业务表（已存在的表跳过 —— 与 alembic 相比的取舍：
     Base.metadata.create_all(engine)
     _migrate_knowledge_schema()
+    _migrate_conversation_schema()
     _migrate_message_schema()
 
     # 3. HNSW 向量索引：cosine 距离 + 内积均可，文本 embedding 惯例用 cosine

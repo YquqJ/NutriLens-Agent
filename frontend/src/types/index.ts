@@ -115,6 +115,10 @@ export interface Message {
   agent_name: string | null
   tool_trace: string | null // JSON 字符串，前端解析
   citations: string | null // JSON 字符串，QA 证据定位与切片正文
+  duration_ms: number | null
+  input_tokens: number | null
+  output_tokens: number | null
+  total_tokens: number | null
   created_at: string
 }
 
@@ -188,6 +192,10 @@ export interface ChatMessage {
   createdAt?: string | null // 历史消息时间戳；流式新消息由前端补
   thinkingMs?: number // 首 token 前耗时（思考）
   answerMs?: number // 首 token 后到结束耗时（生成）
+  durationMs?: number
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
 }
 
 // ---- SSE 事件（后端 chat.py 分帧协议）----
@@ -197,5 +205,16 @@ export type SseEvent =
   | { type: 'tool_calls'; entry: ToolTraceEntry }
   | { type: 'citations'; items: Citation[] }
   | { type: 'interrupt'; payload: DietConfirmPayload }
-  | { type: 'done'; interrupted: boolean; agent_name?: string; persisted?: boolean; content?: string; citations?: Citation[] }
+  | {
+      type: 'done'
+      interrupted: boolean
+      agent_name?: string
+      persisted?: boolean
+      content?: string
+      citations?: Citation[]
+      duration_ms?: number
+      input_tokens?: number | null
+      output_tokens?: number | null
+      total_tokens?: number | null
+    }
   | { type: 'error'; message: string }

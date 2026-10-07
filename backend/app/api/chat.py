@@ -33,6 +33,8 @@ SSE 分帧格式（W3C 标准，前端按行解析）：
 """
 
 import json
+import logging
+import time
 from datetime import datetime, timezone
 from typing import Any, Iterator, Optional
 
@@ -51,9 +53,11 @@ from app.core.deps import get_current_user
 from app.db.models import Conversation, Message, User
 from app.db.session import SessionLocal, get_db
 from app.observability.langfuse import add_langfuse_observability
+from app.observability.usage import TokenUsageCollector, merge_usage_metrics
 from app.services import plan as plan_service
 
 router = APIRouter(prefix="/api/conversations", tags=["chat"])
+logger = logging.getLogger(__name__)
 
 # 工具结果（如检索命中列表）落库轨迹时截断，避免 tool_trace 膨胀
 _TOOL_RESULT_MAX = 2000
@@ -297,11 +301,93 @@ def _diet_record_report(raw_result: Any) -> Optional[str]:
     return report
 
 
+def _current_request_metrics(
+    collector: TokenUsageCollector, started_at: float
+) -> dict[str, int | None]:
+    """把本次 graph.stream 的耗时与模型 usage 规整成持久化结构。"""
+    usage = collector.summary()
+    return {
+        "duration_ms": max(0, round((time.perf_counter() - started_at) * 1000)),
+        "input_tokens": usage["input_tokens"],
+        "output_tokens": usage["output_tokens"],
+        "total_tokens": usage["total_tokens"],
+    }
+
+
+def _load_pending_metrics(conversation_id: str) -> dict[str, int | None]:
+    """读取会话级待合并指标，不触碰 LangGraph 的中断 checkpoint。"""
+    db = SessionLocal()
+    try:
+        conversation = db.get(Conversation, conversation_id)
+        if conversation is None:
+            return {}
+        return {
+            "duration_ms": conversation.pending_duration_ms,
+            "input_tokens": conversation.pending_input_tokens,
+            "output_tokens": conversation.pending_output_tokens,
+            "total_tokens": conversation.pending_total_tokens,
+        }
+    except Exception:
+        logger.exception("读取待合并性能指标失败")
+        return {}
+    finally:
+        db.close()
+
+
+def _save_pending_metrics(
+    conversation_id: str, metrics: dict[str, int | None]
+) -> None:
+    """在 HITL 挂起时暂存阶段指标，resume 完成后再写入 assistant 消息。"""
+    db = SessionLocal()
+    try:
+        conversation = db.get(Conversation, conversation_id)
+        if conversation is None:
+            return
+        conversation.pending_duration_ms = metrics.get("duration_ms")
+        conversation.pending_input_tokens = metrics.get("input_tokens")
+        conversation.pending_output_tokens = metrics.get("output_tokens")
+        conversation.pending_total_tokens = metrics.get("total_tokens")
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("保存待合并性能指标失败")
+    finally:
+        db.close()
+
+
+def _clear_pending_metrics(conversation_id: str) -> None:
+    """assistant 消息完成后清理会话级暂存指标。"""
+    db = SessionLocal()
+    try:
+        conversation = db.get(Conversation, conversation_id)
+        if conversation is None:
+            return
+        conversation.pending_duration_ms = None
+        conversation.pending_input_tokens = None
+        conversation.pending_output_tokens = None
+        conversation.pending_total_tokens = None
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("清理待合并性能指标失败")
+    finally:
+        db.close()
+
+
 def _run_graph_and_stream(
     graph_input: Any, cfg: dict, conversation_id: str
 ) -> Iterator[str]:
     """跑图 → SSE 事件流 → 落库 assistant 汇报。chat 与 resume 共用。"""
     graph = get_graph()
+    started_at = time.perf_counter()
+    usage_collector = TokenUsageCollector()
+    is_resume = isinstance(graph_input, Command)
+    pending_metrics = _load_pending_metrics(conversation_id) if is_resume else {}
+    stream_cfg = dict(cfg)
+    stream_cfg["callbacks"] = [
+        *(cfg.get("callbacks") or []),
+        usage_collector,
+    ]
     token_buffer: list[str] = []  # 兜底文本（正常取最终 state 的最后一条 AI 消息）
     tool_trace: list[dict] = []  # 本轮全部工具调用（落 messages.tool_trace）
     citations: list[dict] = []  # QA 结构化证据（落 messages.citations，供前端抽屉回放）
@@ -314,7 +400,7 @@ def _run_graph_and_stream(
 
     try:
         for mode, chunk in graph.stream(
-            graph_input, cfg, stream_mode=["messages", "updates"]
+            graph_input, stream_cfg, stream_mode=["messages", "updates"]
         ):
             if mode == "messages":
                 msg, _meta = chunk
@@ -367,17 +453,23 @@ def _run_graph_and_stream(
         if interrupted:
             # 挂起等用户：不落 assistant 消息（草稿在 interrupt 事件里，
             # resume 完成后由下一轮流统一落库），也不结束会话
+            phase_metrics = _current_request_metrics(usage_collector, started_at)
+            metrics = merge_usage_metrics(pending_metrics, phase_metrics)
+            _save_pending_metrics(conversation_id, metrics)
             yield _sse(
                 "done",
                 {
                     "interrupted": True,
                     "content": _normalize_assistant_content("".join(token_buffer)),
+                    **metrics,
                 },
             )
             return
 
         # ---- 流结束：合并本轮各 worker 的终态汇报 ----
         final_state = graph.get_state(cfg).values
+        phase_metrics = _current_request_metrics(usage_collector, started_at)
+        metrics = merge_usage_metrics(pending_metrics, phase_metrics)
         reports = _collect_turn_final_reports(final_state.get("messages") or [])
         content = "\n\n".join(_normalize_assistant_content(report) for report in reports)
         content = content or _normalize_assistant_content("".join(token_buffer))
@@ -403,11 +495,16 @@ def _run_graph_and_stream(
                         agent_name=current_agent,
                         tool_trace=json.dumps(tool_trace, ensure_ascii=False),
                         citations=json.dumps(citations, ensure_ascii=False) if citations else None,
+                        duration_ms=metrics["duration_ms"],
+                        input_tokens=metrics["input_tokens"],
+                        output_tokens=metrics["output_tokens"],
+                        total_tokens=metrics["total_tokens"],
                     )
                 )
                 db.commit()
             finally:
                 db.close()
+        _clear_pending_metrics(conversation_id)
         yield _sse(
             "done",
             {
@@ -418,6 +515,7 @@ def _run_graph_and_stream(
                 # 前端收到 done 后用 content 替换累积的 token 文本，保证最终消息干净
                 "content": content,
                 "citations": citations,
+                **metrics,
             },
         )
     except (APITimeoutError, TimeoutException):

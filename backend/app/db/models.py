@@ -119,6 +119,11 @@ class Conversation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+    # 首次饮食确认挂起时暂存请求级性能指标，resume 完成后合并到 assistant 消息。
+    pending_duration_ms: Mapped[int | None] = mapped_column(Integer)
+    pending_input_tokens: Mapped[int | None] = mapped_column(Integer)
+    pending_output_tokens: Mapped[int | None] = mapped_column(Integer)
+    pending_total_tokens: Mapped[int | None] = mapped_column(Integer)
 
     messages: Mapped[list["Message"]] = relationship(
         back_populates="conversation",
@@ -148,6 +153,10 @@ class Message(Base):
     agent_name: Mapped[str | None] = mapped_column(String(32))
     tool_trace: Mapped[str | None] = mapped_column(Text)  # JSON 数组：[{name, args, result}]
     citations: Mapped[str | None] = mapped_column(Text)  # JSON 数组：QA 证据定位与切片正文
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    total_tokens: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )

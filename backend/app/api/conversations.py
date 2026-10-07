@@ -32,6 +32,10 @@ class MessageOut(BaseModel):
     agent_name: str | None
     tool_trace: str | None
     citations: str | None
+    duration_ms: int | None
+    input_tokens: int | None
+    output_tokens: int | None
+    total_tokens: int | None
     created_at: str
 
 
@@ -52,6 +56,10 @@ def _serialize_message(message: Message) -> MessageOut:
         agent_name=message.agent_name,
         tool_trace=message.tool_trace,
         citations=message.citations,
+        duration_ms=message.duration_ms,
+        input_tokens=message.input_tokens,
+        output_tokens=message.output_tokens,
+        total_tokens=message.total_tokens,
         created_at=message.created_at.isoformat(),
     )
 
