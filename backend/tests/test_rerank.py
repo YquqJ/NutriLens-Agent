@@ -77,3 +77,55 @@ def test_retrieve_pipeline_with_rerank():
         db.delete(document)
         db.commit()
         db.close()
+import httpx
+import pytest
+
+from app.rag import rerank as rerank_module
+
+
+def test_rerank_retries_rate_limit_with_exponential_backoff(monkeypatch):
+    request = httpx.Request("POST", rerank_module._RERANK_URL)
+    responses = [
+        httpx.Response(429, request=request),
+        httpx.Response(
+            200,
+            request=request,
+            json={"output": {"results": [{"index": 0, "relevance_score": 0.91}]}},
+        ),
+    ]
+    calls = []
+    delays = []
+
+    def fake_post(*args, **kwargs):
+        calls.append((args, kwargs))
+        return responses.pop(0)
+
+    monkeypatch.setattr(rerank_module.httpx, "post", fake_post)
+    monkeypatch.setattr(rerank_module.time, "sleep", delays.append)
+    monkeypatch.setattr(rerank_module.random, "uniform", lambda _low, high: high)
+
+    result = rerank_module.rerank("牛肉面", ["牛肉面营养信息"], top_n=1)
+
+    assert result == [(0, 0.91)]
+    assert len(calls) == 2
+    assert delays == [0.5]
+
+
+def test_rerank_does_not_retry_non_retryable_client_error(monkeypatch):
+    request = httpx.Request("POST", rerank_module._RERANK_URL)
+    calls = []
+    delays = []
+
+    def fake_post(*args, **kwargs):
+        calls.append((args, kwargs))
+        return httpx.Response(400, request=request)
+
+    monkeypatch.setattr(rerank_module.httpx, "post", fake_post)
+    monkeypatch.setattr(rerank_module.time, "sleep", delays.append)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        rerank_module.rerank("牛肉面", ["牛肉面营养信息"], top_n=1)
+
+    assert len(calls) == 1
+    assert delays == []
+

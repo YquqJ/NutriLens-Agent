@@ -252,6 +252,33 @@ def test_image_recognition_json_is_rendered_as_natural_language():
     assert '"items"' not in visible
 
 
+def test_image_recognition_json_followed_by_route_json_is_rendered_as_natural_language():
+    """识别结果后紧跟路由协议时，也不能把两个内部 JSON 原样展示。"""
+    image_result = json.dumps(
+        {
+            "items": [
+                {"food_name": "白切鸡", "estimated_grams": 150},
+                {"food_name": "炒白菜", "estimated_grams": 120},
+                {"food_name": "米饭", "estimated_grams": 180},
+                {"food_name": "番茄酱", "estimated_grams": 80},
+            ]
+        },
+        ensure_ascii=False,
+    )
+    route_result = json.dumps(
+        {"next_agent": "diet_agent", "task": "记录2026-10-07的午餐"},
+        ensure_ascii=False,
+    )
+
+    visible = _normalize_assistant_content(image_result + route_result)
+
+    assert visible == (
+        "我识别到这顿饭包括：白切鸡约150克、炒白菜约120克、米饭约180克、"
+        "番茄酱约80克。请确认是否记录。"
+    )
+    assert '"next_agent"' not in visible
+
+
 def test_normalize_assistant_content_keeps_normal_reply_unchanged():
     reply = "已为你记录午餐，共 520 千卡。"
 

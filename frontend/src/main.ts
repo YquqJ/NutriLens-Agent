@@ -5,6 +5,9 @@ import App from './App.vue'
 import router from './router'
 import { useAuthStore } from './stores/auth'
 import './styles/index.scss'
+// MessageBox is created programmatically, so its style is not discovered by
+// the template-based Element Plus resolver.
+import 'element-plus/es/components/message-box/style/css'
 
 const app = createApp(App)
 

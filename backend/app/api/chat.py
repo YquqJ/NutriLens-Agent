@@ -87,7 +87,23 @@ def _normalize_assistant_content(content: str) -> str:
     try:
         payload = json.loads(candidate)
     except (TypeError, json.JSONDecodeError):
-        return content
+        # 多模态模型可能先输出图片识别 JSON，随后紧接着输出
+        # Supervisor 的路由 JSON。两段内部协议拼接后不是合法 JSON，
+        # 但只需提取第一个带 items 的对象作为用户可见摘要。
+        payload = None
+        decoder = json.JSONDecoder()
+        for start, char in enumerate(candidate):
+            if char != "{":
+                continue
+            try:
+                parsed, _ = decoder.raw_decode(candidate[start:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict) and isinstance(parsed.get("items"), list):
+                payload = parsed
+                break
+        if payload is None:
+            return content
 
     if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
         return content
