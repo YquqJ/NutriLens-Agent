@@ -1,6 +1,6 @@
 """PDF 知识文档的提取与切片。
 
-当前只接入项目内置的通用营养与运动知识 PDF。这里故意把“文件解析/切片”
+当前接入项目内置的营养、运动与健康管理知识 PDF。这里故意把“文件解析/切片”
 和“向量化/数据库写入”分开：前者可离线、确定性测试；后者才依赖 embedding
 服务与数据库。未来增加 Markdown、Word 或后台上传时，复用同一份切片契约。
 """
@@ -34,6 +34,36 @@ EXERCISE_SAFETY_SOURCE_PATH = (
     / "knowledge"
     / "运动处方、恢复与特殊人群安全手册.pdf"
 )
+NATIONAL_FITNESS_GUIDE_SOURCE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "knowledge"
+    / "《全民健身指南》解读.pdf"
+)
+HEALTHY_CHINA_ACTION_SOURCE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "knowledge"
+    / "健康中国行动.pdf"
+)
+DIETARY_GUIDELINES_SOURCE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "knowledge"
+    / "平衡膳食八准则——核心推荐.pdf"
+)
+WEIGHT_MANAGEMENT_GUIDELINE_SOURCE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "knowledge"
+    / "体重管理指导原则.pdf"
+)
+BALANCED_MEALS_SOURCE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "knowledge"
+    / "会吃比好吃更重要：一日三餐的科学搭配法则.pdf"
+)
 PARSER_VERSION = "pdf-text-v1"
 
 _CHAPTER_RE = re.compile(r"^第[一二三四五六七八九十百]+章(?:\s+.*)?$")
@@ -63,6 +93,31 @@ KNOWLEDGE_SOURCES = (
         "exercise_recovery_safety_pdf",
         "运动处方、恢复与特殊人群安全手册",
         EXERCISE_SAFETY_SOURCE_PATH,
+    ),
+    KnowledgeSource(
+        "national_fitness_guide_pdf",
+        "《全民健身指南》解读",
+        NATIONAL_FITNESS_GUIDE_SOURCE_PATH,
+    ),
+    KnowledgeSource(
+        "healthy_china_action_pdf",
+        "健康中国行动",
+        HEALTHY_CHINA_ACTION_SOURCE_PATH,
+    ),
+    KnowledgeSource(
+        "dietary_guidelines_eight_pdf",
+        "平衡膳食八准则——核心推荐",
+        DIETARY_GUIDELINES_SOURCE_PATH,
+    ),
+    KnowledgeSource(
+        "weight_management_guideline_pdf",
+        "体重管理指导原则",
+        WEIGHT_MANAGEMENT_GUIDELINE_SOURCE_PATH,
+    ),
+    KnowledgeSource(
+        "balanced_meals_pdf",
+        "会吃比好吃更重要：一日三餐的科学搭配法则",
+        BALANCED_MEALS_SOURCE_PATH,
     ),
 )
 

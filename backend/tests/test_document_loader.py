@@ -35,15 +35,15 @@ def test_pdf_source_supports_fixed_split_experiment_mode():
 
 
 def test_all_registered_knowledge_sources_are_traceable_pdfs():
-    assert len(KNOWLEDGE_SOURCES) == 3
-    assert len({source.source_key for source in KNOWLEDGE_SOURCES}) == 3
+    assert len(KNOWLEDGE_SOURCES) == 8
+    assert len({source.source_key for source in KNOWLEDGE_SOURCES}) == 8
 
     extracted_by_key = {}
     for source in KNOWLEDGE_SOURCES:
         assert source.path.is_file(), source.path
         page_count, chunks = extract_pdf_chunks(source.path)
         extracted_by_key[source.source_key] = chunks
-        assert page_count >= 5
+        assert page_count >= 2
         assert chunks
         assert all(chunk.page_number and chunk.section for chunk in chunks)
 

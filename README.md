@@ -1,81 +1,191 @@
 # NutriLens 健康管理智能助手
 
-> 基于 AI Agent 的个人健康管理应用 —— 饮食管理 + 运动记录 + 智能问答三位一体，帮助用户实现热量收支平衡。
+NutriLens 是一个面向个人用户的 AI 健康管理应用，围绕饮食记录、运动记录、健康知识问答和个性化计划组织日常健康管理流程。项目采用 Vue 3 + FastAPI，使用 LangGraph 编排多 Agent，并通过 PostgreSQL、pgvector 与对象存储持久化业务数据和知识库。
 
-## 功能
+## 功能概览
 
-- 📷 **拍照记录饮食**：上传食物照片 → qwen-vl-max 识别 → 食物库匹配营养数据 → 人工确认后落库（Human-in-the-loop）
-- ⌨️ **文字描述录入**："我午饭吃了一碗牛肉面" → Agent 解析并自动记录
-- 🏃 **运动记录**：MET 公式计算运动消耗
-- 💬 **智能问答**：营养/健身咨询（Agentic RAG：混合检索 + 重排 + 迭代自检）
-- 🎯 **个性化计划**：BMR/TDEE 计算 + 按目标（减脂/增肌/维持）生成饮食计划
-- 📊 **热量看板**：每日收支、宏量营养素、7 日趋势
+- **饮食记录**：通过文字或食物照片记录饮食；图片识别结果经过营养信息补全和用户确认后再写入记录。
+- **运动记录**：记录运动类型与时长，根据运动 MET 值和用户资料估算消耗热量。
+- **健康问答**：针对营养、饮食和运动问题检索知识库，生成带证据引用的回答。
+- **个性化计划**：基于个人资料、BMR/TDEE 和健康目标生成饮食计划。
+- **健康看板**：查看每日热量收支、宏量营养素和阶段趋势。
+- **会话体验**：支持 SSE 流式回复、工具轨迹、Citation 回查、HITL 确认，以及回复耗时和 Token 用量展示。
 
 ## 技术栈
 
-| 层 | 技术 |
+| 层次 | 技术 |
 |---|---|
-| Agent 编排 | LangGraph（Supervisor 多 Agent、interrupt HITL、PostgresSaver checkpointer） |
-| 模型 | 阿里 Qwen（qwen-plus / qwen-vl-max / text-embedding-v3 / gte-rerank，DashScope 兼容模式） |
-| 后端 | Python 3.12 · FastAPI · SQLAlchemy 2.0 · SSE 流式 |
-| 数据 | PostgreSQL + pgvector · 阿里云 OSS |
-| 前端 | Vue 3 · Vite · TypeScript · Element Plus · ECharts · Pinia |
+| Web 前端 | Vue 3、TypeScript、Vite、Element Plus、Pinia、ECharts |
+| API 服务 | Python 3.12、FastAPI、SQLAlchemy 2、SSE |
+| Agent 编排 | LangGraph、LangChain；Supervisor 调度领域 Worker，PostgresSaver 持久化对话状态 |
+| 模型服务 | 阿里云 DashScope：Qwen 文本/视觉模型、text-embedding-v3、gte-rerank |
+| 数据存储 | PostgreSQL、pgvector、阿里云 OSS |
+| 检索 | pgvector 向量检索、BM25 关键词检索、RRF 融合、Rerank 精排 |
 
-## 架构
+## 系统架构
 
+```mermaid
+flowchart LR
+    UI[Vue 3 Web 客户端] -->|REST / SSE| API[FastAPI]
+    API --> GRAPH[LangGraph Supervisor]
+    GRAPH --> IMG[图片识别与上下文整理]
+    IMG --> SUP[Supervisor 路由]
+    SUP --> DIET[饮食 Agent]
+    SUP --> EXERCISE[运动 Agent]
+    SUP --> QA[健康问答 Agent]
+    SUP --> PLAN[计划 Agent]
+    DIET --> SUP
+    EXERCISE --> SUP
+    QA --> SUP
+    PLAN --> SUP
+    API --> DB[(PostgreSQL)]
+    GRAPH --> CP[(PostgresSaver Checkpoints)]
+    QA --> RAG[检索与证据组装]
+    RAG --> VEC[(pgvector)]
+    RAG --> BM25[BM25 + RRF + Rerank]
+    API --> OSS[(对象存储 OSS)]
 ```
-（待补充：Supervisor 多 Agent 架构图）
-```
 
-## 快速开始
+Supervisor 是唯一调度中枢，饮食、运动、问答和计划 Agent 分别负责领域任务。Worker 完成后回到 Supervisor，由其决定是否继续处理复合请求或结束本轮。图状态通过 PostgreSQL checkpoint 保存；饮食图片识别采用人工确认后写入（HITL），避免未经用户确认地保存估算数据。
 
-```bash
-# 1. 启动 PostgreSQL（含 pgvector）
+问答链路会进行知识检索和证据组装；当首轮结果被判定不足时，可改写查询并再次检索。生成回答时将检索片段作为上下文，Citation 提供文档、章节、页码和原文片段定位。
+
+## 本地运行
+
+### 环境要求
+
+- Python 3.12 和 [uv](https://docs.astral.sh/uv/)
+- Node.js 与 npm
+- Docker Desktop / Docker Engine
+- DashScope API Key
+- OSS 配置用于食物图片上传与访问；如只验证不涉及图片上传的流程，可按需配置
+
+### 1. 启动数据库
+
+在项目根目录执行：
+
+```powershell
 docker compose up -d
-
-# 2. 后端
-cd backend
-cp ../.env.example .env          # 填入 DASHSCOPE_API_KEY / OSS 配置
-uv sync                          # 首次安装依赖（固定 Python 3.12）
-uv run python -m app.db.init_db  # 建表 + 向量索引
-uv run python -m app.db.seed_knowledge # 导入注册表中的全部营养运动知识 PDF
-uv run python scripts/run_dev.py  # 默认 8000；若被占用自动顺延到 8001、8002…
-
-# 3. 前端（M6 后提供）
-cd frontend && npm install && npm run dev
 ```
 
-开发后端启动后会把实际端口写入 `backend/.runtime-port`，Vite 会自动读取并将
-`/api` 请求代理到该端口。也可以通过 `BACKEND_PORT=9000 npm run dev` 临时覆盖代理目标。
+Compose 会启动 PostgreSQL 16 + pgvector，默认映射到宿主机 `15433` 端口。
 
-## RAG 评测
+### 2. 配置并启动后端
 
-项目内置三份知识文档和两套冻结评测集。`rag_queries_v2.json` 面向多文档
-检索，包含 32 条正例、5 条越界负例，并覆盖单文档、多证据和跨文档问题。
+```powershell
+Copy-Item .env.example backend/.env
+```
 
-```bash
-cd backend
-uv run python -m app.rag.run_ablation \
-  --split-mode section_aware \
+编辑 `backend/.env`，至少配置数据库连接和 `DASHSCOPE_API_KEY`。数据库地址默认应与 Compose 端口一致：
+
+```dotenv
+DATABASE_URL=postgresql+psycopg://nutrilens:nutrilens@localhost:15433/nutrilens
+DASHSCOPE_API_KEY=你的DashScope_API_Key
+```
+
+然后初始化数据库、导入知识文档并启动 API：
+
+```powershell
+Set-Location backend
+uv sync
+uv run python -m app.db.init_db
+uv run python -m app.db.seed_knowledge
+uv run python scripts/run_dev.py
+```
+
+开发启动脚本默认从 `8000` 端口开始，若端口被占用会自动顺延，并将实际端口写入 `backend/.runtime-port`。
+
+### 3. 启动前端
+
+在另一个终端窗口从项目根目录执行：
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
+
+Vite 默认运行于 `http://localhost:5173`。开发服务器会读取后端运行端口并代理 `/api` 请求；也可通过 `BACKEND_PORT` 临时指定代理端口：
+
+```powershell
+$env:BACKEND_PORT = "8000"
+npm run dev
+```
+
+## RAG 知识库与评测
+
+知识文档位于 `backend/data/knowledge/`。`app/rag/document_loader.py` 中的 `KNOWLEDGE_SOURCES` 是导入注册表；新增 PDF 后需登记稳定的 `source_key`、标题和文件路径，再运行 seed 命令。导入流程会提取 PDF 文本、按章节感知策略切分、生成 embedding 并写入 PostgreSQL/pgvector。源文件未变化时会按哈希跳过重复导入。
+
+检索模式包括：
+
+- `vector`：单轮 pgvector 向量检索，作为检索基线。
+- `bm25`：基于中文字符 bigram 的 BM25 关键词检索。
+- `hybrid_rrf`：融合向量与 BM25 的候选结果。
+- `hybrid_rerank`：在混合召回候选上使用 Rerank 调整排序；服务不可用时回退到 RRF 结果。
+
+真实检索消融评测需要 PostgreSQL 中已导入对应知识源，并配置 DashScope API Key。在 `backend/` 目录运行：
+
+```powershell
+# 单文档基础评测集
+uv run python -m app.rag.run_ablation `
+  --split-mode section_aware `
+  --eval-data tests/eval_data/rag_queries.json
+
+# 多文档评测集
+uv run python -m app.rag.run_ablation `
+  --split-mode section_aware `
   --eval-data tests/eval_data/rag_queries_v2.json
 ```
 
-当前 v2 基线中，`hybrid_rrf` 的 Recall@4 为 96.88%、Recall@8 为
-98.44%、MRR 为 90.10%、nDCG@4 为 90.54%；`hybrid_rerank` 的 MRR 为
-91.67%。完整逐题结果写入 `backend/reports/rag-v2-section-aware.json`。
+评测脚本输出包含 Recall@4、Recall@8、MRR、nDCG@4 和逐 query 明细。评测集用页码与证据文本锚定相关切片，不依赖某一种切分方式产生的固定 chunk hash。当前内置评测集覆盖既有标注证据对应的知识文档；新登记的 PDF 需补充人工核对的 gold evidence 和 query 后，才能纳入相应指标。检索模式消融只测检索结果，不代表完整 QA 流程；充分性判断、Query Rewrite、二次检索及答案生成需要单独设计端到端评测。
+
+## 测试与质量检查
+
+后端单元与集成测试（在 `backend/` 目录）：
+
+```powershell
+uv run pytest
+```
+
+真实检索评测也可通过 pytest 显式运行：
+
+```powershell
+uv run pytest -m eval -s
+```
+
+前端检查（在 `frontend/` 目录）：
+
+```powershell
+npm run type-check
+npm run test
+npm run build
+```
 
 ## 项目结构
 
-```
-backend/app/
-├── core/       配置 / JWT / 依赖注入
-├── db/         SQLAlchemy 模型与会话
-├── schemas/    API 请求/响应模型
-├── services/   业务逻辑层（REST 与 Agent 工具共用）
-├── agents/     LangGraph 多 Agent 编排 ★核心
-├── tools/      @tool 工具集（Agent 的"手"）
-├── rag/        Agentic RAG（知识库 / 混合检索 / 重排）
-└── api/        路由（REST + SSE）
+```text
+backend/
+├── app/
+│   ├── agents/       LangGraph Supervisor、领域 Agent、状态与记忆
+│   ├── api/          FastAPI 路由与 SSE 对话接口
+│   ├── core/         配置、认证与依赖注入
+│   ├── db/           SQLAlchemy 模型、初始化、seed 与 checkpoint 集成
+│   ├── observability/调用指标与可观测性集成
+│   ├── rag/          PDF 解析、切分、检索、Rerank、Citation 与评测
+│   ├── services/     业务服务层
+│   └── tools/        Agent 可调用工具
+├── data/knowledge/   已登记的知识 PDF
+├── scripts/          开发与评测辅助脚本
+└── tests/            后端测试与 RAG 评测集
+frontend/
+├── src/api/          后端 API 客户端
+├── src/components/   对话、轨迹、引用及表单组件
+├── src/stores/       Pinia 状态
+├── src/types/        TypeScript 类型
+├── src/utils/        前端工具函数
+└── src/views/        页面视图
 ```
 
-> 详细注释贯穿全码：每个模块头部 docstring 说明职责与设计决策，关键流程（interrupt 恢复、SSE 分帧、混合检索）有逐步行内注释。
+## 可选可观测性
+
+项目支持按需启用 Langfuse 或 LangSmith，用于观察 Agent 路由、工具和模型调用。相关环境变量及配置说明见 [`.env.example`](.env.example)。不要将包含 API Key、JWT Secret 或 OSS 凭据的 `.env` 文件提交到版本库。
