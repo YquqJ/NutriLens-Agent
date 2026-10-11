@@ -15,15 +15,30 @@ from langgraph.graph import END
 
 from app.agents.supervisor import (
     MAX_HOPS,
+    PlannedTask,
     RouteDecision,
+    TaskPlanDecision,
     make_supervisor_node,
 )
+from app.agents.graph import _turn_reset
 from app.core.config import settings
 
 
 def _stub_router(decision: RouteDecision):
     """伪造 router：无论输入，永远返回给定决策。"""
     return RunnableLambda(lambda _: decision)
+
+
+class _CountingPlanner:
+    """测试一次性任务规划只调用一次，并记录每次输入。"""
+
+    def __init__(self, decision: TaskPlanDecision):
+        self.decision = decision
+        self.calls = 0
+
+    def invoke(self, _messages):
+        self.calls += 1
+        return self.decision
 
 
 def test_routes_to_agent_with_rewritten_task():
@@ -64,6 +79,119 @@ def test_hop_guard_forces_end():
     assert cmd.update["next_agent"] == "FINISH"
     # 强制结束时 hop_count 不再累加（保持原值，标识已终止）
     assert cmd.update["hop_count"] == MAX_HOPS
+
+
+def test_allows_fourth_worker_route_before_guard():
+    """MAX_HOPS=4 时，第四次路由仍可派发 Worker。"""
+    supervisor = make_supervisor_node(
+        _stub_router(RouteDecision(next_agent="plan_agent", task="生成计划"))
+    )
+    cmd = supervisor(
+        {
+            "messages": [HumanMessage("还需要生成计划")],
+            "hop_count": 3,
+            "agent_trace": [
+                "supervisor→diet_agent",
+                "supervisor→exercise_agent",
+                "supervisor→qa_agent",
+            ],
+        }
+    )
+    assert cmd.goto == "plan_agent"
+    assert cmd.update["hop_count"] == 4
+
+
+def test_plans_composite_request_once_then_dispatches_serially():
+    """首次路由生成完整计划，后续只推进游标，不重复调用规划器。"""
+    planner = _CountingPlanner(
+        TaskPlanDecision(
+            tasks=[
+                PlannedTask(
+                    next_agent="diet_agent", task="记录今天早餐：鸡蛋和包子"
+                ),
+                PlannedTask(
+                    next_agent="exercise_agent", task="记录今天跑步 30 分钟"
+                ),
+            ]
+        )
+    )
+    supervisor = make_supervisor_node(planner)
+    base_state = {"messages": [HumanMessage("记录早餐并记录跑步")], "hop_count": 0}
+
+    first = supervisor(base_state)
+    assert planner.calls == 1
+    assert first.goto == "diet_agent"
+    assert first.update["task"] == "记录今天早餐：鸡蛋和包子"
+    assert first.update["task_index"] == 1
+    assert first.update["task_plan"] == [
+        {"next_agent": "diet_agent", "task": "记录今天早餐：鸡蛋和包子"},
+        {"next_agent": "exercise_agent", "task": "记录今天跑步 30 分钟"},
+    ]
+
+    second = supervisor(
+        {
+            **base_state,
+            **first.update,
+            "hop_count": 1,
+            "agent_trace": ["supervisor→diet_agent"],
+        }
+    )
+    assert planner.calls == 1
+    assert second.goto == "exercise_agent"
+    assert second.update["task"] == "记录今天跑步 30 分钟"
+    assert second.update["task_index"] == 2
+
+    finished = supervisor(
+        {
+            **base_state,
+            **first.update,
+            **second.update,
+            "hop_count": 2,
+            "agent_trace": [
+                "supervisor→diet_agent",
+                "supervisor→exercise_agent",
+            ],
+        }
+    )
+    assert planner.calls == 1
+    assert finished.goto == END
+    assert finished.update["next_agent"] == "FINISH"
+
+
+def test_merges_non_contiguous_tasks_for_same_worker_without_dropping_them():
+    """同一 Worker 的非连续子任务也应合并，而不是静默丢弃。"""
+    planner = _CountingPlanner(
+        TaskPlanDecision(
+            tasks=[
+                PlannedTask(next_agent="diet_agent", task="记录早餐：鸡蛋"),
+                PlannedTask(next_agent="exercise_agent", task="记录跑步 30 分钟"),
+                PlannedTask(next_agent="diet_agent", task="记录午餐：牛肉面"),
+            ]
+        )
+    )
+    cmd = make_supervisor_node(planner)(
+        {"messages": [HumanMessage("记录早餐、跑步和午餐")], "hop_count": 0}
+    )
+    assert cmd.update["task_plan"] == [
+        {"next_agent": "diet_agent", "task": "记录早餐：鸡蛋；记录午餐：牛肉面"},
+        {"next_agent": "exercise_agent", "task": "记录跑步 30 分钟"},
+    ]
+
+
+def test_turn_reset_clears_previous_task_plan():
+    """新用户轮次清空旧计划；HITL resume 不经过该入口节点。"""
+    reset = _turn_reset(
+        {
+            "task_plan": [{"next_agent": "diet_agent", "task": "旧任务"}],
+            "task_index": 1,
+            "plan_initialized": True,
+            "hop_count": 4,
+        }
+    )
+    assert reset["task_plan"] is None
+    assert reset["task_index"] == 0
+    assert reset["plan_initialized"] is False
+    assert reset["hop_count"] == 0
 
 
 def test_agent_trace_accumulates():

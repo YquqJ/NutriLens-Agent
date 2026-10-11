@@ -61,7 +61,10 @@ class AgentState(TypedDict):
     # ---- supervisor 路由决策结果 ----
     next_agent: str
     task: str  # 改写后的子任务指令（含指代消解，交给专职 agent 独立执行）
-    hop_count: int  # 已路由次数，>=2 后强制结束
+    task_plan: Optional[list[dict]]  # 本轮一次性生成的有序单域任务计划
+    task_index: int  # 下一个待派发任务的游标
+    plan_initialized: bool  # 本轮是否已经生成过任务计划
+    hop_count: int  # 已路由次数，>=4 后强制结束
     plan_requested: bool  # 本轮是否明确生成计划（供 SSE 出站层归档最终交付）
 
     # ---- HITL：待确认的饮食草稿 ----

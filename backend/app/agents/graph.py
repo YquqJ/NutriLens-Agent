@@ -49,13 +49,16 @@ def _turn_reset(state: AgentState) -> dict:
     入口节点：每轮用户消息进来时重置"轮内"状态。
 
     checkpoint 会持久化整个 state，而这些字段的语义是"本轮"——
-    hop_count 不重置的话，第一轮路由两次后，后续每一轮都会被
+    hop_count 不重置的话，第一轮路由达到上限后，后续每一轮都会被
     防死循环守卫直接强制结束（worker 干脆得不到执行机会）；
     agent_trace / tool_calls 不重置则跨轮无限累积。
     resume（Command 恢复中断）不会重新经过 START，不受影响。
     """
     return {
         "hop_count": 0,
+        "task_plan": None,
+        "task_index": 0,
+        "plan_initialized": False,
         "plan_requested": False,
         "agent_trace": [],
         "tool_calls": [],
