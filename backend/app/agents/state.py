@@ -29,6 +29,23 @@ Confidence = Literal["db_exact", "db_fuzzy", "llm_estimate"]
 # 因此必须由状态字段保留前置感知节点的结论，供路由和 worker 做不同处理。
 ImageAnalysisStatus = Literal["no_image", "recognized", "no_food_detected", "failed"]
 NoTaskReason = Literal["out_of_scope", "small_talk", "unclear", "no_action"]
+WorkerStatus = Literal[
+    "success",
+    "retryable_error",
+    "quality_insufficient",
+    "needs_user_input",
+    "fatal_error",
+]
+SideEffectStatus = Literal["none", "committed", "unknown"]
+WorkerOutcome = TypedDict(
+    "WorkerOutcome",
+    {
+        "status": WorkerStatus,
+        "error_code": str,
+        "retryable": bool,
+        "side_effect": SideEffectStatus,
+    },
+)
 FinishReason = Literal[
     "out_of_scope",
     "small_talk",
@@ -36,6 +53,7 @@ FinishReason = Literal[
     "no_action",
     "completed",
     "route_limit",
+    "worker_failed",
 ]
 
 
@@ -73,9 +91,16 @@ class AgentState(TypedDict):
     task_plan: Optional[list[dict]]  # 本轮一次性生成的有序单域任务计划
     task_index: int  # 下一个待派发任务的游标
     plan_initialized: bool  # 本轮是否已经生成过任务计划
-    hop_count: int  # 已路由次数，>=4 后强制结束
+    hop_count: int  # 已派发次数，>=8 后强制结束（四任务各允许一次重试）
     plan_requested: bool  # 本轮是否明确生成计划（供 SSE 出站层归档最终交付）
     finish_reason: Optional[FinishReason]  # 本轮结束原因；新轮次重置
+    worker_outcome: Optional[WorkerOutcome]  # 最近一次 Worker 的结构化结果
+    worker_retry_count: int  # 当前任务已重试次数；首版最多一次
+    worker_retry_context: str  # 重试时注入 Worker 的失败上下文
+    worker_message_start: int  # 最近一次 Worker 输出在 messages 中的起点
+    worker_message_end: int  # 最近一次 Worker 输出在 messages 中的终点
+    worker_discarded_ranges: list[dict]  # 最终回复提取时应跳过的失败尝试区间
+    worker_failures: list[dict]  # 已跳过的失败子任务，供最终兜底和观测
 
     # ---- HITL：待确认的饮食草稿 ----
     # interrupt() 挂起前由工具写入 state，恢复后由工具消费

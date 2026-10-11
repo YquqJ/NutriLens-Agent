@@ -84,24 +84,218 @@ def test_hop_guard_forces_end():
     assert cmd.update["hop_count"] == MAX_HOPS
 
 
-def test_allows_fourth_worker_route_before_guard():
-    """MAX_HOPS=4 时，第四次路由仍可派发 Worker。"""
-    supervisor = make_supervisor_node(
-        _stub_router(RouteDecision(next_agent="plan_agent", task="生成计划"))
-    )
+def test_retries_retryable_worker_failure_once_before_advancing():
+    """仅无副作用的结构化失败重派当前任务一次。"""
+    supervisor = make_supervisor_node(_CountingPlanner(TaskPlanDecision(
+        tasks=[PlannedTask(next_agent="qa_agent", task="回答蛋白质摄入问题")],
+        finish_reason=None,
+    )))
     cmd = supervisor(
         {
-            "messages": [HumanMessage("还需要生成计划")],
-            "hop_count": 3,
-            "agent_trace": [
-                "supervisor→diet_agent",
-                "supervisor→exercise_agent",
-                "supervisor→qa_agent",
-            ],
+            "messages": [HumanMessage("蛋白质怎么吃")],
+            "task_plan": [{"next_agent": "qa_agent", "task": "回答蛋白质摄入问题"}],
+            "task_index": 1,
+            "plan_initialized": True,
+            "hop_count": 1,
+            "worker_outcome": {
+                "status": "retryable_error",
+                "error_code": "read_tool_error",
+                "retryable": True,
+                "side_effect": "none",
+            },
+            "worker_retry_count": 0,
+            "worker_message_start": 1,
+            "worker_message_end": 3,
         }
     )
-    assert cmd.goto == "plan_agent"
-    assert cmd.update["hop_count"] == 4
+
+    assert cmd.goto == "qa_agent"
+    assert cmd.update["task_index"] == 1
+    assert cmd.update["worker_retry_count"] == 1
+    assert cmd.update["hop_count"] == 2
+    assert cmd.update["worker_outcome"] is None
+    assert "上次执行失败" in cmd.update["worker_retry_context"]
+
+
+def test_retry_exhaustion_skips_failed_task_and_continues_plan():
+    """同一任务重试耗尽后记录失败，继续派发复合请求中的下一项。"""
+    supervisor = make_supervisor_node(_CountingPlanner(TaskPlanDecision(
+        tasks=[], finish_reason="unclear"
+    )))
+    cmd = supervisor(
+        {
+            "messages": [HumanMessage("回答问题并记录跑步")],
+            "task_plan": [
+                {"next_agent": "qa_agent", "task": "回答蛋白质摄入问题"},
+                {"next_agent": "exercise_agent", "task": "记录跑步30分钟"},
+            ],
+            "task_index": 1,
+            "plan_initialized": True,
+            "hop_count": 2,
+            "worker_outcome": {
+                "status": "retryable_error",
+                "error_code": "read_tool_error",
+                "retryable": True,
+                "side_effect": "none",
+            },
+            "worker_retry_count": 1,
+            "worker_message_start": 1,
+            "worker_message_end": 3,
+            "worker_failures": [],
+            "agent_trace": ["supervisor→qa_agent", "supervisor→qa_agent"],
+        }
+    )
+
+    assert cmd.goto == "exercise_agent"
+    assert cmd.update["task"] == "记录跑步30分钟"
+    assert cmd.update["worker_failures"] == [
+        {
+            "agent": "qa_agent",
+            "task": "回答蛋白质摄入问题",
+            "error_code": "read_tool_error",
+            "side_effect": "none",
+            "message_start": 1,
+            "message_end": 3,
+        }
+    ]
+    assert cmd.update["worker_retry_count"] == 0
+    assert cmd.update["worker_outcome"] is None
+
+
+def test_does_not_retry_failure_with_uncertain_side_effect():
+    """写操作异常时副作用状态不明，必须跳过而不是盲目重试。"""
+    supervisor = make_supervisor_node(_CountingPlanner(TaskPlanDecision(
+        tasks=[], finish_reason="unclear"
+    )))
+    cmd = supervisor(
+        {
+            "messages": [HumanMessage("记录跑步30分钟")],
+            "task_plan": [{"next_agent": "exercise_agent", "task": "记录跑步30分钟"}],
+            "task_index": 1,
+            "plan_initialized": True,
+            "hop_count": 1,
+            "worker_outcome": {
+                "status": "fatal_error",
+                "error_code": "side_effect_uncertain",
+                "retryable": False,
+                "side_effect": "unknown",
+            },
+            "worker_retry_count": 0,
+            "worker_message_start": 1,
+            "worker_failures": [],
+        }
+    )
+
+    assert cmd.goto == END
+    assert cmd.update["finish_reason"] == "worker_failed"
+    assert cmd.update["worker_retry_count"] == 0
+    assert len(cmd.update["worker_failures"]) == 1
+
+
+def test_worker_result_classifies_only_read_only_tool_errors_as_retryable():
+    from langchain_core.messages import ToolMessage
+
+    from app.agents.worker_result import classify_worker_result
+
+    safe = classify_worker_result(
+        "qa_agent",
+        [ToolMessage(content="temporary failure", tool_call_id="1", name="retrieve_knowledge", status="error")],
+    )
+    unsafe = classify_worker_result(
+        "exercise_agent",
+        [ToolMessage(content="commit failed", tool_call_id="2", name="create_exercise_record", status="error")],
+    )
+
+    assert safe == {
+        "status": "retryable_error",
+        "error_code": "read_tool_error",
+        "retryable": True,
+        "side_effect": "none",
+    }
+    assert unsafe == {
+        "status": "fatal_error",
+        "error_code": "side_effect_uncertain",
+        "retryable": False,
+        "side_effect": "unknown",
+    }
+
+
+def test_worker_result_marks_mutation_before_later_error_as_committed():
+    from langchain_core.messages import ToolMessage
+
+    from app.agents.worker_result import classify_worker_result
+
+    result = classify_worker_result(
+        "exercise_agent",
+        [
+            ToolMessage(
+                content='{"status":"created"}',
+                tool_call_id="1",
+                name="create_exercise_record",
+                status="success",
+            ),
+            ToolMessage(
+                content="temporary read failure",
+                tool_call_id="2",
+                name="get_exercise_records",
+                status="error",
+            ),
+        ],
+    )
+
+    assert result == {
+        "status": "fatal_error",
+        "error_code": "side_effect_committed",
+        "retryable": False,
+        "side_effect": "committed",
+    }
+
+
+def test_allows_each_planned_task_one_retry_within_route_limit():
+    """四个计划任务各重试一次时，最后一次派发仍可执行。"""
+    assert MAX_HOPS == 8
+    supervisor = make_supervisor_node(
+        _CountingPlanner(TaskPlanDecision(tasks=[], finish_reason="unclear"))
+    )
+    state = {
+        "messages": [HumanMessage("四个领域任务均经历一次安全重试")],
+        "task_plan": [
+            {"next_agent": "diet_agent", "task": "查饮食记录"},
+            {"next_agent": "exercise_agent", "task": "查运动记录"},
+            {"next_agent": "qa_agent", "task": "回答营养问题"},
+            {"next_agent": "plan_agent", "task": "生成计划"},
+        ],
+        "task_index": 4,
+        "plan_initialized": True,
+        "hop_count": 7,
+        "worker_outcome": {
+            "status": "retryable_error",
+            "error_code": "read_tool_error",
+            "retryable": True,
+            "side_effect": "none",
+        },
+        "worker_retry_count": 0,
+        "worker_message_start": 1,
+        "worker_failures": [],
+    }
+    retry = supervisor(state)
+    assert retry.goto == "plan_agent"
+    assert retry.update["hop_count"] == 8
+
+    finished = supervisor(
+        {
+            **state,
+            **retry.update,
+            "worker_outcome": {
+                "status": "success",
+                "error_code": "",
+                "retryable": False,
+                "side_effect": "none",
+            },
+        }
+    )
+    assert finished.goto == END
+    assert finished.update["finish_reason"] == "completed"
 
 
 def test_plans_composite_request_once_then_dispatches_serially():

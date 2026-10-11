@@ -38,6 +38,7 @@ from app.agents.plan_agent import make_plan_agent
 from app.agents.qa_agent import make_qa_agent
 from app.agents.state import AgentState
 from app.agents.supervisor import make_supervisor_node
+from app.agents.worker_result import make_worker_node
 from app.core.config import settings
 
 # 四个专职 worker（图中的固定节点名，supervisor 的 Command.goto 按名跳转）
@@ -61,6 +62,13 @@ def _turn_reset(state: AgentState) -> dict:
         "plan_initialized": False,
         "plan_requested": False,
         "finish_reason": None,
+        "worker_outcome": None,
+        "worker_retry_count": 0,
+        "worker_retry_context": "",
+        "worker_message_start": 0,
+        "worker_message_end": 0,
+        "worker_discarded_ranges": [],
+        "worker_failures": [],
         "agent_trace": [],
         "tool_calls": [],
         "citations": [],
@@ -90,10 +98,20 @@ def build_graph(
     builder = StateGraph(AgentState)
 
     builder.add_node("supervisor", supervisor_node or make_supervisor_node())
-    builder.add_node("diet_agent", make_diet_agent(use_scoped_task=use_scoped_task))
-    builder.add_node("exercise_agent", make_exercise_agent(use_scoped_task=use_scoped_task))
-    builder.add_node("qa_agent", make_qa_agent())
-    builder.add_node("plan_agent", make_plan_agent())
+    builder.add_node(
+        "diet_agent",
+        make_worker_node(
+            "diet_agent", make_diet_agent(use_scoped_task=use_scoped_task)
+        ),
+    )
+    builder.add_node(
+        "exercise_agent",
+        make_worker_node(
+            "exercise_agent", make_exercise_agent(use_scoped_task=use_scoped_task)
+        ),
+    )
+    builder.add_node("qa_agent", make_worker_node("qa_agent", make_qa_agent()))
+    builder.add_node("plan_agent", make_worker_node("plan_agent", make_plan_agent()))
 
     # 星型接线：supervisor 是唯一入口；每个 worker 完成后回到 supervisor
     builder.add_node("turn_reset", _turn_reset)

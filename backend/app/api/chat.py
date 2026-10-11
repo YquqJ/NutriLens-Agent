@@ -89,6 +89,7 @@ _FINISH_REASON_RESPONSES = {
     "route_limit": (
         "本轮执行步骤已达到安全上限，我先停止后续调度。你可以把剩余需求拆成新消息继续处理。"
     ),
+    "worker_failed": "部分任务执行状态不确定，请先核对相关记录，再决定是否重试，以免重复提交。",
 }
 _CONTROL_FINISH_REASONS = {
     "out_of_scope",
@@ -96,7 +97,60 @@ _CONTROL_FINISH_REASONS = {
     "unclear",
     "no_action",
     "route_limit",
+    "worker_failed",
 }
+
+_WORKER_LABELS = {
+    "diet_agent": "饮食任务",
+    "exercise_agent": "运动任务",
+    "qa_agent": "知识问答任务",
+    "plan_agent": "计划任务",
+}
+
+
+def _worker_failure_response(failures: list[dict]) -> str:
+    """Turn failed-task records into a safe, actionable user-facing fallback."""
+    retryable_tasks: list[str] = []
+    uncertain_tasks: list[str] = []
+    committed_tasks: list[str] = []
+    for failure in failures:
+        task = str(failure.get("task") or "")
+        if task:
+            label = task
+        else:
+            label = (
+                _WORKER_LABELS.get(str(failure.get("agent")), "部分任务")
+            )
+        side_effect = failure.get("side_effect")
+        if side_effect == "committed":
+            committed_tasks.append(label)
+        elif side_effect != "none":
+            uncertain_tasks.append(label)
+        else:
+            retryable_tasks.append(label)
+
+    replies: list[str] = []
+    if committed_tasks:
+        replies.append(
+            "以下任务已经执行过写入步骤，请先核对记录，不要直接重复提交："
+            + "；".join(committed_tasks)
+            + "。"
+        )
+    if uncertain_tasks:
+        replies.append(
+            "以下任务的写入结果不确定，请先核对记录，再决定是否重试，以免重复提交："
+            + "；".join(uncertain_tasks)
+            + "。"
+        )
+    if retryable_tasks:
+        replies.append(
+            "以下任务暂时未能完成："
+            + "；".join(retryable_tasks)
+            + "。你可以稍后重试。"
+        )
+    if not replies:
+        return _FINISH_REASON_RESPONSES["worker_failed"]
+    return "\n".join(replies)
 
 
 def _normalize_assistant_content(content: str) -> str:
@@ -239,7 +293,10 @@ def _extract_tool_calls(update: dict) -> list[dict]:
     return list(calls.values())
 
 
-def _collect_turn_final_reports(messages: list) -> list[str]:
+def _collect_turn_final_reports(
+    messages: list,
+    discarded_ranges: list[dict] | None = None,
+) -> list[str]:
     """提取本轮每个 worker 的终态汇报，供多领域请求合并展示。
 
     同一轮可能按“饮食 → 运动”接力执行。messages 是 append-only 的，若出站层
@@ -252,10 +309,25 @@ def _collect_turn_final_reports(messages: list) -> list[str]:
             start = i + 1
             break
 
+    ranges = discarded_ranges or []
+
+    def is_discarded(index: int) -> bool:
+        for item in ranges:
+            try:
+                range_start = int(item.get("start", 0))
+                range_end = int(item.get("end", 0))
+            except (AttributeError, TypeError, ValueError):
+                continue
+            if range_start <= index < range_end:
+                return True
+        return False
+
     reports: list[str] = []
     tool_names: dict[str, str] = {}
     skip_next_diet_report = False
-    for message in messages[start:]:
+    for index, message in enumerate(messages[start:], start=start):
+        if is_discarded(index):
+            continue
         message_type = getattr(message, "type", None)
         if message_type == "ai":
             calls = getattr(message, "tool_calls", None) or []
@@ -498,10 +570,18 @@ def _run_graph_and_stream(
         final_state = graph.get_state(cfg).values
         phase_metrics = _current_request_metrics(usage_collector, started_at)
         metrics = merge_usage_metrics(pending_metrics, phase_metrics)
-        reports = _collect_turn_final_reports(final_state.get("messages") or [])
+        finish_reason = final_state.get("finish_reason")
+        reports = _collect_turn_final_reports(
+            final_state.get("messages") or [],
+            discarded_ranges=list(final_state.get("worker_discarded_ranges") or []),
+        )
         content = "\n\n".join(_normalize_assistant_content(report) for report in reports)
-        if not content:
-            finish_reason = final_state.get("finish_reason")
+        if finish_reason == "worker_failed":
+            failure_reply = _worker_failure_response(
+                list(final_state.get("worker_failures") or [])
+            )
+            content = f"{content}\n\n{failure_reply}" if content else failure_reply
+        elif not content:
             if finish_reason in _CONTROL_FINISH_REASONS:
                 content = _FINISH_REASON_RESPONSES.get(finish_reason, "")
             else:

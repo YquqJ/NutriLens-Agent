@@ -177,15 +177,19 @@ def make_qa_agent(callbacks: Sequence[BaseCallbackHandler] | None = None):
             available_indexes = "、".join(
                 f"[{citation['index']}]" for citation in citations
             ) or "（本轮没有可用引用编号）"
+            retry_context = state.get("worker_retry_context") or ""
             system = SystemMessage(
-                content=f"{QA_SYSTEM_PROMPT}\n\n【当前任务】{question}"
-                f"\n\n【知识库切片】\n{_context_block(results)}"
-                f"\n\n【可用引用编号】{available_indexes}"
-                f"\n这些编号是本轮唯一有效的引用编号；不能使用其他 [n]。"
-                f"\n\n【可用来源列表】"
-                + "、".join(
-                    f"[{i}]{citation_label(r)}"
-                    for i, r in enumerate(results, start=1)
+                content=(
+                    f"{QA_SYSTEM_PROMPT}\n\n【当前任务】{question}"
+                    + (f"\n\n【重试说明】{retry_context}" if retry_context else "")
+                    + f"\n\n【知识库切片】\n{_context_block(results)}"
+                    + f"\n\n【可用引用编号】{available_indexes}"
+                    + "\n这些编号是本轮唯一有效的引用编号；不能使用其他 [n]。"
+                    + "\n\n【可用来源列表】"
+                    + "、".join(
+                        f"[{i}]{citation_label(r)}"
+                        for i, r in enumerate(results, start=1)
+                    )
                 )
             )
             response = invoke_llm(gen_llm, [system] + state["messages"])

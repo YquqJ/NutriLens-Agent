@@ -218,6 +218,7 @@ export type SseEvent =
         | 'no_action'
         | 'completed'
         | 'route_limit'
+        | 'worker_failed'
         | null
       citations?: Citation[]
       duration_ms?: number

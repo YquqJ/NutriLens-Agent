@@ -96,6 +96,8 @@ def _diet_prompt(state: AgentState, *, use_scoped_task: bool = True) -> list:
         f"【当前日期】{date.today().isoformat()}（回答涉及今天/昨天/明天时以此为准，不要臆测日期）。\n\n"
         f"【当前任务】{task}"
     )
+    if state.get("worker_retry_context"):
+        system_text += f"\n\n【重试说明】{state['worker_retry_context']}"
     recognized = state.get("recognized_foods") or []
     image_url = state.get("image_url")
     image_status = state.get("image_analysis_status")

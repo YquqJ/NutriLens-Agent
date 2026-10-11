@@ -26,7 +26,7 @@ from openai import APITimeoutError
 from app.api.chat import (
     _collect_turn_final_reports,
     _extract_tool_calls,
-    _collect_turn_final_reports,
+    _worker_failure_response,
     _normalize_assistant_content,
     _run_graph_and_stream,
 )
@@ -123,6 +123,47 @@ def test_collect_turn_final_reports_keeps_each_worker_result_in_mixed_turn():
         "已记录晚餐方便面，共 760 千卡。",
         "已记录跑步 30 分钟，消耗 343 千卡。",
     ]
+
+
+def test_collect_turn_final_reports_skips_failed_worker_attempt_ranges():
+    messages = [
+        HumanMessage(content="回答问题并记录跑步"),
+        AIMessage(content="我正在查询知识库，但遇到错误。"),
+        AIMessage(content="蛋白质摄入建议：……"),
+        AIMessage(content="已记录跑步 30 分钟。"),
+    ]
+
+    reports = _collect_turn_final_reports(
+        messages,
+        discarded_ranges=[{"start": 1, "end": 3}],
+    )
+
+    assert reports == ["已记录跑步 30 分钟。"]
+
+
+@pytest.mark.parametrize("side_effect", ["unknown", "committed", None])
+def test_worker_failure_response_warns_to_verify_before_retrying(side_effect):
+    response = _worker_failure_response(
+        [
+            {
+                "agent": "exercise_agent",
+                "task": "记录跑步30分钟",
+                "side_effect": side_effect,
+            }
+        ]
+    )
+
+    assert "记录跑步30分钟" in response
+    assert "核对" in response
+    assert "重复" in response
+
+
+def test_worker_failure_without_details_uses_conservative_fallback():
+    response = _worker_failure_response([])
+
+    assert "核对" in response
+    assert "重复" in response
+    assert "稍后重试" not in response
 
 
 def test_collect_turn_final_reports_uses_confirmed_meal_from_tool_result():
@@ -460,6 +501,97 @@ def test_finish_reason_fallback_does_not_replace_streamed_worker_text(
     payload = json.loads(done.split("data: ", 1)[1])
 
     assert payload["content"] == "已完成处理"
+
+
+def test_worker_failed_finish_keeps_success_and_adds_friendly_fallback(
+    auth_headers, monkeypatch
+):
+    """复合任务部分成功时保留成功结果，并说明失败子任务。"""
+
+    class PartiallyFailedGraph:
+        def stream(self, *_args, **_kwargs):
+            yield "updates", {
+                "exercise_agent": {
+                    "messages": [AIMessage(content="已记录跑步30分钟，消耗约200千卡")]
+                }
+            }
+
+        def get_state(self, _config):
+            return SimpleNamespace(
+                values={
+                    "messages": [
+                        HumanMessage(content="记录跑步并回答蛋白质问题"),
+                        AIMessage(content="蛋白质摄入建议：半成品，不应展示。"),
+                        AIMessage(content="已记录跑步30分钟，消耗约200千卡"),
+                    ],
+                    "finish_reason": "worker_failed",
+                    "worker_discarded_ranges": [{"start": 1, "end": 2}],
+                    "worker_failures": [
+                        {
+                            "agent": "qa_agent",
+                            "task": "回答蛋白质摄入问题",
+                            "error_code": "read_tool_error",
+                            "side_effect": "none",
+                        }
+                    ],
+                }
+            )
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: PartiallyFailedGraph())
+    conversation_id = auth_headers["conversation_id"]
+    config = {
+        "configurable": {
+            "thread_id": conversation_id,
+            "user_id": auth_headers["user_id"],
+        }
+    }
+
+    frames = list(_run_graph_and_stream({}, config, conversation_id))
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+
+    assert "已记录跑步30分钟" in payload["content"]
+    assert "半成品" not in payload["content"]
+    assert "蛋白质摄入问题" in payload["content"]
+    assert payload["finish_reason"] == "worker_failed"
+
+
+def test_worker_failed_write_result_fallback_asks_user_to_verify(auth_headers, monkeypatch):
+    class FailedWriteGraph:
+        def stream(self, *_args, **_kwargs):
+            if False:
+                yield None
+
+        def get_state(self, _config):
+            return SimpleNamespace(
+                values={
+                    "messages": [HumanMessage(content="记录跑步30分钟")],
+                    "finish_reason": "worker_failed",
+                    "worker_failures": [
+                        {
+                            "agent": "exercise_agent",
+                            "task": "记录跑步30分钟",
+                            "side_effect": "unknown",
+                        }
+                    ],
+                }
+            )
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: FailedWriteGraph())
+    conversation_id = auth_headers["conversation_id"]
+    config = {
+        "configurable": {
+            "thread_id": conversation_id,
+            "user_id": auth_headers["user_id"],
+        }
+    }
+
+    frames = list(_run_graph_and_stream({}, config, conversation_id))
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+
+    assert "核对" in payload["content"]
+    assert "重复" in payload["content"]
 
 
 def test_no_task_reply_overrides_pre_worker_stream_content(auth_headers, monkeypatch):

@@ -9,7 +9,7 @@ Supervisor 路由节点 —— 多 Agent 系统的调度核心。
    交给 worker 后 worker 不需要任何对话上下文就能独立执行；
 3. hop_count 防死循环：worker 之间不允许互相踢皮球，
    路由次数 >= MAX_HOPS 强制结束（LangGraph recursion_limit 是兜底，
-   业务层主动计数更可控）。
+   业务层主动计数更可控）。MAX_HOPS 覆盖四个计划任务各一次安全重试。
 
 可测试性设计：make_supervisor_node(router=...) 的 router 可注入 ——
 单测注入桩（伪造固定决策），不依赖真实 LLM；联调时用 qwen-plus。
@@ -30,9 +30,10 @@ from app.agents.state import AgentState, NoTaskReason
 # 路由目标：四个专职 agent + 结束
 RouteTarget = Literal["diet_agent", "exercise_agent", "qa_agent", "plan_agent", "FINISH"]
 
-# 防死循环上限：一轮最多路由四个 Worker，覆盖四个领域各执行一次。
-# 这是路由次数上限，不限制单个 Worker 内部的工具调用次数。
-MAX_HOPS = 4
+# 防死循环上限：最多四个计划任务各派发一次，并各允许一次安全重试。
+# 这是 Worker 派发次数上限，不限制单个 Worker 内部的工具调用次数。
+MAX_HOPS = 8
+MAX_WORKER_RETRIES = 1
 
 AGENT_DUTIES: dict[str, str] = {
     "diet_agent": (
@@ -122,20 +123,8 @@ def make_supervisor_node(
         # 注：返回注解不能用 Command[RouteTarget] —— compile 时 LangGraph 会把
         # 注解里的字面量解析成 goto 目标白名单做校验，"FINISH" 不是图中的
         # 节点名（真正跳的是 END 常量），带了它直接 ValueError。
-        # ---- 1. 防死循环：超限强制结束 ----
         hop_count = state.get("hop_count", 0)
-        if hop_count >= MAX_HOPS:
-            return Command(
-                goto=END,
-                update={
-                    "next_agent": "FINISH",
-                    "task": "已达最大路由次数，强制结束以避免 agent 间循环",
-                    "hop_count": hop_count,
-                    "finish_reason": "route_limit",
-                },
-            )
-
-        # ---- 2. 首次进入才规划；Worker 回流只推进已持久化计划 ----
+        # ---- 1. 首次进入才规划；Worker 回流只推进已持久化计划 ----
         routing_msgs = [
             (
                 "system",
@@ -211,11 +200,68 @@ def make_supervisor_node(
             task_index = 0
             plan_initialized = True
         task_plan = task_plan or []
+        worker_failures = list(state.get("worker_failures") or [])
+        worker_outcome = state.get("worker_outcome")
+
+        # 当前任务计划游标在派发时已前移，因此最近一次 Worker 对应 task_index - 1。
+        # 只有明确无副作用的错误才允许重试；副作用未知时直接记录失败并继续计划。
+        if worker_outcome and worker_outcome.get("status") not in {
+            None,
+            "success",
+        }:
+            completed_index = task_index - 1
+            if 0 <= completed_index < len(task_plan):
+                failed_task = PlannedTask.model_validate(task_plan[completed_index])
+                retry_count = int(state.get("worker_retry_count", 0) or 0)
+                can_retry = (
+                    worker_outcome.get("status") == "retryable_error"
+                    and worker_outcome.get("retryable") is True
+                    and worker_outcome.get("side_effect") == "none"
+                    and retry_count < MAX_WORKER_RETRIES
+                    and hop_count < MAX_HOPS
+                )
+                if can_retry:
+                    return Command(
+                        goto=failed_task.next_agent,
+                        update={
+                            "next_agent": failed_task.next_agent,
+                            "task": failed_task.task,
+                            "task_index": task_index,
+                            "hop_count": hop_count + 1,
+                            "worker_outcome": None,
+                            "worker_retry_count": retry_count + 1,
+                            "worker_retry_context": (
+                                "上次执行失败：只读步骤未成功且未执行写入；请重新执行任务一次，"
+                                "仍遵守原有确认与数据安全规则。"
+                            ),
+                            "worker_message_start": len(state.get("messages") or []),
+                            "worker_message_end": len(state.get("messages") or []),
+                            "agent_trace": state.get("agent_trace", [])
+                            + [f"supervisor→{failed_task.next_agent}"],
+                        },
+                    )
+
+                worker_failures.append(
+                    {
+                        "agent": failed_task.next_agent,
+                        "task": failed_task.task,
+                        "error_code": worker_outcome.get("error_code")
+                        or "worker_error",
+                        "side_effect": worker_outcome.get("side_effect", "unknown"),
+                        "message_start": int(
+                            state.get("worker_message_start", 0) or 0
+                        ),
+                        "message_end": int(
+                            state.get("worker_message_end", 0) or 0
+                        ),
+                    }
+                )
+
         if task_index >= len(task_plan):
             if not task_plan and task_index == 0:
                 finish_reason = no_task_reason or "unclear"
             else:
-                finish_reason = "completed"
+                finish_reason = "worker_failed" if worker_failures else "completed"
             return Command(
                 goto=END,
                 update={
@@ -230,10 +276,30 @@ def make_supervisor_node(
                     "plan_initialized": plan_initialized,
                     "hop_count": hop_count,
                     "finish_reason": finish_reason,
+                    "worker_outcome": None,
+                    "worker_retry_count": 0,
+                    "worker_retry_context": "",
+                    "worker_failures": worker_failures,
                 },
             )
 
         current = PlannedTask.model_validate(task_plan[task_index])
+        # 限制本轮所有首次派发与重试的总次数，且只在确实还要派发任务时触发。
+        # 这样最后一个 Worker 返回后仍可处理其结果并正常结束。
+        if hop_count >= MAX_HOPS:
+            return Command(
+                goto=END,
+                update={
+                    "next_agent": "FINISH",
+                    "task": "已达最大路由次数，停止后续任务以避免流程循环",
+                    "hop_count": hop_count,
+                    "finish_reason": "route_limit",
+                    "worker_outcome": None,
+                    "worker_retry_count": 0,
+                    "worker_retry_context": "",
+                    "worker_failures": worker_failures,
+                },
+            )
         next_index = task_index + 1
         # ---- 3. 更新路由状态并跳转 ----
         return Command(
@@ -246,6 +312,12 @@ def make_supervisor_node(
                 "plan_initialized": plan_initialized,
                 "hop_count": hop_count + 1,
                 "finish_reason": None,
+                "worker_outcome": None,
+                "worker_retry_count": 0,
+                "worker_retry_context": "",
+                "worker_message_start": len(state.get("messages") or []),
+                "worker_message_end": len(state.get("messages") or []),
+                "worker_failures": worker_failures,
                 "plan_requested": state.get("plan_requested", False)
                 or (
                     current.next_agent == "plan_agent"
