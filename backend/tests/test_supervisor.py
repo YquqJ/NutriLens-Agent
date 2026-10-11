@@ -12,6 +12,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END
+from pydantic import ValidationError
 
 from app.agents.supervisor import (
     MAX_HOPS,
@@ -54,6 +55,7 @@ def test_routes_to_agent_with_rewritten_task():
     assert cmd.update["next_agent"] == "diet_agent"
     assert cmd.update["task"] == "记录今日午餐：牛肉面一碗"
     assert cmd.update["hop_count"] == 1
+    assert cmd.update["finish_reason"] is None
     assert cmd.update["agent_trace"] == ["supervisor→diet_agent"]
 
 
@@ -77,6 +79,7 @@ def test_hop_guard_forces_end():
     )
     assert cmd.goto == END
     assert cmd.update["next_agent"] == "FINISH"
+    assert cmd.update["finish_reason"] == "route_limit"
     # 强制结束时 hop_count 不再累加（保持原值，标识已终止）
     assert cmd.update["hop_count"] == MAX_HOPS
 
@@ -112,7 +115,8 @@ def test_plans_composite_request_once_then_dispatches_serially():
                 PlannedTask(
                     next_agent="exercise_agent", task="记录今天跑步 30 分钟"
                 ),
-            ]
+            ],
+            finish_reason=None,
         )
     )
     supervisor = make_supervisor_node(planner)
@@ -156,6 +160,39 @@ def test_plans_composite_request_once_then_dispatches_serially():
     assert planner.calls == 1
     assert finished.goto == END
     assert finished.update["next_agent"] == "FINISH"
+    assert finished.update["finish_reason"] == "completed"
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["out_of_scope", "small_talk", "unclear", "no_action"],
+)
+def test_empty_task_plan_preserves_structured_finish_reason(reason):
+    planner = _CountingPlanner(TaskPlanDecision(tasks=[], finish_reason=reason))
+    supervisor = make_supervisor_node(planner)
+
+    cmd = supervisor({"messages": [HumanMessage("随便问个无关问题")], "hop_count": 0})
+
+    assert cmd.goto == END
+    assert cmd.update["next_agent"] == "FINISH"
+    assert cmd.update["finish_reason"] == reason
+
+
+def test_empty_task_plan_with_null_reason_falls_back_to_unclear():
+    planner = _CountingPlanner(TaskPlanDecision(tasks=[], finish_reason=None))
+
+    cmd = make_supervisor_node(planner)(
+        {"messages": [HumanMessage("帮我看看这个")], "hop_count": 0}
+    )
+
+    assert cmd.goto == END
+    assert cmd.update["finish_reason"] == "unclear"
+
+
+def test_task_plan_requires_explicit_finish_reason():
+    """结构化规划结果不能省略结束原因字段。"""
+    with pytest.raises(ValidationError):
+        TaskPlanDecision(tasks=[])
 
 
 def test_merges_non_contiguous_tasks_for_same_worker_without_dropping_them():
@@ -166,7 +203,8 @@ def test_merges_non_contiguous_tasks_for_same_worker_without_dropping_them():
                 PlannedTask(next_agent="diet_agent", task="记录早餐：鸡蛋"),
                 PlannedTask(next_agent="exercise_agent", task="记录跑步 30 分钟"),
                 PlannedTask(next_agent="diet_agent", task="记录午餐：牛肉面"),
-            ]
+            ],
+            finish_reason=None,
         )
     )
     cmd = make_supervisor_node(planner)(
@@ -186,12 +224,14 @@ def test_turn_reset_clears_previous_task_plan():
             "task_index": 1,
             "plan_initialized": True,
             "hop_count": 4,
+            "finish_reason": "out_of_scope",
         }
     )
     assert reset["task_plan"] is None
     assert reset["task_index"] == 0
     assert reset["plan_initialized"] is False
     assert reset["hop_count"] == 0
+    assert reset["finish_reason"] is None
 
 
 def test_agent_trace_accumulates():

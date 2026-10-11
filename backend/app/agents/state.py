@@ -28,6 +28,15 @@ Confidence = Literal["db_exact", "db_fuzzy", "llm_estimate"]
 # 图片分析的终态。recognized_foods=None 本身无法区分“没有食物”和“识图失败”，
 # 因此必须由状态字段保留前置感知节点的结论，供路由和 worker 做不同处理。
 ImageAnalysisStatus = Literal["no_image", "recognized", "no_food_detected", "failed"]
+NoTaskReason = Literal["out_of_scope", "small_talk", "unclear", "no_action"]
+FinishReason = Literal[
+    "out_of_scope",
+    "small_talk",
+    "unclear",
+    "no_action",
+    "completed",
+    "route_limit",
+]
 
 
 class DietItemDraft(TypedDict):
@@ -66,6 +75,7 @@ class AgentState(TypedDict):
     plan_initialized: bool  # 本轮是否已经生成过任务计划
     hop_count: int  # 已路由次数，>=4 后强制结束
     plan_requested: bool  # 本轮是否明确生成计划（供 SSE 出站层归档最终交付）
+    finish_reason: Optional[FinishReason]  # 本轮结束原因；新轮次重置
 
     # ---- HITL：待确认的饮食草稿 ----
     # interrupt() 挂起前由工具写入 state，恢复后由工具消费

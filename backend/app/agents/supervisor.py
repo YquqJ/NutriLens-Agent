@@ -25,7 +25,7 @@ from langgraph.types import Command
 from pydantic import BaseModel, Field
 
 from app.agents.llm import get_text_llm
-from app.agents.state import AgentState
+from app.agents.state import AgentState, NoTaskReason
 
 # 路由目标：四个专职 agent + 结束
 RouteTarget = Literal["diet_agent", "exercise_agent", "qa_agent", "plan_agent", "FINISH"]
@@ -78,6 +78,13 @@ class TaskPlanDecision(BaseModel):
     """Supervisor 首次进入时生成的有序任务计划。"""
 
     tasks: list[PlannedTask] = Field(default_factory=list, max_length=4)
+    finish_reason: Optional[NoTaskReason] = Field(
+        description=(
+            "tasks 非空时必须为 null；tasks 为空时必须说明原因：out_of_scope（超出健康管理范围）、"
+            "small_talk（问候或感谢）、unclear（意图不清，需要用户澄清）、"
+            "no_action（无需执行的新操作）"
+        )
+    )
 
 
 SUPERVISOR_SYSTEM_PROMPT = """你是健康管理系统的调度员（supervisor）。你的唯一职责是规划和路由，不要自己回答问题。
@@ -86,7 +93,7 @@ SUPERVISOR_SYSTEM_PROMPT = """你是健康管理系统的调度员（supervisor�
 
 可用执行者：
 {duties}
-如果用户没有可执行任务，返回空 tasks。
+如果用户没有可执行任务，返回空 tasks，并根据原因填写 finish_reason；有任务时 finish_reason 必须为 null。
 
 判断规则：
 1. 依据完整对话历史一次性拆出有序 tasks；每个 task 只属于一个执行者。
@@ -94,7 +101,8 @@ SUPERVISOR_SYSTEM_PROMPT = """你是健康管理系统的调度员（supervisor�
 2. tasks 按推荐执行顺序排列；最多返回四个 task。不要把其他领域动作写进单个 task；
 3. task 字段把用户请求改写成独立指令：补全指代消解（他/它/昨天那顿→具体内容）；
    "今天"一律消解为 {today}，"昨天/明天"据此前后推算；未提及日期默认今天；
-4. 只把确实需要执行的领域放入 tasks；寒暄或已经完成的请求返回空 tasks。"""
+4. 只把确实需要执行的领域放入 tasks；超出健康管理范围、寒暄、意图不清、无需新操作时返回空 tasks，
+   并分别填写 out_of_scope、small_talk、unclear、no_action。禁止把无关任务硬塞给某个 worker。"""
 
 
 def make_supervisor_node(
@@ -123,6 +131,7 @@ def make_supervisor_node(
                     "next_agent": "FINISH",
                     "task": "已达最大路由次数，强制结束以避免 agent 间循环",
                     "hop_count": hop_count,
+                    "finish_reason": "route_limit",
                 },
             )
 
@@ -165,6 +174,7 @@ def make_supervisor_node(
         task_plan = state.get("task_plan")
         task_index = int(state.get("task_index", 0) or 0)
         plan_initialized = bool(state.get("plan_initialized", False))
+        no_task_reason: Optional[NoTaskReason] = None
         if not plan_initialized:
             routing_msgs.extend(state["messages"])
             raw_decision = router.invoke(routing_msgs)
@@ -179,8 +189,10 @@ def make_supervisor_node(
                 planned = [
                     PlannedTask(next_agent=raw_decision.next_agent, task=raw_decision.task)
                 ] if raw_decision.next_agent != "FINISH" else []
+                no_task_reason = "unclear" if not planned else None
             else:
                 planned = list(getattr(raw_decision, "tasks", []) or [])
+                no_task_reason = getattr(raw_decision, "finish_reason", None)
             # 同一领域的多个子请求合并，避免同一个 Worker 被重复派发。
             # 按首次出现顺序保留领域顺序；即使同一 agent 的任务不连续，
             # 也必须合并而不能静默丢弃后续任务。
@@ -200,15 +212,24 @@ def make_supervisor_node(
             plan_initialized = True
         task_plan = task_plan or []
         if task_index >= len(task_plan):
+            if not task_plan and task_index == 0:
+                finish_reason = no_task_reason or "unclear"
+            else:
+                finish_reason = "completed"
             return Command(
                 goto=END,
                 update={
                     "next_agent": "FINISH",
-                    "task": "所有计划任务已完成",
+                    "task": (
+                        "没有可执行的健康管理任务"
+                        if not task_plan
+                        else "所有计划任务已完成"
+                    ),
                     "task_plan": task_plan,
                     "task_index": task_index,
                     "plan_initialized": plan_initialized,
                     "hop_count": hop_count,
+                    "finish_reason": finish_reason,
                 },
             )
 
@@ -224,6 +245,7 @@ def make_supervisor_node(
                 "task_index": next_index,
                 "plan_initialized": plan_initialized,
                 "hop_count": hop_count + 1,
+                "finish_reason": None,
                 "plan_requested": state.get("plan_requested", False)
                 or (
                     current.next_agent == "plan_agent"

@@ -70,6 +70,34 @@ _TITLE_SYSTEM = (
 )
 _TITLE_FALLBACK_LEN = 12
 
+_FINISH_REASON_RESPONSES = {
+    "out_of_scope": (
+        "抱歉，这个请求不在我的健康管理范围内。我目前可以帮你处理饮食记录与营养查询、"
+        "运动记录与消耗查询、营养与健身知识问答，以及个性化计划。"
+    ),
+    "small_talk": (
+        "你好！我可以帮你记录或查询饮食和运动、回答营养健身问题，"
+        "或者生成个性化计划。"
+    ),
+    "unclear": (
+        "我还不确定你想完成什么。你可以具体说说饮食、运动、营养问答或计划方面的需求。"
+    ),
+    "no_action": (
+        "我没有发现需要执行的新操作。如果你想继续，可以告诉我下一步要记录、查询或生成什么。"
+    ),
+    "completed": "本轮任务已处理完成。",
+    "route_limit": (
+        "本轮执行步骤已达到安全上限，我先停止后续调度。你可以把剩余需求拆成新消息继续处理。"
+    ),
+}
+_CONTROL_FINISH_REASONS = {
+    "out_of_scope",
+    "small_talk",
+    "unclear",
+    "no_action",
+    "route_limit",
+}
+
 
 def _normalize_assistant_content(content: str) -> str:
     """把误泄漏到助手正文的图片识别 JSON 转成用户可读摘要。
@@ -472,7 +500,14 @@ def _run_graph_and_stream(
         metrics = merge_usage_metrics(pending_metrics, phase_metrics)
         reports = _collect_turn_final_reports(final_state.get("messages") or [])
         content = "\n\n".join(_normalize_assistant_content(report) for report in reports)
-        content = content or _normalize_assistant_content("".join(token_buffer))
+        if not content:
+            finish_reason = final_state.get("finish_reason")
+            if finish_reason in _CONTROL_FINISH_REASONS:
+                content = _FINISH_REASON_RESPONSES.get(finish_reason, "")
+            else:
+                content = _normalize_assistant_content("".join(token_buffer))
+                if not content:
+                    content = _FINISH_REASON_RESPONSES.get(finish_reason, "")
 
         if content:
             db = SessionLocal()
@@ -511,6 +546,7 @@ def _run_graph_and_stream(
                 "interrupted": False,
                 "agent_name": current_agent,
                 "persisted": bool(content),
+                "finish_reason": final_state.get("finish_reason"),
                 # 权威终稿：流式 token 可能混入 react agent 的工具间叙述（"现在我将…"），
                 # 前端收到 done 后用 content 替换累积的 token 文本，保证最终消息干净
                 "content": content,

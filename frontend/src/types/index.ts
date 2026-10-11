@@ -211,6 +211,14 @@ export type SseEvent =
       agent_name?: string
       persisted?: boolean
       content?: string
+      finish_reason?:
+        | 'out_of_scope'
+        | 'small_talk'
+        | 'unclear'
+        | 'no_action'
+        | 'completed'
+        | 'route_limit'
+        | null
       citations?: Citation[]
       duration_ms?: number
       input_tokens?: number | null

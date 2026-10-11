@@ -60,6 +60,7 @@ def _turn_reset(state: AgentState) -> dict:
         "task_index": 0,
         "plan_initialized": False,
         "plan_requested": False,
+        "finish_reason": None,
         "agent_trace": [],
         "tool_calls": [],
         "citations": [],

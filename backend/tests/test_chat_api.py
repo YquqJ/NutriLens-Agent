@@ -381,6 +381,114 @@ def test_chat_stream_done_aggregates_actual_model_usage(monkeypatch):
     assert payload["total_tokens"] == 150
 
 
+def test_out_of_scope_finish_reason_returns_and_persists_friendly_reply(
+    auth_headers, monkeypatch
+):
+    """没有 Worker 回复时，结构化越界原因也必须成为用户可见的最终消息。"""
+
+    class EmptyGraph:
+        def stream(self, *_args, **_kwargs):
+            return iter(())
+
+        def get_state(self, _config):
+            return SimpleNamespace(
+                values={
+                    "messages": [HumanMessage(content="帮我写一段 Python")],
+                    "finish_reason": "out_of_scope",
+                }
+            )
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: EmptyGraph())
+    conversation_id = auth_headers["conversation_id"]
+    config = {
+        "configurable": {
+            "thread_id": conversation_id,
+            "user_id": auth_headers["user_id"],
+        }
+    }
+
+    frames = list(_run_graph_and_stream({}, config, conversation_id))
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+    expected = (
+        "抱歉，这个请求不在我的健康管理范围内。我目前可以帮你处理饮食记录与营养查询、"
+        "运动记录与消耗查询、营养与健身知识问答，以及个性化计划。"
+    )
+
+    assert payload["content"] == expected
+    assert payload["persisted"] is True
+    assert payload["finish_reason"] == "out_of_scope"
+
+    db = SessionLocal()
+    try:
+        assistant = (
+            db.query(Message)
+            .filter(
+                Message.conversation_id == conversation_id,
+                Message.role == "assistant",
+            )
+            .one()
+        )
+        assert assistant.content == expected
+        assert assistant.agent_name is None
+    finally:
+        db.close()
+
+
+def test_finish_reason_fallback_does_not_replace_streamed_worker_text(
+    auth_headers, monkeypatch
+):
+    """有流式正文时应保留正文，结束原因只在没有任何回复时兜底。"""
+
+    class TokenOnlyGraph:
+        def stream(self, *_args, **_kwargs):
+            yield "messages", (AIMessageChunk(content="已完成处理"), {})
+
+        def get_state(self, _config):
+            return SimpleNamespace(values={"messages": [], "finish_reason": "completed"})
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: TokenOnlyGraph())
+    conversation_id = auth_headers["conversation_id"]
+    config = {
+        "configurable": {
+            "thread_id": conversation_id,
+            "user_id": auth_headers["user_id"],
+        }
+    }
+    frames = list(_run_graph_and_stream({}, config, conversation_id))
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+
+    assert payload["content"] == "已完成处理"
+
+
+def test_no_task_reply_overrides_pre_worker_stream_content(auth_headers, monkeypatch):
+    """越界时前置图片节点的流式片段不能遮住范围提示。"""
+
+    class PreWorkerTokenGraph:
+        def stream(self, *_args, **_kwargs):
+            yield "messages", (AIMessageChunk(content='{"items":[]}'), {})
+
+        def get_state(self, _config):
+            return SimpleNamespace(
+                values={"messages": [], "finish_reason": "out_of_scope"}
+            )
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: PreWorkerTokenGraph())
+    conversation_id = auth_headers["conversation_id"]
+    config = {
+        "configurable": {
+            "thread_id": conversation_id,
+            "user_id": auth_headers["user_id"],
+        }
+    }
+    frames = list(_run_graph_and_stream({}, config, conversation_id))
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+
+    assert payload["content"].startswith("抱歉，这个请求不在我的健康管理范围内。")
+
+
 def test_image_interrupt_done_contains_normalized_content_without_token_leak(monkeypatch):
     """带图识别在 interrupt 前不能把内部 JSON 作为 token 泄漏给前端。"""
     raw = json.dumps(
