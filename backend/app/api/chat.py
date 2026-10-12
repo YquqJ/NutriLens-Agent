@@ -90,6 +90,7 @@ _FINISH_REASON_RESPONSES = {
         "本轮执行步骤已达到安全上限，我先停止后续调度。你可以把剩余需求拆成新消息继续处理。"
     ),
     "worker_failed": "部分任务执行状态不确定，请先核对相关记录，再决定是否重试，以免重复提交。",
+    "routing_mismatch": "我暂时无法可靠判断该请求应由哪个功能处理，请换一种方式说明你的需求。",
 }
 _CONTROL_FINISH_REASONS = {
     "out_of_scope",
@@ -98,6 +99,7 @@ _CONTROL_FINISH_REASONS = {
     "no_action",
     "route_limit",
     "worker_failed",
+    "routing_mismatch",
 }
 
 _WORKER_LABELS = {

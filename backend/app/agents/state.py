@@ -32,6 +32,7 @@ NoTaskReason = Literal["out_of_scope", "small_talk", "unclear", "no_action"]
 WorkerStatus = Literal[
     "success",
     "retryable_error",
+    "routing_mismatch",
     "quality_insufficient",
     "needs_user_input",
     "fatal_error",
@@ -54,7 +55,16 @@ FinishReason = Literal[
     "completed",
     "route_limit",
     "worker_failed",
+    "routing_mismatch",
 ]
+RoutingMismatch = TypedDict(
+    "RoutingMismatch",
+    {
+        "attempted_agent": str,
+        "suggested_agent": Optional[str],
+        "reason": str,
+    },
+)
 
 
 class DietItemDraft(TypedDict):
@@ -101,6 +111,8 @@ class AgentState(TypedDict):
     worker_message_end: int  # 最近一次 Worker 输出在 messages 中的终点
     worker_discarded_ranges: list[dict]  # 最终回复提取时应跳过的失败尝试区间
     worker_failures: list[dict]  # 已跳过的失败子任务，供最终兜底和观测
+    routing_mismatch: Optional[RoutingMismatch]  # Worker 准入审核拒绝的路由信息
+    routing_mismatch_count: int  # 本轮已发生的退回次数；最多允许一次重规划
 
     # ---- HITL：待确认的饮食草稿 ----
     # interrupt() 挂起前由工具写入 state，恢复后由工具消费

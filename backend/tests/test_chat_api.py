@@ -25,6 +25,8 @@ from langchain_core.outputs import ChatGeneration, LLMResult
 from openai import APITimeoutError
 
 from app.api.chat import (
+    _CONTROL_FINISH_REASONS,
+    _FINISH_REASON_RESPONSES,
     _collect_turn_agent_names,
     _collect_turn_final_reports,
     _extract_tool_calls,
@@ -40,6 +42,12 @@ from app.db.session import SessionLocal
 from app.main import app
 
 client = TestClient(app)
+
+
+def test_routing_mismatch_finish_has_a_clarification_response():
+    """防御机制耗尽时，前端必须收到可行动的澄清提示。"""
+    assert "routing_mismatch" in _CONTROL_FINISH_REASONS
+    assert _FINISH_REASON_RESPONSES["routing_mismatch"]
 
 
 def test_collect_turn_agent_names_keeps_unique_workers_in_order():

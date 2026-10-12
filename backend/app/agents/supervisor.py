@@ -283,6 +283,91 @@ def make_supervisor_node(
         worker_failures = list(state.get("worker_failures") or [])
         worker_outcome = state.get("worker_outcome")
 
+        if worker_outcome and worker_outcome.get("status") == "routing_mismatch":
+            mismatch_count = int(state.get("routing_mismatch_count", 0) or 0)
+            mismatch = state.get("routing_mismatch") or {}
+            if mismatch_count >= 1:
+                return Command(
+                    goto=END,
+                    update={
+                        "next_agent": "FINISH",
+                        "task": "任务多次路由不匹配，请用户澄清需求",
+                        "finish_reason": "routing_mismatch",
+                        "worker_outcome": None,
+                        "routing_mismatch": None,
+                        "routing_mismatch_count": mismatch_count,
+                        "worker_retry_count": 0,
+                        "worker_retry_context": "",
+                        "worker_failures": worker_failures,
+                    },
+                )
+
+            reroute_messages = [
+                *routing_msgs,
+                *_routing_conversation(state.get("messages") or []),
+                (
+                    "system",
+                    "【Worker 退回后重规划】上一候选 Worker 在执行前拒绝了任务，未调用任何工具。"
+                    "请仅依据当前用户原话重新规划，不要沿用之前的 task；退回信息只作校验参考："
+                    f"候选 Worker={mismatch.get('attempted_agent')}; "
+                    f"建议={mismatch.get('suggested_agent')}; 原因={mismatch.get('reason')}。",
+                ),
+            ]
+            reviewed_decision = router.invoke(reroute_messages)
+            if isinstance(reviewed_decision, RouteDecision):
+                replanned = (
+                    [
+                        PlannedTask(
+                            next_agent=reviewed_decision.next_agent,
+                            task=reviewed_decision.task,
+                        )
+                    ]
+                    if reviewed_decision.next_agent != "FINISH"
+                    else []
+                )
+            else:
+                replanned = list(getattr(reviewed_decision, "tasks", []) or [])
+
+            if not replanned:
+                return Command(
+                    goto=END,
+                    update={
+                        "next_agent": "FINISH",
+                        "task": "路由不匹配且无法可靠重规划，请用户澄清需求",
+                        "finish_reason": "routing_mismatch",
+                        "worker_outcome": None,
+                        "routing_mismatch": None,
+                        "routing_mismatch_count": mismatch_count + 1,
+                        "worker_retry_count": 0,
+                        "worker_retry_context": "",
+                        "worker_failures": worker_failures,
+                    },
+                )
+
+            next_task = replanned[0]
+            return Command(
+                goto=next_task.next_agent,
+                update={
+                    "next_agent": next_task.next_agent,
+                    "task": next_task.task,
+                    "task_plan": [next_task.model_dump()],
+                    "task_index": 1,
+                    "plan_initialized": True,
+                    "hop_count": hop_count + 1,
+                    "finish_reason": None,
+                    "worker_outcome": None,
+                    "routing_mismatch": None,
+                    "routing_mismatch_count": mismatch_count + 1,
+                    "worker_retry_count": 0,
+                    "worker_retry_context": "",
+                    "worker_message_start": len(state.get("messages") or []),
+                    "worker_message_end": len(state.get("messages") or []),
+                    "worker_failures": worker_failures,
+                    "agent_trace": state.get("agent_trace", [])
+                    + [f"supervisor→{next_task.next_agent}"],
+                },
+            )
+
         # 当前任务计划游标在派发时已前移，因此最近一次 Worker 对应 task_index - 1。
         # 只有明确无副作用的错误才允许重试；副作用未知时直接记录失败并继续计划。
         if worker_outcome and worker_outcome.get("status") not in {

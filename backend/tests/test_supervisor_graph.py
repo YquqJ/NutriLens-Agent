@@ -122,6 +122,45 @@ def test_worker_adapter_supports_callable_qa_node_and_tracks_new_messages():
     assert result["worker_discarded_ranges"] == [{"start": 1, "end": 3}]
 
 
+def test_worker_rejects_mismatched_route_before_invoking_business_worker():
+    """Worker 准入审核拒绝时，业务 Worker 和其工具均不得执行。"""
+    calls = []
+
+    class RejectingGuard:
+        def invoke(self, _messages):
+            return {
+                "approved": False,
+                "reason": "BMI 概念解释应由知识问答处理",
+                "suggested_agent": "qa_agent",
+            }
+
+    def mutating_worker(_state):
+        calls.append(True)
+        return {"messages": [AIMessage(content="不应执行")]}
+
+    result = make_worker_node(
+        "diet_agent", mutating_worker, admission_guard=RejectingGuard()
+    )(
+        {
+            "messages": [HumanMessage("BMI是什么")],
+            "task": "记录今天早餐",
+        }
+    )
+
+    assert calls == []
+    assert result["worker_outcome"] == {
+        "status": "routing_mismatch",
+        "error_code": "routing_mismatch",
+        "retryable": False,
+        "side_effect": "none",
+    }
+    assert result["routing_mismatch"] == {
+        "attempted_agent": "diet_agent",
+        "suggested_agent": "qa_agent",
+        "reason": "BMI 概念解释应由知识问答处理",
+    }
+
+
 def test_nested_worker_interrupt_propagates_and_resumes():
     class State(TypedDict):
         messages: list

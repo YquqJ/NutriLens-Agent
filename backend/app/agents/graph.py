@@ -39,6 +39,7 @@ from app.agents.qa_agent import make_qa_agent
 from app.agents.state import AgentState
 from app.agents.supervisor import make_supervisor_node
 from app.agents.worker_result import make_worker_node
+from app.agents.worker_guard import make_worker_admission_guard
 from app.core.config import settings
 
 # 四个专职 worker（图中的固定节点名，supervisor 的 Command.goto 按名跳转）
@@ -69,6 +70,8 @@ def _turn_reset(state: AgentState) -> dict:
         "worker_message_end": 0,
         "worker_discarded_ranges": [],
         "worker_failures": [],
+        "routing_mismatch": None,
+        "routing_mismatch_count": 0,
         "agent_trace": [],
         "tool_calls": [],
         "citations": [],
@@ -95,23 +98,24 @@ def build_graph(
     if worker_context_mode not in {"scoped_task", "raw_message"}:
         raise ValueError(f"不支持的 worker_context_mode：{worker_context_mode}")
     use_scoped_task = worker_context_mode == "scoped_task"
+    admission_guard = make_worker_admission_guard()
     builder = StateGraph(AgentState)
 
     builder.add_node("supervisor", supervisor_node or make_supervisor_node())
     builder.add_node(
         "diet_agent",
         make_worker_node(
-            "diet_agent", make_diet_agent(use_scoped_task=use_scoped_task)
+            "diet_agent", make_diet_agent(use_scoped_task=use_scoped_task), admission_guard
         ),
     )
     builder.add_node(
         "exercise_agent",
         make_worker_node(
-            "exercise_agent", make_exercise_agent(use_scoped_task=use_scoped_task)
+            "exercise_agent", make_exercise_agent(use_scoped_task=use_scoped_task), admission_guard
         ),
     )
-    builder.add_node("qa_agent", make_worker_node("qa_agent", make_qa_agent()))
-    builder.add_node("plan_agent", make_worker_node("plan_agent", make_plan_agent()))
+    builder.add_node("qa_agent", make_worker_node("qa_agent", make_qa_agent(), admission_guard))
+    builder.add_node("plan_agent", make_worker_node("plan_agent", make_plan_agent(), admission_guard))
 
     # 星型接线：supervisor 是唯一入口；每个 worker 完成后回到 supervisor
     builder.add_node("turn_reset", _turn_reset)

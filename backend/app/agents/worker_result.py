@@ -3,11 +3,12 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
 
 from app.agents.state import WorkerOutcome
+from app.agents.worker_guard import WORKER_ADMISSION_PROMPT, WorkerAdmissionDecision
 
 READ_ONLY_TOOL_NAMES = frozenset(
     {
@@ -95,7 +96,16 @@ def classify_worker_result(
     }
 
 
-def make_worker_node(agent_name: str, worker: Any):
+def _latest_user_message(messages: Sequence[Any]) -> str:
+    for message in reversed(messages):
+        if isinstance(message, HumanMessage) and message.content:
+            return message.content if isinstance(message.content, str) else str(message.content)
+    return ""
+
+
+def make_worker_node(
+    agent_name: str, worker: Any, admission_guard: Any | None = None
+):
     """Wrap a compiled worker subgraph while allowing LangGraph interrupts through."""
 
     def invoke_worker(
@@ -103,6 +113,66 @@ def make_worker_node(agent_name: str, worker: Any):
     ) -> dict[str, Any]:
         messages = state.get("messages") or []
         message_start = len(messages)
+        if admission_guard is not None:
+            try:
+                decision = admission_guard.invoke(
+                    [
+                        ("system", WORKER_ADMISSION_PROMPT),
+                        (
+                            "user",
+                            f"当前用户原话：{_latest_user_message(messages)}\n"
+                            f"候选 Worker：{agent_name}\n"
+                            f"候选任务：{state.get('task') or ''}",
+                        ),
+                    ]
+                )
+                approved = (
+                    decision.approved
+                    if isinstance(decision, WorkerAdmissionDecision)
+                    else bool(decision.get("approved"))
+                )
+                if not approved:
+                    suggested_agent = (
+                        decision.suggested_agent
+                        if isinstance(decision, WorkerAdmissionDecision)
+                        else decision.get("suggested_agent")
+                    )
+                    reason = (
+                        decision.reason
+                        if isinstance(decision, WorkerAdmissionDecision)
+                        else str(decision.get("reason") or "任务与候选 Worker 职责不匹配")
+                    )
+                    return {
+                        "worker_outcome": {
+                            "status": "routing_mismatch",
+                            "error_code": "routing_mismatch",
+                            "retryable": False,
+                            "side_effect": "none",
+                        },
+                        "routing_mismatch": {
+                            "attempted_agent": agent_name,
+                            "suggested_agent": suggested_agent,
+                            "reason": reason,
+                        },
+                        "worker_message_start": message_start,
+                        "worker_message_end": message_start,
+                    }
+            except Exception:
+                return {
+                    "worker_outcome": {
+                        "status": "routing_mismatch",
+                        "error_code": "admission_guard_error",
+                        "retryable": False,
+                        "side_effect": "none",
+                    },
+                    "routing_mismatch": {
+                        "attempted_agent": agent_name,
+                        "suggested_agent": None,
+                        "reason": "Worker 准入审核不可用，已阻止执行以避免错误操作",
+                    },
+                    "worker_message_start": message_start,
+                    "worker_message_end": message_start,
+                }
         try:
             # React workers are compiled subgraphs with ``invoke``; QA is a
             # regular node function. Normalize both execution shapes here so

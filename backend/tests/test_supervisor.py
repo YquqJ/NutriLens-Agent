@@ -209,6 +209,81 @@ def test_does_not_retry_failure_with_uncertain_side_effect():
     assert len(cmd.update["worker_failures"]) == 1
 
 
+def test_replans_once_after_worker_rejects_mismatched_route():
+    """Worker 拒绝错误任务后，Supervisor 只能重规划一次并改派其他 Worker。"""
+    planner = _SequentialPlanner(
+        TaskPlanDecision(
+            tasks=[PlannedTask(next_agent="qa_agent", task="解释 BMI")],
+            finish_reason=None,
+        )
+    )
+    supervisor = make_supervisor_node(planner)
+
+    cmd = supervisor(
+        {
+            "messages": [HumanMessage("BMI是什么")],
+            "task_plan": [{"next_agent": "diet_agent", "task": "记录早餐"}],
+            "task_index": 1,
+            "plan_initialized": True,
+            "hop_count": 1,
+            "worker_outcome": {
+                "status": "routing_mismatch",
+                "error_code": "routing_mismatch",
+                "retryable": False,
+                "side_effect": "none",
+            },
+            "routing_mismatch": {
+                "attempted_agent": "diet_agent",
+                "suggested_agent": "qa_agent",
+                "reason": "BMI 概念解释不属于饮食记录",
+            },
+            "routing_mismatch_count": 0,
+            "worker_failures": [],
+        }
+    )
+
+    assert planner.calls == 1
+    assert cmd.goto == "qa_agent"
+    assert cmd.update["task_plan"] == [{"next_agent": "qa_agent", "task": "解释 BMI"}]
+    assert cmd.update["task_index"] == 1
+    assert cmd.update["routing_mismatch_count"] == 1
+    assert cmd.update["worker_outcome"] is None
+
+
+def test_stops_for_clarification_after_second_worker_route_rejection():
+    """重规划后仍被 Worker 拒绝时必须结束，禁止继续跳转。"""
+    supervisor = make_supervisor_node(
+        _CountingPlanner(TaskPlanDecision(tasks=[], finish_reason="unclear"))
+    )
+
+    cmd = supervisor(
+        {
+            "messages": [HumanMessage("BMI是什么")],
+            "task_plan": [{"next_agent": "qa_agent", "task": "解释 BMI"}],
+            "task_index": 1,
+            "plan_initialized": True,
+            "hop_count": 2,
+            "worker_outcome": {
+                "status": "routing_mismatch",
+                "error_code": "routing_mismatch",
+                "retryable": False,
+                "side_effect": "none",
+            },
+            "routing_mismatch": {
+                "attempted_agent": "qa_agent",
+                "suggested_agent": "diet_agent",
+                "reason": "任务仍不匹配",
+            },
+            "routing_mismatch_count": 1,
+            "worker_failures": [],
+        }
+    )
+
+    assert cmd.goto == END
+    assert cmd.update["finish_reason"] == "routing_mismatch"
+    assert cmd.update["routing_mismatch_count"] == 1
+
+
 def test_worker_result_classifies_only_read_only_tool_errors_as_retryable():
     from langchain_core.messages import ToolMessage
 
