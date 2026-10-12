@@ -13,6 +13,7 @@ SSE 解析：TestClient 流式响应按行读，按 W3C 格式配对 event/data 
 
 import json
 import uuid
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import httpx
@@ -24,12 +25,14 @@ from langchain_core.outputs import ChatGeneration, LLMResult
 from openai import APITimeoutError
 
 from app.api.chat import (
+    _collect_turn_agent_names,
     _collect_turn_final_reports,
     _extract_tool_calls,
     _worker_failure_response,
     _normalize_assistant_content,
     _run_graph_and_stream,
 )
+from app.api.conversations import _serialize_message
 from app.core.config import settings
 from app.core.security import create_access_token, hash_password
 from app.db.models import Conversation, DietRecord, Message, User
@@ -37,6 +40,48 @@ from app.db.session import SessionLocal
 from app.main import app
 
 client = TestClient(app)
+
+
+def test_collect_turn_agent_names_keeps_unique_workers_in_order():
+    assert _collect_turn_agent_names(
+        [
+            "supervisor→diet_agent",
+            "supervisor→exercise_agent",
+            "supervisor→diet_agent",
+            "supervisor→FINISH",
+        ]
+    ) == ["diet_agent", "exercise_agent"]
+
+
+def test_serialize_message_returns_agent_names_and_falls_back_for_legacy_rows():
+    created_at = datetime.now(timezone.utc)
+    shared = {
+        "id": 1,
+        "role": "assistant",
+        "content": "已记录。",
+        "image_url": None,
+        "tool_trace": None,
+        "citations": None,
+        "duration_ms": None,
+        "input_tokens": None,
+        "output_tokens": None,
+        "total_tokens": None,
+        "created_at": created_at,
+    }
+
+    composite = _serialize_message(
+        SimpleNamespace(
+            **shared,
+            agent_name="exercise_agent",
+            agent_names='["diet_agent", "exercise_agent"]',
+        )
+    )
+    legacy = _serialize_message(
+        SimpleNamespace(**shared, agent_name="diet_agent", agent_names=None)
+    )
+
+    assert composite.agent_names == ["diet_agent", "exercise_agent"]
+    assert legacy.agent_names == ["diet_agent"]
 
 
 @pytest.fixture
@@ -524,6 +569,10 @@ def test_worker_failed_finish_keeps_success_and_adds_friendly_fallback(
                         AIMessage(content="蛋白质摄入建议：半成品，不应展示。"),
                         AIMessage(content="已记录跑步30分钟，消耗约200千卡"),
                     ],
+                    "agent_trace": [
+                        "supervisor→diet_agent",
+                        "supervisor→exercise_agent",
+                    ],
                     "finish_reason": "worker_failed",
                     "worker_discarded_ranges": [{"start": 1, "end": 2}],
                     "worker_failures": [
@@ -554,6 +603,21 @@ def test_worker_failed_finish_keeps_success_and_adds_friendly_fallback(
     assert "半成品" not in payload["content"]
     assert "蛋白质摄入问题" in payload["content"]
     assert payload["finish_reason"] == "worker_failed"
+    assert payload["agent_names"] == ["diet_agent", "exercise_agent"]
+
+    db = SessionLocal()
+    try:
+        assistant = (
+            db.query(Message)
+            .filter(
+                Message.conversation_id == conversation_id,
+                Message.role == "assistant",
+            )
+            .one()
+        )
+        assert json.loads(assistant.agent_names) == ["diet_agent", "exercise_agent"]
+    finally:
+        db.close()
 
 
 def test_worker_failed_write_result_fallback_asks_user_to_verify(auth_headers, monkeypatch):

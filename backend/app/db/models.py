@@ -137,7 +137,8 @@ class Conversation(Base):
 class Message(Base):
     """
     一条对话消息。role: user / assistant / tool_trace。
-    - agent_name：产出该消息的 agent（前端渲染 agent 徽章）
+    - agent_name：产出该消息的最后一个 agent（旧字段兼容）
+    - agent_names：本轮参与的 agent 列表（JSON 字符串，前端渲染多个徽章）
     - tool_trace：本轮工具调用记录（JSON 字符串，前端折叠面板渲染）
     """
 
@@ -151,6 +152,7 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     image_url: Mapped[str | None] = mapped_column(Text)  # 该消息携带的食物图片（OSS URL）
     agent_name: Mapped[str | None] = mapped_column(String(32))
+    agent_names: Mapped[str | None] = mapped_column(Text)
     tool_trace: Mapped[str | None] = mapped_column(Text)  # JSON 数组：[{name, args, result}]
     citations: Mapped[str | None] = mapped_column(Text)  # JSON 数组：QA 证据定位与切片正文
     duration_ms: Mapped[int | None] = mapped_column(Integer)

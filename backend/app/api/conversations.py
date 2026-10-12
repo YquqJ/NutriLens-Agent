@@ -1,5 +1,6 @@
 """会话管理路由：列表 / 新建 / 历史消息 / 删除。"""
 
+import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -30,6 +31,7 @@ class MessageOut(BaseModel):
     content: str
     image_url: str | None
     agent_name: str | None
+    agent_names: list[str]
     tool_trace: str | None
     citations: str | None
     duration_ms: int | None
@@ -48,12 +50,23 @@ class MessagePageOut(BaseModel):
 
 
 def _serialize_message(message: Message) -> MessageOut:
+    try:
+        agent_names = json.loads(message.agent_names) if message.agent_names else []
+    except (TypeError, json.JSONDecodeError):
+        agent_names = []
+    if not isinstance(agent_names, list):
+        agent_names = []
+    agent_names = [name for name in agent_names if isinstance(name, str) and name]
+    if message.agent_name and message.agent_name not in agent_names:
+        agent_names.append(message.agent_name)
+
     return MessageOut(
         id=message.id,
         role=message.role,
         content=message.content,
         image_url=message.image_url,
         agent_name=message.agent_name,
+        agent_names=agent_names,
         tool_trace=message.tool_trace,
         citations=message.citations,
         duration_ms=message.duration_ms,

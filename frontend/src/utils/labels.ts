@@ -39,6 +39,15 @@ export const CONFIDENCE_LABELS: Record<string, string> = {
 export function agentLabel(name: string | null): string {
   return (name && AGENT_LABELS[name]) || name || ''
 }
+
+export function appendAgentName(names: string[], name: string | null | undefined): string[] {
+  return name && !names.includes(name) ? [...names, name] : names
+}
+
+export function appendAgentNames(names: string[], additions: string[]): string[] {
+  return additions.reduce(appendAgentName, names)
+}
+
 export function toolLabel(name: string): string {
   return TOOL_LABELS[name] || name
 }

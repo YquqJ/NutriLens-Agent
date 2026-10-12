@@ -11,6 +11,7 @@ import { listConversations, createConversation, getMessages, deleteConversation 
 import { uploadImage } from '@/api/uploads'
 import { getErrorMessage } from '@/utils/error'
 import { saveCurrentPlan } from '@/api/plans'
+import { appendAgentName, appendAgentNames } from '@/utils/labels'
 import { MESSAGE_PAGE_SIZE } from '@/api/conversations'
 import ChatMessage from '@/components/ChatMessage.vue'
 import CitationDrawer from '@/components/CitationDrawer.vue'
@@ -100,6 +101,7 @@ function toChatMessage(m: Message): ChatMsg {
     content: m.content,
     imageUrl: m.image_url,
     agentName: m.agent_name,
+    agentNames: m.agent_names?.length ? m.agent_names : (m.agent_name ? [m.agent_name] : []),
     toolTrace,
     citations,
     durationMs: m.duration_ms ?? undefined,
@@ -154,7 +156,10 @@ async function streamRequest(
         break
       case 'agent_trace':
         // supervisor 收尾时 next_agent=FINISH，不是真实 agent，不更新徽章
-        if (e.to && e.to !== 'FINISH') live.agentName = e.to
+        if (e.to && e.to !== 'FINISH') {
+          live.agentName = e.to
+          live.agentNames = appendAgentName(live.agentNames, e.to)
+        }
         break
       case 'tool_calls':
         live.toolTrace.push(e.entry)
@@ -174,6 +179,10 @@ async function streamRequest(
         if (e.content) live.content = e.content
         if (!e.interrupted) {
           live.agentName = e.agent_name || live.agentName
+          live.agentNames = appendAgentNames(live.agentNames, e.agent_names || [])
+          if (!live.agentNames.length) {
+            live.agentNames = appendAgentName(live.agentNames, live.agentName)
+          }
           // 用后端权威终稿替换流式累积的 token 文本：token 流可能混入
           // react agent 的工具间叙述（"现在我将…"），终稿才是干净的最终回答
           if (e.citations) live.citations = e.citations
@@ -378,14 +387,14 @@ async function send(text?: string) {
   const now = new Date().toISOString()
   messages.value.push({
     key: uid(), role: 'user', content, imageUrl: img,
-    agentName: null, toolTrace: [], citations: [], streaming: false, interrupt: null,
+    agentName: null, agentNames: [], toolTrace: [], citations: [], streaming: false, interrupt: null,
     createdAt: now,
   })
   // reactive 包装：SSE 事件流中会持续 mutate 此对象（token 追加/轨迹 push），
   // 普通对象 push 进 reactive 数组后，对原始引用的 mutate 不触发重渲染
   const live = reactive<ChatMsg>({
     key: uid(), role: 'assistant', content: '', imageUrl: null,
-    agentName: null, toolTrace: [], citations: [], streaming: true, interrupt: null,
+    agentName: null, agentNames: [], toolTrace: [], citations: [], streaming: true, interrupt: null,
     createdAt: now,
   })
   messages.value.push(live)

@@ -245,6 +245,23 @@ class ResumeRequest(BaseModel):
     value: Any
 
 
+def _collect_turn_agent_names(
+    agent_trace: list[str] | None,
+    current_agent: str | None = None,
+) -> list[str]:
+    """Return unique worker names from this turn's supervisor trace in order."""
+    names: list[str] = []
+    for entry in agent_trace or []:
+        if not isinstance(entry, str):
+            continue
+        name = entry.rsplit("→", 1)[-1].strip()
+        if name and name != "FINISH" and name not in names:
+            names.append(name)
+    if current_agent and current_agent not in names:
+        names.append(current_agent)
+    return names
+
+
 def _build_graph_config(conversation_id: str, user_id: int, entrypoint: str) -> dict:
     """构造图执行配置，并按开关注入 Langfuse 全链路追踪。"""
     config = {"configurable": {"thread_id": conversation_id, "user_id": user_id}}
@@ -571,6 +588,9 @@ def _run_graph_and_stream(
         phase_metrics = _current_request_metrics(usage_collector, started_at)
         metrics = merge_usage_metrics(pending_metrics, phase_metrics)
         finish_reason = final_state.get("finish_reason")
+        agent_names = _collect_turn_agent_names(
+            final_state.get("agent_trace"), current_agent
+        )
         reports = _collect_turn_final_reports(
             final_state.get("messages") or [],
             discarded_ranges=list(final_state.get("worker_discarded_ranges") or []),
@@ -608,6 +628,7 @@ def _run_graph_and_stream(
                         role="assistant",
                         content=content,
                         agent_name=current_agent,
+                        agent_names=json.dumps(agent_names, ensure_ascii=False),
                         tool_trace=json.dumps(tool_trace, ensure_ascii=False),
                         citations=json.dumps(citations, ensure_ascii=False) if citations else None,
                         duration_ms=metrics["duration_ms"],
@@ -625,6 +646,7 @@ def _run_graph_and_stream(
             {
                 "interrupted": False,
                 "agent_name": current_agent,
+                "agent_names": agent_names,
                 "persisted": bool(content),
                 "finish_reason": final_state.get("finish_reason"),
                 # 权威终稿：流式 token 可能混入 react agent 的工具间叙述（"现在我将…"），
