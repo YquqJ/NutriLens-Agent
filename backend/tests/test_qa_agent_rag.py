@@ -68,6 +68,129 @@ def test_qa_agent_forwards_callbacks_to_every_llm_call(monkeypatch):
     assert generator.configs == [{"callbacks": [callback]}]
 
 
+def test_qa_agent_uses_latest_user_question_instead_of_expanded_task(monkeypatch):
+    """宽泛咨询的检索和自检不能被路由任务扩写成更高的回答门槛。"""
+    class FakeChecker:
+        def __init__(self):
+            self.messages = []
+
+        def with_structured_output(self, _schema):
+            return self
+
+        def invoke(self, messages):
+            from app.agents.qa_agent import QaSelfCheck
+
+            self.messages.append(messages)
+            return QaSelfCheck(sufficient=True, reason="核心原则已被切片覆盖")
+
+    class FakeGenerator:
+        def invoke(self, _messages):
+            return AIMessage(content="可以根据核心原则安排饮食和运动。[1]")
+
+    checker = FakeChecker()
+    queries = []
+    result_item = {
+        "id": 1,
+        "source_title": "体重管理指南",
+        "section": "减脂原则",
+        "page_number": 2,
+        "chunk_index": 0,
+        "content": "减脂应保持适度热量缺口，并结合有氧和抗阻训练。",
+    }
+
+    def fake_get_text_llm(*, streaming=True):
+        return FakeGenerator() if streaming else checker
+
+    class FakeDb:
+        def close(self):
+            pass
+
+    def fake_retrieve(_db, query, **_kwargs):
+        queries.append(query)
+        return [result_item]
+
+    monkeypatch.setattr("app.agents.qa_agent.get_text_llm", fake_get_text_llm)
+    monkeypatch.setattr("app.agents.qa_agent.SessionLocal", lambda: FakeDb())
+    monkeypatch.setattr("app.agents.qa_agent.retrieve", fake_retrieve)
+
+    result = make_qa_agent()(
+        {
+            "messages": [HumanMessage("减肥期间该如何饮食和运动？")],
+            "task": (
+                "解答减肥期间的饮食和运动原则，包括热量缺口建议、宏量营养素分配、"
+                "运动类型与频率推荐"
+            ),
+        }
+    )
+
+    assert queries == ["减肥期间该如何饮食和运动？"]
+    assert "用户问题：减肥期间该如何饮食和运动？" in checker.messages[0][1][1]
+    assert "知识库中未找到" not in result["messages"][-1].content
+
+
+def test_qa_agent_retries_when_self_check_omits_a_rewritten_query(monkeypatch):
+    """自检判不足却未改写时，仍应以原问题进行一次扩大候选集的复检。"""
+    class FakeChecker:
+        def __init__(self):
+            self.calls = 0
+
+        def with_structured_output(self, _schema):
+            return self
+
+        def invoke(self, _messages):
+            from app.agents.qa_agent import QaSelfCheck
+
+            self.calls += 1
+            return QaSelfCheck(
+                sufficient=self.calls > 1,
+                rewritten_query="",
+                reason="首轮证据不完整" if self.calls == 1 else "核心建议已覆盖",
+            )
+
+    class FakeGenerator:
+        def invoke(self, _messages):
+            return AIMessage(content="可以从饮食和运动两方面安排。[1]")
+
+    checker = FakeChecker()
+    captured_queries = []
+    result_item = {
+        "id": 1,
+        "source_title": "体重管理",
+        "section": "减脂",
+        "page_number": 1,
+        "chunk_index": 0,
+        "content": "减脂期间应控制总能量，并结合有氧运动和力量训练。",
+    }
+
+    def fake_get_text_llm(*, streaming=True):
+        return FakeGenerator() if streaming else checker
+
+    class FakeDb:
+        def close(self):
+            pass
+
+    def fake_retrieve(_db, query, top_k):
+        captured_queries.append((query, top_k))
+        return [result_item]
+
+    monkeypatch.setattr("app.agents.qa_agent.get_text_llm", fake_get_text_llm)
+    monkeypatch.setattr("app.agents.qa_agent.SessionLocal", lambda: FakeDb())
+    monkeypatch.setattr("app.agents.qa_agent.retrieve", fake_retrieve)
+
+    result = make_qa_agent()(
+        {
+            "messages": [HumanMessage("减肥期间该如何饮食和运动")],
+            "task": "回答：减肥期间该如何饮食和运动",
+        }
+    )
+
+    assert captured_queries == [
+        ("减肥期间该如何饮食和运动", 6),
+        ("减肥期间该如何饮食和运动", 6),
+    ]
+    assert result["messages"][-1].content.startswith("可以从饮食和运动")
+
+
 def test_qa_agent_abstains_when_evidence_is_only_partial(monkeypatch):
     """严格 RAG 下，擦边证据不能支撑受限回答，必须直接拒答。"""
     class FakeChecker:

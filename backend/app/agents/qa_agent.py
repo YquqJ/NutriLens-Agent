@@ -50,8 +50,10 @@ QA_SYSTEM_PROMPT = """你是营养与运动知识顾问，基于检索到的知�
 _NO_EVIDENCE_REPLY = "知识库中未找到与该问题直接相关的信息，暂时无法可靠回答。"
 
 _SELF_CHECK_PROMPT = """你是检索质量审查员。判断下方知识库切片是否足以回答用户问题：
-- 充分：切片包含与问题直接相关的具体信息（数值、方法、结论）；
-- 不足：切片只是擦边相关、明显缺关键信息，或完全没有相关内容。
+- 充分：切片覆盖用户明确询问的核心意图和主要结论，即使没有覆盖所有可能的延伸细节，也可以判为充分；
+- 不足：切片只是擦边相关、明显缺少回答核心问题所需的信息，或完全没有相关内容。
+- 不要把用户没有明确询问的细节（例如完整宏量营养素比例、个体化热量、训练组数）作为拒答条件；回答时可说明这些细节未被覆盖，需要额外信息才能个性化。
+- 对“如何饮食和运动”这类概括性问题，只要切片能支持主要原则、方向或可执行的基础建议，就判为充分。
 
 不足时把问题改写成更利于检索的表述（补全领域关键词、消除口语化指代）。
 判断只依据切片内容，不要自己脑补答案。"""
@@ -69,12 +71,12 @@ class QaSelfCheck(BaseModel):
 
 
 def _question_from(state: AgentState) -> str:
-    """检索 query：优先 supervisor 改写过的 task，兜底取最后的用户消息。"""
-    if state.get("task"):
-        return state["task"]
+    """以本轮最新用户原话为准，避免路由扩写提高 QA 的回答门槛。"""
     for m in reversed(state["messages"]):
         if isinstance(m, HumanMessage) and m.content:
             return m.content if isinstance(m.content, str) else str(m.content)
+    if state.get("task"):
+        return state["task"]
     return ""
 
 
@@ -143,16 +145,17 @@ def make_qa_agent(callbacks: Sequence[BaseCallbackHandler] | None = None):
         db = SessionLocal()  # 知识库是全局的，不涉用户数据，无需 user_id
         try:
             # ---- 第 1 轮检索 ----
-            results = retrieve(db, question, top_k=4)
+            results = retrieve(db, question, top_k=6)
             trace.append(_trace_entry(question, 1, results, reason="初检"))
 
             # ---- 自检：不足则改写重检（≤2 轮）----
             check: Optional[QaSelfCheck] = run_self_check(results, 1)
-            if not check.sufficient and check.rewritten_query:
-                results2 = retrieve(db, check.rewritten_query, top_k=4)
+            if not check.sufficient:
+                retry_query = check.rewritten_query or question
+                results2 = retrieve(db, retry_query, top_k=6)
                 trace.append(
                     _trace_entry(
-                        check.rewritten_query,
+                        retry_query,
                         2,
                         results2,
                         reason=f"第一轮不足：{check.reason}",
