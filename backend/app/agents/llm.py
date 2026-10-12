@@ -37,6 +37,21 @@ def get_text_llm(streaming: bool = True) -> ChatOpenAI:
 
 
 @lru_cache
+def get_router_llm() -> ChatOpenAI:
+    """Supervisor 专用路由模型，固定输出以提高意图判定稳定性。"""
+    return ChatOpenAI(
+        model=settings.text_model,
+        api_key=settings.dashscope_api_key,
+        base_url=settings.dashscope_base_url,
+        streaming=False,
+        stream_usage=True,
+        temperature=0,
+        max_retries=2,
+        timeout=settings.llm_timeout_seconds,
+    )
+
+
+@lru_cache
 def get_vision_llm() -> ChatOpenAI:
     """视觉模型（qwen-vl-max），仅图片识别使用。"""
     return ChatOpenAI(

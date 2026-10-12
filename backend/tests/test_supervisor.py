@@ -9,13 +9,15 @@ Supervisor 路由节点测试。
 """
 
 import pytest
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END
 from pydantic import ValidationError
 
+import app.agents.supervisor as supervisor_module
 from app.agents.supervisor import (
     MAX_HOPS,
+    ROUTING_CONTEXT_WINDOW,
     PlannedTask,
     RouteDecision,
     TaskPlanDecision,
@@ -410,6 +412,151 @@ def test_rechecks_out_of_scope_with_llm_before_dispatching_composite_record():
         },
     ]
     assert cmd.update["finish_reason"] is None
+
+
+@pytest.mark.parametrize(
+    ("initial_reason", "question", "task"),
+    [
+        ("no_action", "BMI是什么", "解释 BMI 的定义、用途和计算方法"),
+        (
+            "unclear",
+            "基础代谢率 BMR 是什么，占每天总消耗多少比例？",
+            "解释 BMR、总日能量消耗及两者关系",
+        ),
+    ],
+)
+def test_rechecks_suspicious_empty_plan_with_llm_for_health_knowledge_question(
+    initial_reason, question, task
+):
+    """知识问题被误判为空计划时，二次 LLM 审查必须将其路由给 QA。"""
+    planner = _SequentialPlanner(
+        TaskPlanDecision(tasks=[], finish_reason=initial_reason),
+        TaskPlanDecision(
+            tasks=[PlannedTask(next_agent="qa_agent", task=task)],
+            finish_reason=None,
+        ),
+    )
+
+    cmd = make_supervisor_node(planner)(
+        {"messages": [HumanMessage(question)], "hop_count": 0}
+    )
+
+    assert planner.calls == 2
+    assert any(
+        "重新审查" in message[1]
+        for message in planner.inputs[1]
+        if isinstance(message, tuple) and message[0] == "system"
+    )
+    assert cmd.goto == "qa_agent"
+    assert cmd.update["task"] == task
+
+
+def test_router_receives_current_user_request_and_bounded_reference_only_context():
+    """工具输出不能污染路由；旧对话仅保留有限窗口供指代消解。"""
+    planner = _SequentialPlanner(
+        TaskPlanDecision(
+            tasks=[PlannedTask(next_agent="qa_agent", task="解释 BMI")],
+            finish_reason=None,
+        )
+    )
+    noisy_tool_payload = "TOOL_PAYLOAD_MUST_NOT_REACH_ROUTER"
+    old_messages = [
+        item
+        for index in range(ROUTING_CONTEXT_WINDOW + 3)
+        for item in (
+            HumanMessage(f"历史用户消息 {index}"),
+            AIMessage(f"历史助手回复 {index}"),
+        )
+    ]
+    cmd = make_supervisor_node(planner)(
+        {
+            "messages": [
+                *old_messages,
+                ToolMessage(
+                    content=noisy_tool_payload,
+                    tool_call_id="routing-context-test",
+                    name="retrieve_knowledge",
+                ),
+                HumanMessage("BMI是什么"),
+            ],
+            "hop_count": 0,
+        }
+    )
+
+    received = planner.inputs[0]
+    forwarded_chat_messages = [
+        message for message in received if isinstance(message, (HumanMessage, AIMessage))
+    ]
+    assert cmd.goto == "qa_agent"
+    assert forwarded_chat_messages[-1].content == "BMI是什么"
+    assert len(forwarded_chat_messages) <= ROUTING_CONTEXT_WINDOW + 1
+    assert all(
+        noisy_tool_payload not in str(getattr(message, "content", ""))
+        for message in received
+    )
+    assert any(
+        "ROUTING_REFERENCE_ONLY_CONTEXT" in message[1]
+        for message in received
+        if isinstance(message, tuple) and message[0] == "system"
+    )
+
+
+def test_summary_is_marked_as_reference_only_routing_context():
+    """摘要可辅助消解指代，但不得将摘要中的旧需求重新作为当前任务。"""
+    planner = _SequentialPlanner(
+        TaskPlanDecision(
+            tasks=[PlannedTask(next_agent="qa_agent", task="解释 BMI")],
+            finish_reason=None,
+        )
+    )
+
+    make_supervisor_node(planner)(
+        {
+            "messages": [HumanMessage("BMI是什么")],
+            "summary": "此前用户曾要求记录跑步。",
+            "hop_count": 0,
+        }
+    )
+
+    assert any(
+        "ROUTING_REFERENCE_ONLY_SUMMARY" in message[1]
+        for message in planner.inputs[0]
+        if isinstance(message, tuple) and message[0] == "system"
+    )
+
+
+def test_default_supervisor_uses_dedicated_router_llm(monkeypatch):
+    """生产构造必须使用零温度的专用路由模型，而非生成模型。"""
+    planner = _CountingPlanner(
+        TaskPlanDecision(
+            tasks=[PlannedTask(next_agent="qa_agent", task="解释 BMI")],
+            finish_reason=None,
+        )
+    )
+
+    class _RouterLlm:
+        def __init__(self):
+            self.schema = None
+
+        def with_structured_output(self, schema):
+            self.schema = schema
+            return planner
+
+    router_llm = _RouterLlm()
+    factory_calls = []
+    monkeypatch.setattr(
+        supervisor_module,
+        "get_router_llm",
+        lambda: factory_calls.append(True) or router_llm,
+    )
+
+    cmd = make_supervisor_node()(
+        {"messages": [HumanMessage("BMI是什么")], "hop_count": 0}
+    )
+
+    assert factory_calls == [True]
+    assert router_llm.schema is TaskPlanDecision
+    assert cmd.goto == "qa_agent"
 
 
 @pytest.mark.parametrize(

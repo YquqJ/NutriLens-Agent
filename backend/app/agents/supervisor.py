@@ -19,12 +19,13 @@ from datetime import date
 from typing import Literal, Optional
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import Runnable
 from langgraph.graph import END
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
-from app.agents.llm import get_text_llm
+from app.agents.llm import get_router_llm
 from app.agents.state import AgentState, NoTaskReason
 
 # 路由目标：四个专职 agent + 结束
@@ -34,6 +35,9 @@ RouteTarget = Literal["diet_agent", "exercise_agent", "qa_agent", "plan_agent", 
 # 这是 Worker 派发次数上限，不限制单个 Worker 内部的工具调用次数。
 MAX_HOPS = 8
 MAX_WORKER_RETRIES = 1
+# 当前轮路由只保留有限的前序对话，避免历史工具结果或旧任务主导意图判断。
+ROUTING_CONTEXT_WINDOW = 6
+EMPTY_PLAN_REVIEW_REASONS = {"out_of_scope", "no_action", "unclear"}
 
 AGENT_DUTIES: dict[str, str] = {
     "diet_agent": (
@@ -46,12 +50,14 @@ AGENT_DUTIES: dict[str, str] = {
         "涉及'跑了多久/消耗多少'选它。"
     ),
     "qa_agent": (
-        "营养/健身知识问答与建议咨询：'减脂期怎么吃''蛋白质摄入量'等开放性问题选它。"
+        "营养/健身知识问答与建议咨询：'减脂期怎么吃''蛋白质摄入量'等开放性问题选它；"
+        "BMI、BMR、TDEE、基础代谢、体脂率、热量缺口的定义/公式/原理，以及一般营养"
+        "和运动原则都属于知识问答。"
         "注意：查用户自己的记录不归它（那是 diet/exercise_agent 的事）。"
     ),
     "plan_agent": (
-        "个性化饮食/运动计划生成：读身体档案算 BMR/TDEE，按减脂/增肌/维持目标出方案；"
-        "查看或更新身体档案（身高体重/活动水平/偏好）也归它。"
+        "仅处理个人身体档案的读取/更新（身高体重/活动水平/偏好），或基于用户个人"
+        "档案生成个性化饮食/运动计划。单纯解释 BMR/TDEE 等概念不得路由到此。"
     ),
 }
 
@@ -83,7 +89,7 @@ class TaskPlanDecision(BaseModel):
         description=(
             "tasks 非空时必须为 null；tasks 为空时必须说明原因：out_of_scope（超出健康管理范围）、"
             "small_talk（问候或感谢）、unclear（意图不清，需要用户澄清）、"
-            "no_action（无需执行的新操作）"
+            "no_action（仅确认、感谢等没有新问题或请求的消息）"
         )
     )
 
@@ -97,13 +103,43 @@ SUPERVISOR_SYSTEM_PROMPT = """你是健康管理系统的调度员（supervisor�
 如果用户没有可执行任务，返回空 tasks，并根据原因填写 finish_reason；有任务时 finish_reason 必须为 null。
 
 判断规则：
-1. 依据完整对话历史一次性拆出有序 tasks；每个 task 只属于一个执行者。
+1. 以【当前用户请求】为唯一需要响应的对象；前序上下文仅用于消解它的指代，
+   不得把前序内容中的旧需求当作当前任务。一次性拆出有序 tasks；每个 task 只属于一个执行者。
    若同一领域有多个子请求，合并成该领域一个 task，不要重复添加同一 agent；
 2. tasks 按推荐执行顺序排列；最多返回四个 task。不要把其他领域动作写进单个 task；
 3. task 字段把用户请求改写成独立指令：补全指代消解（他/它/昨天那顿→具体内容）；
    "今天"一律消解为 {today}，"昨天/明天"据此前后推算；未提及日期默认今天；
-4. 只把确实需要执行的领域放入 tasks；超出健康管理范围、寒暄、意图不清、无需新操作时返回空 tasks，
-   并分别填写 out_of_scope、small_talk、unclear、no_action。禁止把无关任务硬塞给某个 worker。"""
+4. BMI、BMR、TDEE、基础代谢、体脂率、热量缺口的术语/公式/原理解释，及一般营养或运动
+   建议，都是 qa_agent 的可执行知识问题，不能判为 no_action 或 unclear。
+5. no_action 仅用于确认、感谢或完全没有新问题/请求的消息；绝不能因为请求不涉及数据库写入而使用。
+   超出健康管理范围、寒暄、意图不清、无需新操作时才返回空 tasks，并分别填写
+   out_of_scope、small_talk、unclear、no_action。禁止把无关任务硬塞给某个 worker。"""
+
+
+def _routing_conversation(messages: list) -> list:
+    """返回当前请求和仅供指代消解的有限前序对话，排除工具输出。"""
+    human_indexes = [
+        index for index, message in enumerate(messages) if isinstance(message, HumanMessage)
+    ]
+    if not human_indexes:
+        return []
+
+    current_index = human_indexes[-1]
+    preceding = [
+        message
+        for message in messages[:current_index]
+        if isinstance(message, (HumanMessage, AIMessage))
+    ][-ROUTING_CONTEXT_WINDOW:]
+    return [
+        (
+            "system",
+            "[ROUTING_REFERENCE_ONLY_CONTEXT] 以下前序内容仅用于消解当前请求中的指代，"
+            "不得从中引入新的任务。",
+        ),
+        *preceding,
+        ("system", "【当前用户请求】请只路由接下来的这条用户消息。"),
+        messages[current_index],
+    ]
 
 
 def make_supervisor_node(
@@ -116,7 +152,7 @@ def make_supervisor_node(
     生产路径由本函数内部用 qwen-plus 构建；旧版 RouteDecision 测试桩仍兼容。
     """
     if router is None:
-        llm: BaseChatModel = get_text_llm(streaming=False)  # 路由是一次结构化输出，关流式
+        llm: BaseChatModel = get_router_llm()
         router = llm.with_structured_output(TaskPlanDecision)
 
     def supervisor(state: AgentState) -> Command:
@@ -138,7 +174,13 @@ def make_supervisor_node(
         # （"昨天那顿"）。把 summary 作为第二条系统消息注入，保证指代消解仍可做。
         summary = state.get("summary")
         if summary:
-            routing_msgs.append(("system", f"【历史对话摘要，供指代消解参考】\n{summary}"))
+            routing_msgs.append(
+                (
+                    "system",
+                    "[ROUTING_REFERENCE_ONLY_SUMMARY] 以下历史摘要仅用于消解当前请求中的"
+                    f"指代，不得从中引入新的任务。\n{summary}",
+                )
+            )
         # 图片感知：本条消息带图时，图片里的食物对 supervisor 是未知的（文本路由
         # 看不到图）。不点破，指代消解会拿历史里最近记录的食物（如"香肠"）去填
         # "晚饭"，产出"把香肠改成晚餐"这类错误 task，盖过 diet_agent 的识别指令。
@@ -165,12 +207,17 @@ def make_supervisor_node(
         plan_initialized = bool(state.get("plan_initialized", False))
         no_task_reason: Optional[NoTaskReason] = None
         if not plan_initialized:
-            routing_msgs.extend(state["messages"])
+            routing_msgs.extend(_routing_conversation(state.get("messages") or []))
             raw_decision = router.invoke(routing_msgs)
+            blocked_duplicate_route = False
             if isinstance(raw_decision, RouteDecision):
                 trace = state.get("agent_trace", [])
-                last_agent = trace[-1].split("→")[-1] if trace else None
+                last_agent = next(
+                    (agent for agent in AGENT_DUTIES if trace and trace[-1].endswith(agent)),
+                    None,
+                )
                 if raw_decision.next_agent == last_agent:
+                    blocked_duplicate_route = True
                     raw_decision = RouteDecision(
                         next_agent="FINISH",
                         task="上一 agent 已完成本任务，避免同 agent 连续重复路由",
@@ -182,16 +229,21 @@ def make_supervisor_node(
             else:
                 planned = list(getattr(raw_decision, "tasks", []) or [])
                 no_task_reason = getattr(raw_decision, "finish_reason", None)
-            if not planned and no_task_reason == "out_of_scope":
+            if (
+                not blocked_duplicate_route
+                and not planned
+                and no_task_reason in EMPTY_PLAN_REVIEW_REASONS
+            ):
                 review_messages = [
                     *routing_msgs,
                     (
                         "system",
-                        "【重新审查】你刚刚将该请求判为 out_of_scope。请重新完整理解用户"
-                        "本轮请求及上下文，重点检查是否同时包含多个可执行的健康管理意图。"
-                        "不要基于上一次结论复述；若存在任何饮食记录、运动记录、营养/健身"
-                        "问答、档案或计划相关意图，必须拆分为对应 tasks；只有确实与健康"
-                        "管理完全无关时才保留 out_of_scope。",
+                        "【重新审查】你刚刚将当前请求判为空计划。请重新完整理解当前用户请求，"
+                        "不要基于上一次结论复述。用户在提问、请求解释或请求建议，本身就是"
+                        "可执行任务，必须路由给对应 worker；不能因为它没有数据库写入而判为"
+                        "no_action。若存在饮食记录、运动记录、营养/健身问答、档案或计划相关"
+                        "意图，必须拆分为对应 tasks。只有确实没有新请求的确认/感谢才保留"
+                        "no_action；只有确实与健康管理完全无关时才保留 out_of_scope。",
                     ),
                 ]
                 reviewed_decision = router.invoke(review_messages)
