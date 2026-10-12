@@ -182,6 +182,34 @@ def make_supervisor_node(
             else:
                 planned = list(getattr(raw_decision, "tasks", []) or [])
                 no_task_reason = getattr(raw_decision, "finish_reason", None)
+            if not planned and no_task_reason == "out_of_scope":
+                review_messages = [
+                    *routing_msgs,
+                    (
+                        "system",
+                        "【重新审查】你刚刚将该请求判为 out_of_scope。请重新完整理解用户"
+                        "本轮请求及上下文，重点检查是否同时包含多个可执行的健康管理意图。"
+                        "不要基于上一次结论复述；若存在任何饮食记录、运动记录、营养/健身"
+                        "问答、档案或计划相关意图，必须拆分为对应 tasks；只有确实与健康"
+                        "管理完全无关时才保留 out_of_scope。",
+                    ),
+                ]
+                reviewed_decision = router.invoke(review_messages)
+                if isinstance(reviewed_decision, RouteDecision):
+                    planned = (
+                        [
+                            PlannedTask(
+                                next_agent=reviewed_decision.next_agent,
+                                task=reviewed_decision.task,
+                            )
+                        ]
+                        if reviewed_decision.next_agent != "FINISH"
+                        else []
+                    )
+                    no_task_reason = "unclear" if not planned else None
+                else:
+                    planned = list(getattr(reviewed_decision, "tasks", []) or [])
+                    no_task_reason = getattr(reviewed_decision, "finish_reason", None)
             # 同一领域的多个子请求合并，避免同一个 Worker 被重复派发。
             # 按首次出现顺序保留领域顺序；即使同一 agent 的任务不连续，
             # 也必须合并而不能静默丢弃后续任务。

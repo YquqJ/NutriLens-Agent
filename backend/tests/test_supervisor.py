@@ -42,6 +42,21 @@ class _CountingPlanner:
         return self.decision
 
 
+class _SequentialPlanner:
+    """Return one structured planning decision per invocation."""
+
+    def __init__(self, *decisions: TaskPlanDecision):
+        self.decisions = list(decisions)
+        self.calls = 0
+        self.inputs = []
+
+    def invoke(self, messages):
+        self.inputs.append(messages)
+        decision = self.decisions[self.calls]
+        self.calls += 1
+        return decision
+
+
 def test_routes_to_agent_with_rewritten_task():
     """正常路由：goto 正确、task 透传、hop_count 累加、trace 记录。"""
     decision = RouteDecision(
@@ -355,6 +370,46 @@ def test_plans_composite_request_once_then_dispatches_serially():
     assert finished.goto == END
     assert finished.update["next_agent"] == "FINISH"
     assert finished.update["finish_reason"] == "completed"
+
+
+def test_rechecks_out_of_scope_with_llm_before_dispatching_composite_record():
+    """首次误判超范围时，必须由 LLM 二次判定意图，而不是关键词兜底。"""
+    planner = _SequentialPlanner(
+        TaskPlanDecision(tasks=[], finish_reason="out_of_scope"),
+        TaskPlanDecision(
+            tasks=[
+                PlannedTask(next_agent="diet_agent", task="记录今天早餐：一根玉米"),
+                PlannedTask(next_agent="exercise_agent", task="记录今天跑步 20 分钟"),
+            ],
+            finish_reason=None,
+        ),
+    )
+
+    cmd = make_supervisor_node(planner)(
+        {
+            "messages": [HumanMessage("我早上吃了一根玉米，并且跑了20分钟")],
+            "hop_count": 0,
+        }
+    )
+
+    assert planner.calls == 2
+    assert any(
+        "重新审查" in message[1]
+        for message in planner.inputs[1]
+        if isinstance(message, tuple) and message[0] == "system"
+    )
+    assert cmd.goto == "diet_agent"
+    assert cmd.update["task_plan"] == [
+        {
+            "next_agent": "diet_agent",
+            "task": "记录今天早餐：一根玉米",
+        },
+        {
+            "next_agent": "exercise_agent",
+            "task": "记录今天跑步 20 分钟",
+        },
+    ]
+    assert cmd.update["finish_reason"] is None
 
 
 @pytest.mark.parametrize(
