@@ -52,6 +52,21 @@ def get_router_llm() -> ChatOpenAI:
 
 
 @lru_cache
+def get_judge_llm() -> ChatOpenAI:
+    """离线质量评测专用文本模型，固定零温度以减少评分波动。"""
+    return ChatOpenAI(
+        model=settings.text_model,
+        api_key=settings.dashscope_api_key,
+        base_url=settings.dashscope_base_url,
+        streaming=False,
+        stream_usage=True,
+        temperature=0,
+        max_retries=2,
+        timeout=settings.llm_timeout_seconds,
+    )
+
+
+@lru_cache
 def get_vision_llm() -> ChatOpenAI:
     """视觉模型（qwen-vl-max），仅图片识别使用。"""
     return ChatOpenAI(

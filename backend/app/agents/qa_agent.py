@@ -17,7 +17,7 @@ qa_agent —— 知识问答专职 worker（M4.5：Agentic RAG 形态）。
 同构，chat.py 统一收集。
 """
 
-from typing import Optional, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -104,7 +104,11 @@ def _context_block(results: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def make_qa_agent(callbacks: Sequence[BaseCallbackHandler] | None = None):
+def make_qa_agent(
+    callbacks: Sequence[BaseCallbackHandler] | None = None,
+    *,
+    evaluation_observer: Callable[[str, list[dict[str, Any]], str], None] | None = None,
+):
     """构造 qa_agent 节点函数（Agentic RAG：混合检索 + 重排 + 迭代自检）。"""
     gen_llm = get_text_llm()  # 生成路：流式（SSE 打字机）
     check_llm = get_text_llm(streaming=False).with_structured_output(
@@ -169,6 +173,8 @@ def make_qa_agent(callbacks: Sequence[BaseCallbackHandler] | None = None):
                 check = run_self_check(results, 2)
 
             if not check.sufficient:
+                if evaluation_observer is not None:
+                    evaluation_observer(question, results, _NO_EVIDENCE_REPLY)
                 return {
                     "messages": [AIMessage(content=_NO_EVIDENCE_REPLY)],
                     "tool_calls": trace,
@@ -211,6 +217,14 @@ def make_qa_agent(callbacks: Sequence[BaseCallbackHandler] | None = None):
             if references:
                 content = f"{content}\n\n{references}"
             response = response.model_copy(update={"content": content})
+
+        if evaluation_observer is not None:
+            answer = (
+                response.content
+                if isinstance(response.content, str)
+                else str(response.content)
+            )
+            evaluation_observer(question, results, answer)
 
         return {
             "messages": [response],

@@ -139,6 +139,16 @@ uv run python -m app.rag.run_ablation `
 
 评测脚本输出包含 Recall@4、Recall@8、MRR、nDCG@4 和逐 query 明细。评测集用页码与证据文本锚定相关切片，不依赖某一种切分方式产生的固定 chunk hash。当前内置评测集覆盖既有标注证据对应的知识文档；新登记的 PDF 需补充人工核对的 gold evidence 和 query 后，才能纳入相应指标。检索模式消融只测检索结果，不代表完整 QA 流程；充分性判断、Query Rewrite、二次检索及答案生成需要单独设计端到端评测。
 
+端到端 QA 评测会对固定问题集重新运行 QA，再由零温度 LLM-as-Judge 评估最终回答的证据忠实度和原问题相关性。报告包含总体均分、逐条回答、使用的证据、Judge 理由及失败样例；该评测独立于线上回答路径，不会改变用户回复或拒答策略。运行完整多文档集可能产生较多模型调用，可先用 `--limit` 小批量试跑：
+
+```powershell
+uv run python -m app.rag.run_judge_eval `
+  --eval-data tests/eval_data/rag_queries_v2.json `
+  --limit 5
+```
+
+Judge 分数用于定位问题和版本间对比，不作为绝对真值或线上质量门槛；应定期抽样人工复核，尤其关注健康安全与复合意图用例。
+
 ## 测试与质量检查
 
 后端单元与集成测试（在 `backend/` 目录）：

@@ -68,6 +68,60 @@ def test_qa_agent_forwards_callbacks_to_every_llm_call(monkeypatch):
     assert generator.configs == [{"callbacks": [callback]}]
 
 
+def test_qa_agent_evaluation_observer_receives_final_answer_and_generation_evidence(
+    monkeypatch,
+):
+    class FakeChecker:
+        def with_structured_output(self, _schema):
+            return self
+
+        def invoke(self, _messages):
+            from app.agents.qa_agent import QaSelfCheck
+
+            return QaSelfCheck(sufficient=True, reason="证据覆盖问题")
+
+    class FakeGenerator:
+        def invoke(self, _messages):
+            return AIMessage(content="按证据安排饮食。[1]")
+
+    result_item = {
+        "id": 7,
+        "source_title": "营养指南",
+        "section": "饮食结构",
+        "page_number": 3,
+        "chunk_index": 0,
+        "content": "一餐可按蔬菜、优质蛋白、主食和适量脂肪配置。",
+    }
+    observed = []
+
+    def fake_get_text_llm(*, streaming=True):
+        return FakeGenerator() if streaming else FakeChecker()
+
+    class FakeDb:
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.agents.qa_agent.get_text_llm", fake_get_text_llm)
+    monkeypatch.setattr("app.agents.qa_agent.SessionLocal", lambda: FakeDb())
+    monkeypatch.setattr(
+        "app.agents.qa_agent.retrieve", lambda *_args, **_kwargs: [result_item]
+    )
+
+    node = make_qa_agent(
+        evaluation_observer=lambda question, evidence, answer: observed.append(
+            (question, evidence, answer)
+        )
+    )
+    result = node({"messages": [HumanMessage("怎么安排饮食？")], "task": ""})
+
+    assert len(observed) == 1
+    question, evidence, answer = observed[0]
+    assert question == "怎么安排饮食？"
+    assert evidence == [result_item]
+    assert "按证据安排饮食。[1]" in answer
+    assert result["messages"][-1].content == answer
+
+
 def test_qa_agent_uses_latest_user_question_instead_of_expanded_task(monkeypatch):
     """宽泛咨询的检索和自检不能被路由任务扩写成更高的回答门槛。"""
     class FakeChecker:
@@ -293,6 +347,49 @@ def test_qa_agent_abstains_when_knowledge_base_has_no_answer(monkeypatch):
         "知识库中未找到与该问题直接相关的信息，暂时无法可靠回答。"
     )
     assert generator.called is False
+
+
+def test_qa_agent_evaluation_observer_receives_grounded_abstention(monkeypatch):
+    class FakeChecker:
+        def with_structured_output(self, _schema):
+            return self
+
+        def invoke(self, _messages):
+            from app.agents.qa_agent import QaSelfCheck
+
+            return QaSelfCheck(sufficient=False, reason="没有可用证据")
+
+    class FakeGenerator:
+        def invoke(self, _messages):
+            raise AssertionError("证据不足时不应生成建议")
+
+    observed = []
+
+    def fake_get_text_llm(*, streaming=True):
+        return FakeGenerator() if streaming else FakeChecker()
+
+    class FakeDb:
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.agents.qa_agent.get_text_llm", fake_get_text_llm)
+    monkeypatch.setattr("app.agents.qa_agent.SessionLocal", lambda: FakeDb())
+    monkeypatch.setattr("app.agents.qa_agent.retrieve", lambda *_args, **_kwargs: [])
+
+    result = make_qa_agent(
+        evaluation_observer=lambda question, evidence, answer: observed.append(
+            (question, evidence, answer)
+        )
+    )({"messages": [HumanMessage("量子计算怎么工作？")], "task": ""})
+
+    assert observed == [
+        (
+            "量子计算怎么工作？",
+            [],
+            "知识库中未找到与该问题直接相关的信息，暂时无法可靠回答。",
+        )
+    ]
+    assert result["messages"][-1].content == observed[0][2]
 
 
 @pytest.fixture(scope="module", autouse=True)
