@@ -317,6 +317,64 @@ def test_messages_are_returned_in_page_no_order(auth_headers):
     ]
 
 
+def test_pending_action_returns_persisted_interrupt_payload(auth_headers, monkeypatch):
+    """刷新或切回会话后，前端必须能重建尚未确认的 HITL 卡片。"""
+    payload = {
+        "type": "diet_confirm",
+        "meal_type": "dinner",
+        "items": [{"food_name": "番茄炒蛋", "grams": 200}],
+    }
+
+    class InterruptedGraph:
+        def get_state(self, *_args, **_kwargs):
+            return SimpleNamespace(
+                next=("diet_agent",),
+                interrupts=(SimpleNamespace(value=payload),),
+            )
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: InterruptedGraph())
+
+    response = client.get(
+        f"/api/conversations/{auth_headers['conversation_id']}/pending-action",
+        headers=auth_headers["headers"],
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"pending": True, "payload": payload}
+
+
+def test_chat_rejects_new_message_while_interrupt_is_pending(auth_headers, monkeypatch):
+    """未确认旧草稿时不能让新消息覆盖同一 thread 的 checkpoint。"""
+    class InterruptedGraph:
+        def get_state(self, *_args, **_kwargs):
+            return SimpleNamespace(next=("diet_agent",), interrupts=())
+
+        def stream(self, *_args, **_kwargs):
+            if False:
+                yield None
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: InterruptedGraph())
+
+    response = client.post(
+        f"/api/conversations/{auth_headers['conversation_id']}/chat",
+        json={"content": "我又吃了一包薯片"},
+        headers=auth_headers["headers"],
+    )
+
+    assert response.status_code == 409
+    assert "待确认" in response.json()["detail"]
+
+    db = SessionLocal()
+    try:
+        assert (
+            db.query(Message)
+            .filter(Message.conversation_id == auth_headers["conversation_id"])
+            .count()
+            == 0
+        )
+    finally:
+        db.close()
+
 def test_messages_include_persisted_request_metrics(auth_headers):
     cid = auth_headers["conversation_id"]
     db = SessionLocal()
@@ -724,6 +782,35 @@ def test_image_interrupt_done_contains_normalized_content_without_token_leak(mon
     payload = json.loads(done.split("data: ", 1)[1])
     assert payload["interrupted"] is True
     assert payload["content"] == "我识别到这顿饭包括：虾约150克。请确认是否记录。"
+
+
+def test_supervisor_structured_output_is_not_streamed_as_user_visible_token(monkeypatch):
+    """Supervisor 的结构化路由结果只能驱动流程，不能出现在聊天正文。"""
+    route_json = json.dumps(
+        {
+            "finish_reason": None,
+            "tasks": [{"next_agent": "diet_agent", "task": "记录饮食"}],
+        },
+        ensure_ascii=False,
+    )
+
+    class SupervisorInterruptGraph:
+        def stream(self, *_args, **_kwargs):
+            yield "messages", (
+                AIMessageChunk(content=route_json),
+                {"langgraph_node": "supervisor"},
+            )
+            yield "updates", {
+                "__interrupt__": [
+                    SimpleNamespace(value={"type": "diet_confirm"})
+                ]
+            }
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: SupervisorInterruptGraph())
+
+    frames = list(_run_graph_and_stream({}, {}, "test-conversation"))
+
+    assert all("event: token" not in frame for frame in frames)
 
 
 @pytest.mark.parametrize(

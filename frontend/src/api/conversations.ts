@@ -1,5 +1,5 @@
 import http from './http'
-import type { Conversation, MessagePage } from '@/types'
+import type { Conversation, DietConfirmPayload, MessagePage } from '@/types'
 
 export const MESSAGE_PAGE_SIZE = 30
 
@@ -12,6 +12,11 @@ export const createConversation = (title = '新会话') =>
 export const getMessages = (id: string, pageNo = 1, pageSize = MESSAGE_PAGE_SIZE) =>
   http
     .get<MessagePage>(`/conversations/${id}/messages`, { params: { pageNo, pageSize } })
+    .then((r) => r.data)
+
+export const getPendingAction = (id: string) =>
+  http
+    .get<{ pending: boolean; payload: DietConfirmPayload | null }>(`/conversations/${id}/pending-action`)
     .then((r) => r.data)
 
 export const deleteConversation = (id: string) => http.delete(`/conversations/${id}`)

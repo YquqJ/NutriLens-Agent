@@ -7,7 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Close, Loading, Picture, Plus, Promotion } from '@element-plus/icons-vue'
 import { getToken } from '@/api/http'
-import { listConversations, createConversation, getMessages, deleteConversation } from '@/api/conversations'
+import { listConversations, createConversation, getMessages, getPendingAction, deleteConversation } from '@/api/conversations'
 import { uploadImage } from '@/api/uploads'
 import { getErrorMessage } from '@/utils/error'
 import { saveCurrentPlan } from '@/api/plans'
@@ -261,6 +261,18 @@ async function selectConversation(id: string) {
     messageLoadError.value = false
     currentMessagePage.value = page.pageNo
     hasMoreMessages.value = page.hasMore
+
+    const pending = await getPendingAction(id)
+    if (requestId !== messageRequestId || id !== activeId.value) return
+    if (pending.pending && pending.payload) {
+      const restored = reactive<ChatMsg>({
+        key: `pending_${id}`, role: 'assistant', content: '', imageUrl: null,
+        agentName: 'diet_agent', agentNames: ['diet_agent'], toolTrace: [], citations: [],
+        streaming: false, interrupt: pending.payload, createdAt: null,
+      })
+      messages.value.push(restored)
+      pendingMsg.value = restored
+    }
   } catch (e) {
     if (requestId !== messageRequestId) return
     messageLoadError.value = true

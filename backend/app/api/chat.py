@@ -522,7 +522,12 @@ def _run_graph_and_stream(
             graph_input, stream_cfg, stream_mode=["messages", "updates"]
         ):
             if mode == "messages":
-                msg, _meta = chunk
+                msg, meta = chunk
+                # Supervisor 的输出是路由用的 Pydantic JSON，不是用户正文。
+                # LangGraph 在部分版本中仍会把它作为 AIMessageChunk 发出；
+                # 若不按节点过滤，会被误封装成 token 事件并直接渲染到聊天区。
+                if isinstance(meta, dict) and meta.get("langgraph_node") == "supervisor":
+                    continue
                 # 只推文本增量：content 为空的分片是 tool_call 编码，跳过
                 if msg.type == "AIMessageChunk" and isinstance(msg.content, str) and msg.content:
                     token_buffer.append(msg.content)
@@ -683,6 +688,31 @@ def _get_own_conversation(
     return conv
 
 
+def _get_pending_interrupt_payload(graph: Any, cfg: dict) -> dict | None:
+    """Return the unresolved HITL payload for this graph thread, if any."""
+    state = graph.get_state(cfg)
+    if not state.next:
+        return None
+    for interrupt in getattr(state, "interrupts", ()) or ():
+        value = getattr(interrupt, "value", None)
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+@router.get("/{conversation_id}/pending-action")
+async def get_pending_action(
+    conversation_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return a persisted HITL confirmation payload after a page reload."""
+    conv = _get_own_conversation(conversation_id, user, db)
+    cfg = _build_graph_config(conv.id, user.id, "pending_action")
+    payload = _get_pending_interrupt_payload(get_graph(), cfg)
+    return {"pending": payload is not None, "payload": payload}
+
+
 @router.post("/{conversation_id}/chat")
 async def chat(
     conversation_id: str,
@@ -692,6 +722,13 @@ async def chat(
 ):
     """发消息并以 SSE 流式返回 Agent 的执行过程与回复。"""
     conv = _get_own_conversation(conversation_id, user, db)
+    graph = get_graph()
+    cfg = _build_graph_config(conv.id, user.id, "chat")
+
+    # interrupt 后 checkpoint 仍停在旧工具节点。向同一 thread 注入新消息会
+    # 重放旧节点并重新推送过期草稿，必须先确认或取消该待处理操作。
+    if graph.get_state(cfg).next:
+        raise HTTPException(status_code=409, detail="当前会话有待确认的饮食记录，请先确认或取消")
 
     # user 消息先落库（流失败也有痕迹），顺带刷新会话活跃时间（列表按此排序）
     db.add(
@@ -717,8 +754,6 @@ async def chat(
         "user_id": str(user.id),
         "image_url": req.image_url,
     }
-    cfg = _build_graph_config(conv.id, user.id, "chat")
-
     return StreamingResponse(
         _run_graph_and_stream(graph_input, cfg, conv.id),
         media_type="text/event-stream",
@@ -737,9 +772,9 @@ async def resume_chat(
     graph = get_graph()
     cfg = _build_graph_config(conv.id, user.id, "resume")
 
-    # state.next 非空 = 图停在某个节点上等 resume；空 = 没有挂起的操作，
-    # 此时灌 resume 值会变成往 checkpoint 写一条无意义的 resume 记录，拦掉
-    if not graph.get_state(cfg).next:
+    # 只允许恢复真正携带 interrupt payload 的 checkpoint，避免普通执行态
+    # 被误当成待确认流程而写入无意义的 resume 值。
+    if _get_pending_interrupt_payload(graph, cfg) is None:
         raise HTTPException(status_code=400, detail="当前没有待确认的操作")
 
     return StreamingResponse(
