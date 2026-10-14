@@ -8,6 +8,7 @@ from app.agents.qa_agent import make_qa_agent
 from app.core.config import settings
 from app.rag.citations import strip_model_reference_catalog
 from app.rag.judge import build_judge_report, judge_answer
+from app.rag.retriever import RetrievalMode
 
 
 def run_qa_judge_eval(
@@ -17,6 +18,7 @@ def run_qa_judge_eval(
     judgment_fn: Callable[..., Any] | None = None,
     judge_model: str | None = None,
     dataset_version: str = "unspecified",
+    retrieval_mode: RetrievalMode = "hybrid_rerank",
 ) -> dict[str, Any]:
     """在固定问题集上执行 QA 并评估忠实度、答案相关性。失败样例不会中断整批。"""
     make_agent = qa_agent_factory or make_qa_agent
@@ -39,7 +41,9 @@ def run_qa_judge_eval(
             "judgment": None,
         }
         try:
-            qa_agent = make_agent(evaluation_observer=observe)
+            qa_agent = make_agent(
+                evaluation_observer=observe, retrieval_mode=retrieval_mode
+            )
             result = qa_agent({"messages": [HumanMessage(content=question)], "task": ""})
             if not observed:
                 messages = result.get("messages") or []
@@ -82,4 +86,5 @@ def run_qa_judge_eval(
         cases,
         judge_model=judge_model or settings.text_model,
         dataset_version=dataset_version,
+        retrieval_mode=retrieval_mode,
     )

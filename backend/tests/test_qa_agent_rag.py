@@ -68,6 +68,47 @@ def test_qa_agent_forwards_callbacks_to_every_llm_call(monkeypatch):
     assert generator.configs == [{"callbacks": [callback]}]
 
 
+def test_qa_agent_can_select_vector_retrieval_for_offline_comparison(monkeypatch):
+    class FakeChecker:
+        def with_structured_output(self, _schema):
+            return self
+
+        def invoke(self, _messages):
+            from app.agents.qa_agent import QaSelfCheck
+
+            return QaSelfCheck(sufficient=False, reason="测试只验证检索模式")
+
+    class FakeGenerator:
+        def invoke(self, _messages):
+            raise AssertionError("证据不足时不得生成回答")
+
+    calls = []
+
+    def fake_retrieve_by_mode(_db, query, *, top_k, mode):
+        calls.append((query, top_k, mode))
+        return []
+
+    class FakeDb:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "app.agents.qa_agent.get_text_llm",
+        lambda *, streaming=True: FakeGenerator() if streaming else FakeChecker(),
+    )
+    monkeypatch.setattr("app.agents.qa_agent.SessionLocal", lambda: FakeDb())
+    monkeypatch.setattr("app.agents.qa_agent.retrieve_by_mode", fake_retrieve_by_mode)
+
+    make_qa_agent(retrieval_mode="vector")(
+        {"messages": [HumanMessage("每周需要多少有氧运动？")], "task": ""}
+    )
+
+    assert calls == [
+        ("每周需要多少有氧运动？", 6, "vector"),
+        ("每周需要多少有氧运动？", 6, "vector"),
+    ]
+
+
 def test_qa_agent_evaluation_observer_receives_final_answer_and_generation_evidence(
     monkeypatch,
 ):

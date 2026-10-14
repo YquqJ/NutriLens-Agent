@@ -60,7 +60,11 @@ def judge_answer(
 
 
 def build_judge_report(
-    cases: list[dict[str, Any]], *, judge_model: str, dataset_version: str
+    cases: list[dict[str, Any]],
+    *,
+    judge_model: str,
+    dataset_version: str,
+    retrieval_mode: str = "unspecified",
 ) -> dict[str, Any]:
     """聚合有效评分，同时保留逐条判断和失败样例以便复核。"""
     judged = [case for case in cases if case.get("judgment") is not None]
@@ -73,6 +77,7 @@ def build_judge_report(
         "schema_version": "rag-qa-judge-v1",
         "dataset_version": dataset_version,
         "judge_model": judge_model,
+        "retrieval_mode": retrieval_mode,
         "n_cases": len(cases),
         "n_judged": len(judged),
         "n_failed": len(cases) - len(judged),

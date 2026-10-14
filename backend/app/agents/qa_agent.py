@@ -33,7 +33,7 @@ from app.rag.citations import (
     normalize_answer_citations,
     strip_model_reference_catalog,
 )
-from app.rag.retriever import retrieve
+from app.rag.retriever import RetrievalMode, retrieve, retrieve_by_mode
 
 QA_SYSTEM_PROMPT = """你是营养与运动知识顾问，基于检索到的知识库切片回答问题。
 
@@ -108,6 +108,7 @@ def make_qa_agent(
     callbacks: Sequence[BaseCallbackHandler] | None = None,
     *,
     evaluation_observer: Callable[[str, list[dict[str, Any]], str], None] | None = None,
+    retrieval_mode: RetrievalMode = "hybrid_rerank",
 ):
     """构造 qa_agent 节点函数（Agentic RAG：混合检索 + 重排 + 迭代自检）。"""
     gen_llm = get_text_llm()  # 生成路：流式（SSE 打字机）
@@ -149,14 +150,22 @@ def make_qa_agent(
         db = SessionLocal()  # 知识库是全局的，不涉用户数据，无需 user_id
         try:
             # ---- 第 1 轮检索 ----
-            results = retrieve(db, question, top_k=6)
+            if retrieval_mode == "hybrid_rerank":
+                results = retrieve(db, question, top_k=6)
+            else:
+                results = retrieve_by_mode(db, question, top_k=6, mode=retrieval_mode)
             trace.append(_trace_entry(question, 1, results, reason="初检"))
 
             # ---- 自检：不足则改写重检（≤2 轮）----
             check: Optional[QaSelfCheck] = run_self_check(results, 1)
             if not check.sufficient:
                 retry_query = check.rewritten_query or question
-                results2 = retrieve(db, retry_query, top_k=6)
+                if retrieval_mode == "hybrid_rerank":
+                    results2 = retrieve(db, retry_query, top_k=6)
+                else:
+                    results2 = retrieve_by_mode(
+                        db, retry_query, top_k=6, mode=retrieval_mode
+                    )
                 trace.append(
                     _trace_entry(
                         retry_query,

@@ -104,7 +104,8 @@ def test_run_qa_judge_eval_uses_original_question_and_actual_qa_evidence():
     }
     observed = {}
 
-    def qa_agent_factory(*, evaluation_observer):
+    def qa_agent_factory(*, evaluation_observer, retrieval_mode):
+        observed["retrieval_mode"] = retrieval_mode
         def qa_agent(state):
             question = state["messages"][0].content
             observed["question"] = question
@@ -131,9 +132,11 @@ def test_run_qa_judge_eval_uses_original_question_and_actual_qa_evidence():
         judgment_fn=judgment_fn,
         judge_model="test-judge",
         dataset_version="rag-eval-test-v1",
+        retrieval_mode="vector",
     )
 
     assert observed["question"] == "成年人每周要做多少有氧运动？"
+    assert observed["retrieval_mode"] == "vector"
     assert observed["judgment_input"] == (
         "成年人每周要做多少有氧运动？",
         "每周可安排中等强度有氧活动。[1]",

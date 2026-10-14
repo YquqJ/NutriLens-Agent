@@ -1,0 +1,146 @@
+{
+  "schema_version": "rag-eval-v3-100q",
+  "includes": ["rag_queries_v2.json"],
+  "evidence": {
+    "basics_cutting_protein": {
+      "source_key": "nutrition_exercise_basics_pdf",
+      "page_number": 2,
+      "text": "减脂期人群：1.6g - 2.4g / kg体重"
+    },
+    "basics_preworkout_food": {
+      "source_key": "nutrition_exercise_basics_pdf",
+      "page_number": 6,
+      "text": "运动前（Pre-workout）：运动前 1-2 小时摄入适量碳水和少量蛋白质"
+    },
+    "exercise_weekly_minimum": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 3,
+      "text": "每周进行 150-300 分钟中等强度有氧活动，或 75-150 分钟高强度有氧活动"
+    },
+    "exercise_water": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 6,
+      "text": "一般环境下持续时间较短的普通训练，水通常可以满足基本需求"
+    },
+    "exercise_safety": {
+      "source_key": "exercise_recovery_safety_pdf",
+      "page_number": 2,
+      "text": "运动中胸痛、胸闷、明显心悸或接近晕厥"
+    },
+    "fitness_safety_principle": {
+      "source_key": "national_fitness_guide_pdf",
+      "page_number": 9,
+      "text": "准备活动的时间一般为 5～10分钟"
+    },
+    "fitness_weekly_activity": {
+      "source_key": "national_fitness_guide_pdf",
+      "page_number": 8,
+      "text": "每周应进行 150 分钟"
+    },
+    "healthy_china_vegetables": {
+      "source_key": "healthy_china_action_pdf",
+      "page_number": 11,
+      "text": "300～500g 蔬菜"
+    },
+    "healthy_china_steps": {
+      "source_key": "healthy_china_action_pdf",
+      "page_number": 36,
+      "text": "6000～10000 步"
+    },
+    "diet_guideline_salt": {
+      "source_key": "dietary_guidelines_eight_pdf",
+      "page_number": 2,
+      "text": "成年人每天摄入食盐不超过 5g"
+    },
+    "diet_guideline_water": {
+      "source_key": "dietary_guidelines_eight_pdf",
+      "page_number": 2,
+      "text": "成年男性每天喝水"
+    },
+    "weight_bmi_adult": {
+      "source_key": "weight_management_guideline_pdf",
+      "page_number": 2,
+      "text": "24.0kg/m2≤BMI<28.0kg/m2"
+    },
+    "weight_loss_target": {
+      "source_key": "weight_management_guideline_pdf",
+      "page_number": 5,
+      "text": "0.5~1kg"
+    },
+    "balanced_meal_carbs": {
+      "source_key": "balanced_meals_pdf",
+      "page_number": 3,
+      "text": "50%~65%"
+    },
+    "balanced_meal_children": {
+      "source_key": "balanced_meals_pdf",
+      "page_number": 2,
+      "text": "每天进行至少 60 分钟中高强度运动"
+    }
+  },
+  "queries": [
+    {"query": "减脂阶段每公斤体重的蛋白质摄入建议是多少？", "relevant_evidence_ids": ["basics_cutting_protein"]},
+    {"query": "减脂时蛋白质可以按什么体重剂量范围估算？", "relevant_evidence_ids": ["basics_cutting_protein"]},
+    {"query": "资料对减脂人群的蛋白质克数建议是什么？", "relevant_evidence_ids": ["basics_cutting_protein"]},
+    {"query": "减脂期间的蛋白质摄入量范围是多少克每公斤？", "relevant_evidence_ids": ["basics_cutting_protein"]},
+    {"query": "运动前多久吃东西比较合适，食物应包含什么？", "relevant_evidence_ids": ["basics_preworkout_food"]},
+    {"query": "训练前一两个小时可以补充哪些营养？", "relevant_evidence_ids": ["basics_preworkout_food"]},
+    {"query": "运动开始前的餐食如何安排碳水和蛋白质？", "relevant_evidence_ids": ["basics_preworkout_food"]},
+    {"query": "运动前吃高脂高纤维餐是否合适？运动前建议吃什么？", "relevant_evidence_ids": ["basics_preworkout_food"]},
+    {"query": "成年人每周应累计多少中等强度有氧运动？", "relevant_evidence_ids": ["exercise_weekly_minimum"]},
+    {"query": "如果做高强度有氧，每周推荐时长范围是多少？", "relevant_evidence_ids": ["exercise_weekly_minimum"]},
+    {"query": "中等强度和高强度有氧活动的每周建议量分别是多少？", "relevant_evidence_ids": ["exercise_weekly_minimum"]},
+    {"query": "成年人一周的有氧运动分钟数达到多少算符合指南建议？", "relevant_evidence_ids": ["exercise_weekly_minimum"]},
+    {"query": "普通短时训练需要运动饮料吗？", "relevant_evidence_ids": ["exercise_water"]},
+    {"query": "一般环境下短时间锻炼，补水有什么基本建议？", "relevant_evidence_ids": ["exercise_water"]},
+    {"query": "普通训练时白水能不能满足基本饮水需求？", "relevant_evidence_ids": ["exercise_water"]},
+    {"query": "什么时候运动时可能需要考虑电解质和碳水补充？", "relevant_evidence_ids": ["exercise_water"]},
+    {"query": "运动时胸闷心悸甚至快晕倒，应该继续锻炼吗？", "relevant_evidence_ids": ["exercise_safety"]},
+    {"query": "运动过程中出现胸痛或接近晕厥时应如何处理？", "relevant_evidence_ids": ["exercise_safety"]},
+    {"query": "哪些运动中的症状提示应该停止并寻求帮助？", "relevant_evidence_ids": ["exercise_safety"]},
+    {"query": "出现明显心悸、胸痛后，能否让健康助手继续安排训练？", "relevant_evidence_ids": ["exercise_safety"]},
+    {"query": "一次体育锻炼开始前和结束后分别要做什么？", "relevant_evidence_ids": ["fitness_safety_principle"]},
+    {"query": "全民健身指南如何建议运动前热身和运动后整理？", "relevant_evidence_ids": ["fitness_safety_principle"]},
+    {"query": "体育活动中的安全性原则包括哪些准备和收尾环节？", "relevant_evidence_ids": ["fitness_safety_principle"]},
+    {"query": "运动前后如何降低受伤风险？", "relevant_evidence_ids": ["fitness_safety_principle"]},
+    {"query": "有运动习惯的人每周至少应做多少中等强度运动？", "relevant_evidence_ids": ["fitness_weekly_activity"]},
+    {"query": "每周进行高强度活动的最低时长建议是多少？", "relevant_evidence_ids": ["fitness_weekly_activity"]},
+    {"query": "该指南建议的每周中等强度和大强度锻炼量是什么？", "relevant_evidence_ids": ["fitness_weekly_activity"]},
+    {"query": "为了获得健身效果，一周运动量大致需要达到多少？", "relevant_evidence_ids": ["fitness_weekly_activity"]},
+    {"query": "成年人一天推荐吃多少蔬菜，深色蔬菜占多少？", "relevant_evidence_ids": ["healthy_china_vegetables"]},
+    {"query": "每天蔬菜摄入量的建议范围是多少？", "relevant_evidence_ids": ["healthy_china_vegetables"]},
+    {"query": "健康中国行动对深色蔬菜比例有什么建议？", "relevant_evidence_ids": ["healthy_china_vegetables"]},
+    {"query": "每日蔬菜量和深色蔬菜占比应如何安排？", "relevant_evidence_ids": ["healthy_china_vegetables"]},
+    {"query": "健康中国行动建议每天走多少步？", "relevant_evidence_ids": ["healthy_china_steps"]},
+    {"query": "日常身体活动步数达到什么范围比较合适？", "relevant_evidence_ids": ["healthy_china_steps"]},
+    {"query": "资料给出的每日步行活动量推荐是多少步？", "relevant_evidence_ids": ["healthy_china_steps"]},
+    {"query": "保持日常活动时，每天可以把步数目标定在多少？", "relevant_evidence_ids": ["healthy_china_steps"]},
+    {"query": "成年人每天食盐摄入量建议控制在多少克以内？", "relevant_evidence_ids": ["diet_guideline_salt"]},
+    {"query": "膳食指南对成人每日盐摄入上限有什么建议？", "relevant_evidence_ids": ["diet_guideline_salt"]},
+    {"query": "想少盐饮食，一天盐量不应超过多少？", "relevant_evidence_ids": ["diet_guideline_salt"]},
+    {"query": "成人每天吃盐的推荐控制线是多少克？", "relevant_evidence_ids": ["diet_guideline_salt"]},
+    {"query": "低活动水平成年男女每天建议饮水量分别是多少？", "relevant_evidence_ids": ["diet_guideline_water"]},
+    {"query": "温和气候下成年男性和女性的每日饮水建议量是多少？", "relevant_evidence_ids": ["diet_guideline_water"]},
+    {"query": "膳食指南对成年男女每天喝水量的建议分别是什么？", "relevant_evidence_ids": ["diet_guideline_water"]},
+    {"query": "成年女性每天建议喝多少毫升水？男性呢？", "relevant_evidence_ids": ["diet_guideline_water"]},
+    {"query": "中国成年人BMI多少属于正常范围？", "relevant_evidence_ids": ["weight_bmi_adult"]},
+    {"query": "成人健康体重的BMI标准区间是多少？", "relevant_evidence_ids": ["weight_bmi_adult"]},
+    {"query": "按体重管理指导原则，正常BMI上下限是多少？", "relevant_evidence_ids": ["weight_bmi_adult"]},
+    {"query": "成年人BMI在什么范围内被判定为正常？", "relevant_evidence_ids": ["weight_bmi_adult"]},
+    {"query": "体重管理指导原则建议每周减重多少比较合适？", "relevant_evidence_ids": ["weight_loss_target"]},
+    {"query": "减重目标的每周速度建议设在什么范围？", "relevant_evidence_ids": ["weight_loss_target"]},
+    {"query": "文件对初始阶段周减重目标有什么数字建议？", "relevant_evidence_ids": ["weight_loss_target"]},
+    {"query": "制定减重计划时，每周体重下降多少算建议目标？", "relevant_evidence_ids": ["weight_loss_target"]},
+    {"query": "碳水化合物应占总能量的大约多少比例？", "relevant_evidence_ids": ["balanced_meal_carbs"]},
+    {"query": "膳食中的碳水供能比推荐范围是什么？", "relevant_evidence_ids": ["balanced_meal_carbs"]},
+    {"query": "主食碳水是健康饮食的敌人吗，建议占能量多少？", "relevant_evidence_ids": ["balanced_meal_carbs"]},
+    {"query": "完全不吃主食是否符合资料中的碳水建议？", "relevant_evidence_ids": ["balanced_meal_carbs"]},
+    {"query": "学龄儿童每天建议进行多长时间的中高强度运动？", "relevant_evidence_ids": ["balanced_meal_children"]},
+    {"query": "儿童每日身体活动建议分钟数是多少？", "relevant_evidence_ids": ["balanced_meal_children"]},
+    {"query": "关于学龄儿童健康生活，运动时间有什么核心建议？", "relevant_evidence_ids": ["balanced_meal_children"]},
+    {"query": "学龄儿童每天至少需要多少分钟中高强度活动？", "relevant_evidence_ids": ["balanced_meal_children"]},
+    {"query": "食品含钠800毫克约等于多少克盐？", "relevant_evidence_ids": ["sodium_formula"]},
+    {"query": "钠换算成食盐克数时使用什么公式？", "relevant_evidence_ids": ["sodium_formula"]},
+    {"query": "营养标签上的钠含量如何换算为盐？", "relevant_evidence_ids": ["sodium_formula"]}
+  ]
+}
