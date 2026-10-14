@@ -28,6 +28,43 @@ Confidence = Literal["db_exact", "db_fuzzy", "llm_estimate"]
 # 图片分析的终态。recognized_foods=None 本身无法区分“没有食物”和“识图失败”，
 # 因此必须由状态字段保留前置感知节点的结论，供路由和 worker 做不同处理。
 ImageAnalysisStatus = Literal["no_image", "recognized", "no_food_detected", "failed"]
+NoTaskReason = Literal["out_of_scope", "small_talk", "unclear", "no_action"]
+WorkerStatus = Literal[
+    "success",
+    "retryable_error",
+    "routing_mismatch",
+    "quality_insufficient",
+    "needs_user_input",
+    "fatal_error",
+]
+SideEffectStatus = Literal["none", "committed", "unknown"]
+WorkerOutcome = TypedDict(
+    "WorkerOutcome",
+    {
+        "status": WorkerStatus,
+        "error_code": str,
+        "retryable": bool,
+        "side_effect": SideEffectStatus,
+    },
+)
+FinishReason = Literal[
+    "out_of_scope",
+    "small_talk",
+    "unclear",
+    "no_action",
+    "completed",
+    "route_limit",
+    "worker_failed",
+    "routing_mismatch",
+]
+RoutingMismatch = TypedDict(
+    "RoutingMismatch",
+    {
+        "attempted_agent": str,
+        "suggested_agent": Optional[str],
+        "reason": str,
+    },
+)
 
 
 class DietItemDraft(TypedDict):
@@ -61,8 +98,21 @@ class AgentState(TypedDict):
     # ---- supervisor 路由决策结果 ----
     next_agent: str
     task: str  # 改写后的子任务指令（含指代消解，交给专职 agent 独立执行）
-    hop_count: int  # 已路由次数，>=2 后强制结束
+    task_plan: Optional[list[dict]]  # 本轮一次性生成的有序单域任务计划
+    task_index: int  # 下一个待派发任务的游标
+    plan_initialized: bool  # 本轮是否已经生成过任务计划
+    hop_count: int  # 已派发次数，>=8 后强制结束（四任务各允许一次重试）
     plan_requested: bool  # 本轮是否明确生成计划（供 SSE 出站层归档最终交付）
+    finish_reason: Optional[FinishReason]  # 本轮结束原因；新轮次重置
+    worker_outcome: Optional[WorkerOutcome]  # 最近一次 Worker 的结构化结果
+    worker_retry_count: int  # 当前任务已重试次数；首版最多一次
+    worker_retry_context: str  # 重试时注入 Worker 的失败上下文
+    worker_message_start: int  # 最近一次 Worker 输出在 messages 中的起点
+    worker_message_end: int  # 最近一次 Worker 输出在 messages 中的终点
+    worker_discarded_ranges: list[dict]  # 最终回复提取时应跳过的失败尝试区间
+    worker_failures: list[dict]  # 已跳过的失败子任务，供最终兜底和观测
+    routing_mismatch: Optional[RoutingMismatch]  # Worker 准入审核拒绝的路由信息
+    routing_mismatch_count: int  # 本轮已发生的退回次数；最多允许一次重规划
 
     # ---- HITL：待确认的饮食草稿 ----
     # interrupt() 挂起前由工具写入 state，恢复后由工具消费

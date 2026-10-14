@@ -126,18 +126,13 @@ npm run dev
 真实检索消融评测需要 PostgreSQL 中已导入对应知识源，并配置 DashScope API Key。在 `backend/` 目录运行：
 
 ```powershell
-# 单文档基础评测集
-uv run python -m app.rag.run_ablation `
-  --split-mode section_aware `
-  --eval-data tests/eval_data/rag_queries.json
-
-# 多文档评测集
-uv run python -m app.rag.run_ablation `
-  --split-mode section_aware `
-  --eval-data tests/eval_data/rag_queries_v2.json
+# 100-query comparison: retrieval metrics + QA LLM-as-Judge
+uv run python -m app.rag.run_full_eval
 ```
 
-评测脚本输出包含 Recall@4、Recall@8、MRR、nDCG@4 和逐 query 明细。评测集用页码与证据文本锚定相关切片，不依赖某一种切分方式产生的固定 chunk hash。当前内置评测集覆盖既有标注证据对应的知识文档；新登记的 PDF 需补充人工核对的 gold evidence 和 query 后，才能纳入相应指标。检索模式消融只测检索结果，不代表完整 QA 流程；充分性判断、Query Rewrite、二次检索及答案生成需要单独设计端到端评测。
+默认评测集 `tests/eval_data/rag_queries_v3.json` 含 100 条唯一 query，覆盖 8 份知识 PDF，并包含 5 条领域外负例。脚本对比 Vector、BM25、RRF、Hybrid+Rerank 的检索指标，并对 Vector 与 Hybrid+Rerank 分别运行 QA 和 LLM-as-Judge，比较 Faithfulness、Answer Relevancy。报告包含 Recall@4、Recall@8、MRR、nDCG@4、两项生成质量均分、相对 Vector 基线的绝对/相对变化及逐 query 明细，默认写入 `backend/reports/rag-eval-v3.json`。
+
+完整评测会产生较多模型调用；可用 `--limit 5` 先做小批量冒烟评测，或通过 `--output` 指定报告位置。页码与证据文本用于锚定 gold evidence，不依赖固定 chunk hash；新增 PDF 需补充并人工核对 query 与 gold evidence。Judge 分数用于定位问题和版本间对比，不是绝对真值或线上质量门槛，应对健康安全等用例抽样人工复核。
 
 ## 测试与质量检查
 

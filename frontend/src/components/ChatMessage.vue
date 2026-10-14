@@ -57,7 +57,14 @@ function formatTime(iso: string | null | undefined) {
       </div>
 
       <div class="body">
-        <span v-if="message.agentName" class="agent" :class="toneClass(message.agentName)">{{ agentLabel(message.agentName) }}</span>
+        <div v-if="message.agentNames.length" class="agent-list">
+          <span
+            v-for="agentName in message.agentNames"
+            :key="agentName"
+            class="agent"
+            :class="toneClass(agentName)"
+          >{{ agentLabel(agentName) }}</span>
+        </div>
 
         <div v-if="message.content || message.streaming" class="bubble assistant-bubble">
           <MarkdownContent
@@ -86,7 +93,7 @@ function formatTime(iso: string | null | undefined) {
         <div class="meta">
           <span v-if="message.createdAt" class="time">{{ formatTime(message.createdAt) }}</span>
           <button
-            v-if="message.agentName === 'plan_agent' && message.content && !message.streaming"
+            v-if="(message.agentName === 'plan_agent' || message.agentNames.includes('plan_agent')) && message.content && !message.streaming"
             class="sync-plan"
             type="button"
             @click="emit('sync-plan', message)"
@@ -167,7 +174,6 @@ function formatTime(iso: string | null | undefined) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
   padding: 2px 10px;
   font-size: 11.5px;
   font-weight: 600;
@@ -184,6 +190,13 @@ function formatTime(iso: string | null | undefined) {
   flex: none;
   border-radius: 50%;
   background: var(--tone-dot, var(--primary));
+}
+.agent-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 .tone-diet {
   --tone-bg: #e7f6ee;

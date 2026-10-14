@@ -55,6 +55,11 @@ def _plan_prompt(state: AgentState) -> list:
             f"{PLAN_SYSTEM_PROMPT}\n\n"
             f"【当前日期】{date.today().isoformat()}（回答涉及今天/昨天/明天时以此为准，不要臆测日期）。\n\n"
             f"【当前任务】{task}"
+            + (
+                f"\n\n【重试说明】{state['worker_retry_context']}"
+                if state.get("worker_retry_context")
+                else ""
+            )
         )
     )
     return [system] + state["messages"]

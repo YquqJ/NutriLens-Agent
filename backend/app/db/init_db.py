@@ -70,10 +70,11 @@ def _migrate_knowledge_schema() -> None:
 
 
 def _migrate_message_schema() -> None:
-    """为历史消息补充引用与性能指标，旧消息保持新增字段为 NULL。"""
+    """为历史消息补充参与 agent、引用与性能指标，旧字段保持可空兼容。"""
     with engine.begin() as conn:
         for statement in (
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS citations TEXT",
+            "ALTER TABLE messages ADD COLUMN IF NOT EXISTS agent_names TEXT",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS duration_ms INTEGER",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS input_tokens INTEGER",
             "ALTER TABLE messages ADD COLUMN IF NOT EXISTS output_tokens INTEGER",

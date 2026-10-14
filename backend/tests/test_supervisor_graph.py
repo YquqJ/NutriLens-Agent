@@ -14,12 +14,14 @@ Supervisor 图组装测试（M3.6）。
 import uuid
 
 import pytest
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END
+from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
+from typing_extensions import TypedDict
 
 from app.agents.graph import build_graph, get_checkpointer
+from app.agents.worker_result import make_worker_node
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.models import DietRecord, User
@@ -64,6 +66,129 @@ def test_graph_wiring_and_checkpoint_roundtrip():
     human_texts = [m.content for m in r2["messages"]]
     assert "你好" in human_texts
     assert "还在吗" in human_texts
+
+
+def test_worker_adapter_classifies_read_only_exception_as_retryable():
+    class FailingWorker:
+        def invoke(self, _state, config=None):
+            raise TimeoutError("temporary read failure")
+
+    node = make_worker_node("qa_agent", FailingWorker())
+    result = node({"messages": [HumanMessage("蛋白质怎么吃")]}, {})
+
+    assert result["worker_outcome"]["status"] == "retryable_error"
+    assert result["worker_outcome"]["side_effect"] == "none"
+    assert result["worker_outcome"]["retryable"] is True
+
+
+def test_worker_adapter_does_not_mark_write_worker_exception_retryable():
+    class FailingWorker:
+        def invoke(self, _state, config=None):
+            raise TimeoutError("write may have committed")
+
+    node = make_worker_node("exercise_agent", FailingWorker())
+    result = node({"messages": [HumanMessage("记录慢跑30分钟")]}, {})
+
+    assert result["worker_outcome"]["status"] == "fatal_error"
+    assert result["worker_outcome"]["side_effect"] == "unknown"
+    assert result["worker_outcome"]["retryable"] is False
+
+
+def test_worker_adapter_supports_callable_qa_node_and_tracks_new_messages():
+    from langchain_core.messages import ToolMessage
+
+    def failing_qa_node(_state):
+        return {
+            "messages": [
+                ToolMessage(
+                    content="temporary retrieval failure",
+                    tool_call_id="retrieve-1",
+                    name="retrieve_knowledge",
+                    status="error",
+                ),
+                AIMessage(content="暂时无法检索到知识库内容。"),
+            ]
+        }
+
+    original_messages = [HumanMessage("蛋白质怎么吃")]
+    result = make_worker_node("qa_agent", failing_qa_node)(
+        {"messages": original_messages}, {}
+    )
+
+    assert result["worker_outcome"]["error_code"] == "read_tool_error"
+    assert result["worker_outcome"]["retryable"] is True
+    assert result["worker_message_start"] == 1
+    assert result["worker_message_end"] == 3
+    assert result["worker_discarded_ranges"] == [{"start": 1, "end": 3}]
+
+
+def test_worker_rejects_mismatched_route_before_invoking_business_worker():
+    """Worker 准入审核拒绝时，业务 Worker 和其工具均不得执行。"""
+    calls = []
+
+    class RejectingGuard:
+        def invoke(self, _messages):
+            return {
+                "approved": False,
+                "reason": "BMI 概念解释应由知识问答处理",
+                "suggested_agent": "qa_agent",
+            }
+
+    def mutating_worker(_state):
+        calls.append(True)
+        return {"messages": [AIMessage(content="不应执行")]}
+
+    result = make_worker_node(
+        "diet_agent", mutating_worker, admission_guard=RejectingGuard()
+    )(
+        {
+            "messages": [HumanMessage("BMI是什么")],
+            "task": "记录今天早餐",
+        }
+    )
+
+    assert calls == []
+    assert result["worker_outcome"] == {
+        "status": "routing_mismatch",
+        "error_code": "routing_mismatch",
+        "retryable": False,
+        "side_effect": "none",
+    }
+    assert result["routing_mismatch"] == {
+        "attempted_agent": "diet_agent",
+        "suggested_agent": "qa_agent",
+        "reason": "BMI 概念解释应由知识问答处理",
+    }
+
+
+def test_nested_worker_interrupt_propagates_and_resumes():
+    class State(TypedDict):
+        messages: list
+
+    child_builder = StateGraph(State)
+
+    def confirm_node(_state):
+        value = __import__("langgraph.types", fromlist=["interrupt"]).interrupt(
+            {"type": "test_confirm"}
+        )
+        return {"messages": [AIMessage(content=f"confirmed:{value}")]}
+
+    child_builder.add_node("confirm", confirm_node)
+    child_builder.add_edge(START, "confirm")
+    child_builder.add_edge("confirm", END)
+    child = child_builder.compile()
+
+    parent_builder = StateGraph(State)
+    parent_builder.add_node("diet_agent", make_worker_node("diet_agent", child))
+    parent_builder.add_edge(START, "diet_agent")
+    parent = parent_builder.compile(checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": "nested-interrupt"}}
+
+    paused = parent.invoke({"messages": [HumanMessage(content="record food")]}, config)
+    assert paused["__interrupt__"][0].value == {"type": "test_confirm"}
+
+    resumed = parent.invoke(Command(resume="yes"), config)
+    assert resumed["messages"][-1].content == "confirmed:yes"
 
 
 # ======================================================================

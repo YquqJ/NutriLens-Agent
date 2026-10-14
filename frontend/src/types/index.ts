@@ -113,6 +113,7 @@ export interface Message {
   content: string
   image_url: string | null
   agent_name: string | null
+  agent_names: string[]
   tool_trace: string | null // JSON 字符串，前端解析
   citations: string | null // JSON 字符串，QA 证据定位与切片正文
   duration_ms: number | null
@@ -185,6 +186,7 @@ export interface ChatMessage {
   content: string
   imageUrl: string | null
   agentName: string | null
+  agentNames: string[]
   toolTrace: ToolTraceEntry[]
   citations: Citation[]
   streaming: boolean
@@ -209,8 +211,18 @@ export type SseEvent =
       type: 'done'
       interrupted: boolean
       agent_name?: string
+      agent_names?: string[]
       persisted?: boolean
       content?: string
+      finish_reason?:
+        | 'out_of_scope'
+        | 'small_talk'
+        | 'unclear'
+        | 'no_action'
+        | 'completed'
+        | 'route_limit'
+        | 'worker_failed'
+        | null
       citations?: Citation[]
       duration_ms?: number
       input_tokens?: number | null

@@ -9,7 +9,7 @@ Supervisor 路由节点 —— 多 Agent 系统的调度核心。
    交给 worker 后 worker 不需要任何对话上下文就能独立执行；
 3. hop_count 防死循环：worker 之间不允许互相踢皮球，
    路由次数 >= MAX_HOPS 强制结束（LangGraph recursion_limit 是兜底，
-   业务层主动计数更可控）。
+   业务层主动计数更可控）。MAX_HOPS 覆盖四个计划任务各一次安全重试。
 
 可测试性设计：make_supervisor_node(router=...) 的 router 可注入 ——
 单测注入桩（伪造固定决策），不依赖真实 LLM；联调时用 qwen-plus。
@@ -19,19 +19,25 @@ from datetime import date
 from typing import Literal, Optional
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import Runnable
 from langgraph.graph import END
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
-from app.agents.llm import get_text_llm
-from app.agents.state import AgentState
+from app.agents.llm import get_router_llm
+from app.agents.state import AgentState, NoTaskReason
 
 # 路由目标：四个专职 agent + 结束
 RouteTarget = Literal["diet_agent", "exercise_agent", "qa_agent", "plan_agent", "FINISH"]
 
-# 防死循环上限：最多路由 2 次（用户请求 → agent A → （极少）agent B → 结束）
-MAX_HOPS = 2
+# 防死循环上限：最多四个计划任务各派发一次，并各允许一次安全重试。
+# 这是 Worker 派发次数上限，不限制单个 Worker 内部的工具调用次数。
+MAX_HOPS = 8
+MAX_WORKER_RETRIES = 1
+# 当前轮路由只保留有限的前序对话，避免历史工具结果或旧任务主导意图判断。
+ROUTING_CONTEXT_WINDOW = 6
+EMPTY_PLAN_REVIEW_REASONS = {"out_of_scope", "no_action", "unclear"}
 
 AGENT_DUTIES: dict[str, str] = {
     "diet_agent": (
@@ -44,12 +50,14 @@ AGENT_DUTIES: dict[str, str] = {
         "涉及'跑了多久/消耗多少'选它。"
     ),
     "qa_agent": (
-        "营养/健身知识问答与建议咨询：'减脂期怎么吃''蛋白质摄入量'等开放性问题选它。"
+        "营养/健身知识问答与建议咨询：'减脂期怎么吃''蛋白质摄入量'等开放性问题选它；"
+        "BMI、BMR、TDEE、基础代谢、体脂率、热量缺口的定义/公式/原理，以及一般营养"
+        "和运动原则都属于知识问答。"
         "注意：查用户自己的记录不归它（那是 diet/exercise_agent 的事）。"
     ),
     "plan_agent": (
-        "个性化饮食/运动计划生成：读身体档案算 BMR/TDEE，按减脂/增肌/维持目标出方案；"
-        "查看或更新身体档案（身高体重/活动水平/偏好）也归它。"
+        "仅处理个人身体档案的读取/更新（身高体重/活动水平/偏好），或基于用户个人"
+        "档案生成个性化饮食/运动计划。单纯解释 BMR/TDEE 等概念不得路由到此。"
     ),
 }
 
@@ -66,26 +74,72 @@ class RouteDecision(BaseModel):
     )
 
 
-SUPERVISOR_SYSTEM_PROMPT = """你是健康管理系统的调度员（supervisor）。你的唯一职责是路由，不要自己回答问题。
+class PlannedTask(BaseModel):
+    """一次性计划中的一个单域任务。"""
+
+    next_agent: Literal["diet_agent", "exercise_agent", "qa_agent", "plan_agent"]
+    task: str = Field(min_length=1)
+
+
+class TaskPlanDecision(BaseModel):
+    """Supervisor 首次进入时生成的有序任务计划。"""
+
+    tasks: list[PlannedTask] = Field(default_factory=list, max_length=4)
+    finish_reason: Optional[NoTaskReason] = Field(
+        description=(
+            "tasks 非空时必须为 null；tasks 为空时必须说明原因：out_of_scope（超出健康管理范围）、"
+            "small_talk（问候或感谢）、unclear（意图不清，需要用户澄清）、"
+            "no_action（仅确认、感谢等没有新问题或请求的消息）"
+        )
+    )
+
+
+SUPERVISOR_SYSTEM_PROMPT = """你是健康管理系统的调度员（supervisor）。你的唯一职责是规划和路由，不要自己回答问题。
 
 当前真实日期：{today}（做日期指代消解时以它为准，不要凭记忆猜日期）。
 
 可用执行者：
 {duties}
-以及 FINISH：任务已完成（结果已在对话中）或用户只是寒暄/没有可执行任务。
+如果用户没有可执行任务，返回空 tasks，并根据原因填写 finish_reason；有任务时 finish_reason 必须为 null。
 
 判断规则：
-1. 依据完整对话历史判断用户最新意图，只选一个执行者；若最新请求同时包含多个
-   独立领域（如“吃了什么，又运动了多久”），先选择其中一个执行者，但 task 只能包含
-   该执行者负责的子任务，严禁把其他领域的动作或 agent 名写进 task；
-2. worker 完成后，必须检查最新用户请求是否仍有未完成的独立部分：有则路由给对应
-   执行者并只下发该部分；所有部分完成后才能选 FINISH；
+1. 以【当前用户请求】为唯一需要响应的对象；前序上下文仅用于消解它的指代，
+   不得把前序内容中的旧需求当作当前任务。一次性拆出有序 tasks；每个 task 只属于一个执行者。
+   若同一领域有多个子请求，合并成该领域一个 task，不要重复添加同一 agent；
+2. tasks 按推荐执行顺序排列；最多返回四个 task。不要把其他领域动作写进单个 task；
 3. task 字段把用户请求改写成独立指令：补全指代消解（他/它/昨天那顿→具体内容）；
    "今天"一律消解为 {today}，"昨天/明天"据此前后推算；未提及日期默认今天；
-4. worker 的执行结果会回到你这里：如果结果已经足以回答用户，选 FINISH；
-   判断依据：对话尾部已出现 worker 的完成汇报（如"已记录/已创建/已查询到/已生成"），
-   说明任务已达成，必须选 FINISH —— 不要把已完成的结果再当成新任务重复路由；
-5. 拿不准属于谁时，按最贴近用户目的的那个选。"""
+4. BMI、BMR、TDEE、基础代谢、体脂率、热量缺口的术语/公式/原理解释，及一般营养或运动
+   建议，都是 qa_agent 的可执行知识问题，不能判为 no_action 或 unclear。
+5. no_action 仅用于确认、感谢或完全没有新问题/请求的消息；绝不能因为请求不涉及数据库写入而使用。
+   超出健康管理范围、寒暄、意图不清、无需新操作时才返回空 tasks，并分别填写
+   out_of_scope、small_talk、unclear、no_action。禁止把无关任务硬塞给某个 worker。"""
+
+
+def _routing_conversation(messages: list) -> list:
+    """返回当前请求和仅供指代消解的有限前序对话，排除工具输出。"""
+    human_indexes = [
+        index for index, message in enumerate(messages) if isinstance(message, HumanMessage)
+    ]
+    if not human_indexes:
+        return []
+
+    current_index = human_indexes[-1]
+    preceding = [
+        message
+        for message in messages[:current_index]
+        if isinstance(message, (HumanMessage, AIMessage))
+    ][-ROUTING_CONTEXT_WINDOW:]
+    return [
+        (
+            "system",
+            "[ROUTING_REFERENCE_ONLY_CONTEXT] 以下前序内容仅用于消解当前请求中的指代，"
+            "不得从中引入新的任务。",
+        ),
+        *preceding,
+        ("system", "【当前用户请求】请只路由接下来的这条用户消息。"),
+        messages[current_index],
+    ]
 
 
 def make_supervisor_node(
@@ -94,30 +148,19 @@ def make_supervisor_node(
     """
     构造 supervisor 节点函数。
 
-    参数 router：已绑定结构化输出的决策器（messages → RouteDecision）。
-    生产路径由本函数内部用 qwen-plus 构建；测试注入桩。
+    参数 router：已绑定结构化输出的规划器（messages → TaskPlanDecision）。
+    生产路径由本函数内部用 qwen-plus 构建；旧版 RouteDecision 测试桩仍兼容。
     """
     if router is None:
-        llm: BaseChatModel = get_text_llm(streaming=False)  # 路由是一次结构化输出，关流式
-        router = llm.with_structured_output(RouteDecision)
+        llm: BaseChatModel = get_router_llm()
+        router = llm.with_structured_output(TaskPlanDecision)
 
     def supervisor(state: AgentState) -> Command:
         # 注：返回注解不能用 Command[RouteTarget] —— compile 时 LangGraph 会把
         # 注解里的字面量解析成 goto 目标白名单做校验，"FINISH" 不是图中的
         # 节点名（真正跳的是 END 常量），带了它直接 ValueError。
-        # ---- 1. 防死循环：超限强制结束 ----
         hop_count = state.get("hop_count", 0)
-        if hop_count >= MAX_HOPS:
-            return Command(
-                goto=END,
-                update={
-                    "next_agent": "FINISH",
-                    "task": "已达最大路由次数，强制结束以避免 agent 间循环",
-                    "hop_count": hop_count,
-                },
-            )
-
-        # ---- 2. 路由决策（qwen-plus 结构化输出）----
+        # ---- 1. 首次进入才规划；Worker 回流只推进已持久化计划 ----
         routing_msgs = [
             (
                 "system",
@@ -131,7 +174,13 @@ def make_supervisor_node(
         # （"昨天那顿"）。把 summary 作为第二条系统消息注入，保证指代消解仍可做。
         summary = state.get("summary")
         if summary:
-            routing_msgs.append(("system", f"【历史对话摘要，供指代消解参考】\n{summary}"))
+            routing_msgs.append(
+                (
+                    "system",
+                    "[ROUTING_REFERENCE_ONLY_SUMMARY] 以下历史摘要仅用于消解当前请求中的"
+                    f"指代，不得从中引入新的任务。\n{summary}",
+                )
+            )
         # 图片感知：本条消息带图时，图片里的食物对 supervisor 是未知的（文本路由
         # 看不到图）。不点破，指代消解会拿历史里最近记录的食物（如"香肠"）去填
         # "晚饭"，产出"把香肠改成晚餐"这类错误 task，盖过 diet_agent 的识别指令。
@@ -153,37 +202,294 @@ def make_supervisor_node(
             routing_msgs.append(
                 ("system", "用户本轮消息附带照片但图片食物尚未识别，改写 task 时严禁依据历史臆测食物，应表述为'识别并记录这顿饭'。")
             )
-        routing_msgs.extend(state["messages"])
-        decision: RouteDecision = router.invoke(routing_msgs)
+        task_plan = state.get("task_plan")
+        task_index = int(state.get("task_index", 0) or 0)
+        plan_initialized = bool(state.get("plan_initialized", False))
+        no_task_reason: Optional[NoTaskReason] = None
+        if not plan_initialized:
+            routing_msgs.extend(_routing_conversation(state.get("messages") or []))
+            raw_decision = router.invoke(routing_msgs)
+            blocked_duplicate_route = False
+            if isinstance(raw_decision, RouteDecision):
+                trace = state.get("agent_trace", [])
+                last_agent = next(
+                    (agent for agent in AGENT_DUTIES if trace and trace[-1].endswith(agent)),
+                    None,
+                )
+                if raw_decision.next_agent == last_agent:
+                    blocked_duplicate_route = True
+                    raw_decision = RouteDecision(
+                        next_agent="FINISH",
+                        task="上一 agent 已完成本任务，避免同 agent 连续重复路由",
+                    )
+                planned = [
+                    PlannedTask(next_agent=raw_decision.next_agent, task=raw_decision.task)
+                ] if raw_decision.next_agent != "FINISH" else []
+                no_task_reason = "unclear" if not planned else None
+            else:
+                planned = list(getattr(raw_decision, "tasks", []) or [])
+                no_task_reason = getattr(raw_decision, "finish_reason", None)
+            if (
+                not blocked_duplicate_route
+                and not planned
+                and no_task_reason in EMPTY_PLAN_REVIEW_REASONS
+            ):
+                review_messages = [
+                    *routing_msgs,
+                    (
+                        "system",
+                        "【重新审查】你刚刚将当前请求判为空计划。请重新完整理解当前用户请求，"
+                        "不要基于上一次结论复述。用户在提问、请求解释或请求建议，本身就是"
+                        "可执行任务，必须路由给对应 worker；不能因为它没有数据库写入而判为"
+                        "no_action。若存在饮食记录、运动记录、营养/健身问答、档案或计划相关"
+                        "意图，必须拆分为对应 tasks。只有确实没有新请求的确认/感谢才保留"
+                        "no_action；只有确实与健康管理完全无关时才保留 out_of_scope。",
+                    ),
+                ]
+                reviewed_decision = router.invoke(review_messages)
+                if isinstance(reviewed_decision, RouteDecision):
+                    planned = (
+                        [
+                            PlannedTask(
+                                next_agent=reviewed_decision.next_agent,
+                                task=reviewed_decision.task,
+                            )
+                        ]
+                        if reviewed_decision.next_agent != "FINISH"
+                        else []
+                    )
+                    no_task_reason = "unclear" if not planned else None
+                else:
+                    planned = list(getattr(reviewed_decision, "tasks", []) or [])
+                    no_task_reason = getattr(reviewed_decision, "finish_reason", None)
+            # 同一领域的多个子请求合并，避免同一个 Worker 被重复派发。
+            # 按首次出现顺序保留领域顺序；即使同一 agent 的任务不连续，
+            # 也必须合并而不能静默丢弃后续任务。
+            merged_by_agent: dict[str, PlannedTask] = {}
+            for item in planned[:4]:
+                existing = merged_by_agent.get(item.next_agent)
+                if existing is None:
+                    merged_by_agent[item.next_agent] = item
+                else:
+                    merged_by_agent[item.next_agent] = PlannedTask(
+                        next_agent=item.next_agent,
+                        task=f"{existing.task}；{item.task}",
+                    )
+            merged = list(merged_by_agent.values())
+            task_plan = [item.model_dump() for item in merged[:4]]
+            task_index = 0
+            plan_initialized = True
+        task_plan = task_plan or []
+        worker_failures = list(state.get("worker_failures") or [])
+        worker_outcome = state.get("worker_outcome")
 
-        # ---- 3. 硬兜底：同一轮内不允许同一 agent 连续路由两次 ----
-        # 规则 3 是 prompt 软约束，qwen-plus 可能不遵守（qa_agent 答完又被派一遍，
-        # 流里出现两段重复回答）；代码层强制：本次决策目标 == agent_trace 里
-        # 上一个刚跑完的 agent，说明 LLM 没识别出"已答完"，直接 FINISH。
-        # 用 agent_trace（turn_reset 每轮清空）而非 next_agent（跨轮残留）判断，
-        # 避免新一轮首个 agent 恰好与上一轮相同被误杀。
-        trace = state.get("agent_trace", [])
-        last_agent = trace[-1].split("→")[-1] if trace else None
-        if decision.next_agent == last_agent:
-            decision = RouteDecision(
-                next_agent="FINISH",
-                task="上一 agent 已完成本任务，避免同 agent 连续重复路由",
+        if worker_outcome and worker_outcome.get("status") == "routing_mismatch":
+            mismatch_count = int(state.get("routing_mismatch_count", 0) or 0)
+            mismatch = state.get("routing_mismatch") or {}
+            if mismatch_count >= 1:
+                return Command(
+                    goto=END,
+                    update={
+                        "next_agent": "FINISH",
+                        "task": "任务多次路由不匹配，请用户澄清需求",
+                        "finish_reason": "routing_mismatch",
+                        "worker_outcome": None,
+                        "routing_mismatch": None,
+                        "routing_mismatch_count": mismatch_count,
+                        "worker_retry_count": 0,
+                        "worker_retry_context": "",
+                        "worker_failures": worker_failures,
+                    },
+                )
+
+            reroute_messages = [
+                *routing_msgs,
+                *_routing_conversation(state.get("messages") or []),
+                (
+                    "system",
+                    "【Worker 退回后重规划】上一候选 Worker 在执行前拒绝了任务，未调用任何工具。"
+                    "请仅依据当前用户原话重新规划，不要沿用之前的 task；退回信息只作校验参考："
+                    f"候选 Worker={mismatch.get('attempted_agent')}; "
+                    f"建议={mismatch.get('suggested_agent')}; 原因={mismatch.get('reason')}。",
+                ),
+            ]
+            reviewed_decision = router.invoke(reroute_messages)
+            if isinstance(reviewed_decision, RouteDecision):
+                replanned = (
+                    [
+                        PlannedTask(
+                            next_agent=reviewed_decision.next_agent,
+                            task=reviewed_decision.task,
+                        )
+                    ]
+                    if reviewed_decision.next_agent != "FINISH"
+                    else []
+                )
+            else:
+                replanned = list(getattr(reviewed_decision, "tasks", []) or [])
+
+            if not replanned:
+                return Command(
+                    goto=END,
+                    update={
+                        "next_agent": "FINISH",
+                        "task": "路由不匹配且无法可靠重规划，请用户澄清需求",
+                        "finish_reason": "routing_mismatch",
+                        "worker_outcome": None,
+                        "routing_mismatch": None,
+                        "routing_mismatch_count": mismatch_count + 1,
+                        "worker_retry_count": 0,
+                        "worker_retry_context": "",
+                        "worker_failures": worker_failures,
+                    },
+                )
+
+            next_task = replanned[0]
+            return Command(
+                goto=next_task.next_agent,
+                update={
+                    "next_agent": next_task.next_agent,
+                    "task": next_task.task,
+                    "task_plan": [next_task.model_dump()],
+                    "task_index": 1,
+                    "plan_initialized": True,
+                    "hop_count": hop_count + 1,
+                    "finish_reason": None,
+                    "worker_outcome": None,
+                    "routing_mismatch": None,
+                    "routing_mismatch_count": mismatch_count + 1,
+                    "worker_retry_count": 0,
+                    "worker_retry_context": "",
+                    "worker_message_start": len(state.get("messages") or []),
+                    "worker_message_end": len(state.get("messages") or []),
+                    "worker_failures": worker_failures,
+                    "agent_trace": state.get("agent_trace", [])
+                    + [f"supervisor→{next_task.next_agent}"],
+                },
             )
 
-        # ---- 4. 更新路由状态并跳转 ----
+        # 当前任务计划游标在派发时已前移，因此最近一次 Worker 对应 task_index - 1。
+        # 只有明确无副作用的错误才允许重试；副作用未知时直接记录失败并继续计划。
+        if worker_outcome and worker_outcome.get("status") not in {
+            None,
+            "success",
+        }:
+            completed_index = task_index - 1
+            if 0 <= completed_index < len(task_plan):
+                failed_task = PlannedTask.model_validate(task_plan[completed_index])
+                retry_count = int(state.get("worker_retry_count", 0) or 0)
+                can_retry = (
+                    worker_outcome.get("status") == "retryable_error"
+                    and worker_outcome.get("retryable") is True
+                    and worker_outcome.get("side_effect") == "none"
+                    and retry_count < MAX_WORKER_RETRIES
+                    and hop_count < MAX_HOPS
+                )
+                if can_retry:
+                    return Command(
+                        goto=failed_task.next_agent,
+                        update={
+                            "next_agent": failed_task.next_agent,
+                            "task": failed_task.task,
+                            "task_index": task_index,
+                            "hop_count": hop_count + 1,
+                            "worker_outcome": None,
+                            "worker_retry_count": retry_count + 1,
+                            "worker_retry_context": (
+                                "上次执行失败：只读步骤未成功且未执行写入；请重新执行任务一次，"
+                                "仍遵守原有确认与数据安全规则。"
+                            ),
+                            "worker_message_start": len(state.get("messages") or []),
+                            "worker_message_end": len(state.get("messages") or []),
+                            "agent_trace": state.get("agent_trace", [])
+                            + [f"supervisor→{failed_task.next_agent}"],
+                        },
+                    )
+
+                worker_failures.append(
+                    {
+                        "agent": failed_task.next_agent,
+                        "task": failed_task.task,
+                        "error_code": worker_outcome.get("error_code")
+                        or "worker_error",
+                        "side_effect": worker_outcome.get("side_effect", "unknown"),
+                        "message_start": int(
+                            state.get("worker_message_start", 0) or 0
+                        ),
+                        "message_end": int(
+                            state.get("worker_message_end", 0) or 0
+                        ),
+                    }
+                )
+
+        if task_index >= len(task_plan):
+            if not task_plan and task_index == 0:
+                finish_reason = no_task_reason or "unclear"
+            else:
+                finish_reason = "worker_failed" if worker_failures else "completed"
+            return Command(
+                goto=END,
+                update={
+                    "next_agent": "FINISH",
+                    "task": (
+                        "没有可执行的健康管理任务"
+                        if not task_plan
+                        else "所有计划任务已完成"
+                    ),
+                    "task_plan": task_plan,
+                    "task_index": task_index,
+                    "plan_initialized": plan_initialized,
+                    "hop_count": hop_count,
+                    "finish_reason": finish_reason,
+                    "worker_outcome": None,
+                    "worker_retry_count": 0,
+                    "worker_retry_context": "",
+                    "worker_failures": worker_failures,
+                },
+            )
+
+        current = PlannedTask.model_validate(task_plan[task_index])
+        # 限制本轮所有首次派发与重试的总次数，且只在确实还要派发任务时触发。
+        # 这样最后一个 Worker 返回后仍可处理其结果并正常结束。
+        if hop_count >= MAX_HOPS:
+            return Command(
+                goto=END,
+                update={
+                    "next_agent": "FINISH",
+                    "task": "已达最大路由次数，停止后续任务以避免流程循环",
+                    "hop_count": hop_count,
+                    "finish_reason": "route_limit",
+                    "worker_outcome": None,
+                    "worker_retry_count": 0,
+                    "worker_retry_context": "",
+                    "worker_failures": worker_failures,
+                },
+            )
+        next_index = task_index + 1
+        # ---- 3. 更新路由状态并跳转 ----
         return Command(
-            goto=END if decision.next_agent == "FINISH" else decision.next_agent,
+            goto=current.next_agent,
             update={
-                "next_agent": decision.next_agent,
-                "task": decision.task,
+                "next_agent": current.next_agent,
+                "task": current.task,
+                "task_plan": task_plan,
+                "task_index": next_index,
+                "plan_initialized": plan_initialized,
                 "hop_count": hop_count + 1,
+                "finish_reason": None,
+                "worker_outcome": None,
+                "worker_retry_count": 0,
+                "worker_retry_context": "",
+                "worker_message_start": len(state.get("messages") or []),
+                "worker_message_end": len(state.get("messages") or []),
+                "worker_failures": worker_failures,
                 "plan_requested": state.get("plan_requested", False)
                 or (
-                    decision.next_agent == "plan_agent"
-                    and "计划" in decision.task
+                    current.next_agent == "plan_agent"
+                    and "计划" in current.task
                 ),
                 "agent_trace": state.get("agent_trace", [])
-                + [f"supervisor→{decision.next_agent}"],
+                + [f"supervisor→{current.next_agent}"],
             },
         )
 

@@ -13,6 +13,7 @@ SSE 解析：TestClient 流式响应按行读，按 W3C 格式配对 event/data 
 
 import json
 import uuid
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import httpx
@@ -24,12 +25,16 @@ from langchain_core.outputs import ChatGeneration, LLMResult
 from openai import APITimeoutError
 
 from app.api.chat import (
+    _CONTROL_FINISH_REASONS,
+    _FINISH_REASON_RESPONSES,
+    _collect_turn_agent_names,
     _collect_turn_final_reports,
     _extract_tool_calls,
-    _collect_turn_final_reports,
+    _worker_failure_response,
     _normalize_assistant_content,
     _run_graph_and_stream,
 )
+from app.api.conversations import _serialize_message
 from app.core.config import settings
 from app.core.security import create_access_token, hash_password
 from app.db.models import Conversation, DietRecord, Message, User
@@ -37,6 +42,54 @@ from app.db.session import SessionLocal
 from app.main import app
 
 client = TestClient(app)
+
+
+def test_routing_mismatch_finish_has_a_clarification_response():
+    """防御机制耗尽时，前端必须收到可行动的澄清提示。"""
+    assert "routing_mismatch" in _CONTROL_FINISH_REASONS
+    assert _FINISH_REASON_RESPONSES["routing_mismatch"]
+
+
+def test_collect_turn_agent_names_keeps_unique_workers_in_order():
+    assert _collect_turn_agent_names(
+        [
+            "supervisor→diet_agent",
+            "supervisor→exercise_agent",
+            "supervisor→diet_agent",
+            "supervisor→FINISH",
+        ]
+    ) == ["diet_agent", "exercise_agent"]
+
+
+def test_serialize_message_returns_agent_names_and_falls_back_for_legacy_rows():
+    created_at = datetime.now(timezone.utc)
+    shared = {
+        "id": 1,
+        "role": "assistant",
+        "content": "已记录。",
+        "image_url": None,
+        "tool_trace": None,
+        "citations": None,
+        "duration_ms": None,
+        "input_tokens": None,
+        "output_tokens": None,
+        "total_tokens": None,
+        "created_at": created_at,
+    }
+
+    composite = _serialize_message(
+        SimpleNamespace(
+            **shared,
+            agent_name="exercise_agent",
+            agent_names='["diet_agent", "exercise_agent"]',
+        )
+    )
+    legacy = _serialize_message(
+        SimpleNamespace(**shared, agent_name="diet_agent", agent_names=None)
+    )
+
+    assert composite.agent_names == ["diet_agent", "exercise_agent"]
+    assert legacy.agent_names == ["diet_agent"]
 
 
 @pytest.fixture
@@ -123,6 +176,47 @@ def test_collect_turn_final_reports_keeps_each_worker_result_in_mixed_turn():
         "已记录晚餐方便面，共 760 千卡。",
         "已记录跑步 30 分钟，消耗 343 千卡。",
     ]
+
+
+def test_collect_turn_final_reports_skips_failed_worker_attempt_ranges():
+    messages = [
+        HumanMessage(content="回答问题并记录跑步"),
+        AIMessage(content="我正在查询知识库，但遇到错误。"),
+        AIMessage(content="蛋白质摄入建议：……"),
+        AIMessage(content="已记录跑步 30 分钟。"),
+    ]
+
+    reports = _collect_turn_final_reports(
+        messages,
+        discarded_ranges=[{"start": 1, "end": 3}],
+    )
+
+    assert reports == ["已记录跑步 30 分钟。"]
+
+
+@pytest.mark.parametrize("side_effect", ["unknown", "committed", None])
+def test_worker_failure_response_warns_to_verify_before_retrying(side_effect):
+    response = _worker_failure_response(
+        [
+            {
+                "agent": "exercise_agent",
+                "task": "记录跑步30分钟",
+                "side_effect": side_effect,
+            }
+        ]
+    )
+
+    assert "记录跑步30分钟" in response
+    assert "核对" in response
+    assert "重复" in response
+
+
+def test_worker_failure_without_details_uses_conservative_fallback():
+    response = _worker_failure_response([])
+
+    assert "核对" in response
+    assert "重复" in response
+    assert "稍后重试" not in response
 
 
 def test_collect_turn_final_reports_uses_confirmed_meal_from_tool_result():
@@ -222,6 +316,64 @@ def test_messages_are_returned_in_page_no_order(auth_headers):
         f"消息 {i}" for i in range(1, 6)
     ]
 
+
+def test_pending_action_returns_persisted_interrupt_payload(auth_headers, monkeypatch):
+    """刷新或切回会话后，前端必须能重建尚未确认的 HITL 卡片。"""
+    payload = {
+        "type": "diet_confirm",
+        "meal_type": "dinner",
+        "items": [{"food_name": "番茄炒蛋", "grams": 200}],
+    }
+
+    class InterruptedGraph:
+        def get_state(self, *_args, **_kwargs):
+            return SimpleNamespace(
+                next=("diet_agent",),
+                interrupts=(SimpleNamespace(value=payload),),
+            )
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: InterruptedGraph())
+
+    response = client.get(
+        f"/api/conversations/{auth_headers['conversation_id']}/pending-action",
+        headers=auth_headers["headers"],
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"pending": True, "payload": payload}
+
+
+def test_chat_rejects_new_message_while_interrupt_is_pending(auth_headers, monkeypatch):
+    """未确认旧草稿时不能让新消息覆盖同一 thread 的 checkpoint。"""
+    class InterruptedGraph:
+        def get_state(self, *_args, **_kwargs):
+            return SimpleNamespace(next=("diet_agent",), interrupts=())
+
+        def stream(self, *_args, **_kwargs):
+            if False:
+                yield None
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: InterruptedGraph())
+
+    response = client.post(
+        f"/api/conversations/{auth_headers['conversation_id']}/chat",
+        json={"content": "我又吃了一包薯片"},
+        headers=auth_headers["headers"],
+    )
+
+    assert response.status_code == 409
+    assert "待确认" in response.json()["detail"]
+
+    db = SessionLocal()
+    try:
+        assert (
+            db.query(Message)
+            .filter(Message.conversation_id == auth_headers["conversation_id"])
+            .count()
+            == 0
+        )
+    finally:
+        db.close()
 
 def test_messages_include_persisted_request_metrics(auth_headers):
     cid = auth_headers["conversation_id"]
@@ -381,6 +533,224 @@ def test_chat_stream_done_aggregates_actual_model_usage(monkeypatch):
     assert payload["total_tokens"] == 150
 
 
+def test_out_of_scope_finish_reason_returns_and_persists_friendly_reply(
+    auth_headers, monkeypatch
+):
+    """没有 Worker 回复时，结构化越界原因也必须成为用户可见的最终消息。"""
+
+    class EmptyGraph:
+        def stream(self, *_args, **_kwargs):
+            return iter(())
+
+        def get_state(self, _config):
+            return SimpleNamespace(
+                values={
+                    "messages": [HumanMessage(content="帮我写一段 Python")],
+                    "finish_reason": "out_of_scope",
+                }
+            )
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: EmptyGraph())
+    conversation_id = auth_headers["conversation_id"]
+    config = {
+        "configurable": {
+            "thread_id": conversation_id,
+            "user_id": auth_headers["user_id"],
+        }
+    }
+
+    frames = list(_run_graph_and_stream({}, config, conversation_id))
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+    expected = (
+        "抱歉，这个请求不在我的健康管理范围内。我目前可以帮你处理饮食记录与营养查询、"
+        "运动记录与消耗查询、营养与健身知识问答，以及个性化计划。"
+    )
+
+    assert payload["content"] == expected
+    assert payload["persisted"] is True
+    assert payload["finish_reason"] == "out_of_scope"
+
+    db = SessionLocal()
+    try:
+        assistant = (
+            db.query(Message)
+            .filter(
+                Message.conversation_id == conversation_id,
+                Message.role == "assistant",
+            )
+            .one()
+        )
+        assert assistant.content == expected
+        assert assistant.agent_name is None
+    finally:
+        db.close()
+
+
+def test_finish_reason_fallback_does_not_replace_streamed_worker_text(
+    auth_headers, monkeypatch
+):
+    """有流式正文时应保留正文，结束原因只在没有任何回复时兜底。"""
+
+    class TokenOnlyGraph:
+        def stream(self, *_args, **_kwargs):
+            yield "messages", (AIMessageChunk(content="已完成处理"), {})
+
+        def get_state(self, _config):
+            return SimpleNamespace(values={"messages": [], "finish_reason": "completed"})
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: TokenOnlyGraph())
+    conversation_id = auth_headers["conversation_id"]
+    config = {
+        "configurable": {
+            "thread_id": conversation_id,
+            "user_id": auth_headers["user_id"],
+        }
+    }
+    frames = list(_run_graph_and_stream({}, config, conversation_id))
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+
+    assert payload["content"] == "已完成处理"
+
+
+def test_worker_failed_finish_keeps_success_and_adds_friendly_fallback(
+    auth_headers, monkeypatch
+):
+    """复合任务部分成功时保留成功结果，并说明失败子任务。"""
+
+    class PartiallyFailedGraph:
+        def stream(self, *_args, **_kwargs):
+            yield "updates", {
+                "exercise_agent": {
+                    "messages": [AIMessage(content="已记录跑步30分钟，消耗约200千卡")]
+                }
+            }
+
+        def get_state(self, _config):
+            return SimpleNamespace(
+                values={
+                    "messages": [
+                        HumanMessage(content="记录跑步并回答蛋白质问题"),
+                        AIMessage(content="蛋白质摄入建议：半成品，不应展示。"),
+                        AIMessage(content="已记录跑步30分钟，消耗约200千卡"),
+                    ],
+                    "agent_trace": [
+                        "supervisor→diet_agent",
+                        "supervisor→exercise_agent",
+                    ],
+                    "finish_reason": "worker_failed",
+                    "worker_discarded_ranges": [{"start": 1, "end": 2}],
+                    "worker_failures": [
+                        {
+                            "agent": "qa_agent",
+                            "task": "回答蛋白质摄入问题",
+                            "error_code": "read_tool_error",
+                            "side_effect": "none",
+                        }
+                    ],
+                }
+            )
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: PartiallyFailedGraph())
+    conversation_id = auth_headers["conversation_id"]
+    config = {
+        "configurable": {
+            "thread_id": conversation_id,
+            "user_id": auth_headers["user_id"],
+        }
+    }
+
+    frames = list(_run_graph_and_stream({}, config, conversation_id))
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+
+    assert "已记录跑步30分钟" in payload["content"]
+    assert "半成品" not in payload["content"]
+    assert "蛋白质摄入问题" in payload["content"]
+    assert payload["finish_reason"] == "worker_failed"
+    assert payload["agent_names"] == ["diet_agent", "exercise_agent"]
+
+    db = SessionLocal()
+    try:
+        assistant = (
+            db.query(Message)
+            .filter(
+                Message.conversation_id == conversation_id,
+                Message.role == "assistant",
+            )
+            .one()
+        )
+        assert json.loads(assistant.agent_names) == ["diet_agent", "exercise_agent"]
+    finally:
+        db.close()
+
+
+def test_worker_failed_write_result_fallback_asks_user_to_verify(auth_headers, monkeypatch):
+    class FailedWriteGraph:
+        def stream(self, *_args, **_kwargs):
+            if False:
+                yield None
+
+        def get_state(self, _config):
+            return SimpleNamespace(
+                values={
+                    "messages": [HumanMessage(content="记录跑步30分钟")],
+                    "finish_reason": "worker_failed",
+                    "worker_failures": [
+                        {
+                            "agent": "exercise_agent",
+                            "task": "记录跑步30分钟",
+                            "side_effect": "unknown",
+                        }
+                    ],
+                }
+            )
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: FailedWriteGraph())
+    conversation_id = auth_headers["conversation_id"]
+    config = {
+        "configurable": {
+            "thread_id": conversation_id,
+            "user_id": auth_headers["user_id"],
+        }
+    }
+
+    frames = list(_run_graph_and_stream({}, config, conversation_id))
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+
+    assert "核对" in payload["content"]
+    assert "重复" in payload["content"]
+
+
+def test_no_task_reply_overrides_pre_worker_stream_content(auth_headers, monkeypatch):
+    """越界时前置图片节点的流式片段不能遮住范围提示。"""
+
+    class PreWorkerTokenGraph:
+        def stream(self, *_args, **_kwargs):
+            yield "messages", (AIMessageChunk(content='{"items":[]}'), {})
+
+        def get_state(self, _config):
+            return SimpleNamespace(
+                values={"messages": [], "finish_reason": "out_of_scope"}
+            )
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: PreWorkerTokenGraph())
+    conversation_id = auth_headers["conversation_id"]
+    config = {
+        "configurable": {
+            "thread_id": conversation_id,
+            "user_id": auth_headers["user_id"],
+        }
+    }
+    frames = list(_run_graph_and_stream({}, config, conversation_id))
+    done = next(frame for frame in frames if frame.startswith("event: done"))
+    payload = json.loads(done.split("data: ", 1)[1])
+
+    assert payload["content"].startswith("抱歉，这个请求不在我的健康管理范围内。")
+
+
 def test_image_interrupt_done_contains_normalized_content_without_token_leak(monkeypatch):
     """带图识别在 interrupt 前不能把内部 JSON 作为 token 泄漏给前端。"""
     raw = json.dumps(
@@ -412,6 +782,35 @@ def test_image_interrupt_done_contains_normalized_content_without_token_leak(mon
     payload = json.loads(done.split("data: ", 1)[1])
     assert payload["interrupted"] is True
     assert payload["content"] == "我识别到这顿饭包括：虾约150克。请确认是否记录。"
+
+
+def test_supervisor_structured_output_is_not_streamed_as_user_visible_token(monkeypatch):
+    """Supervisor 的结构化路由结果只能驱动流程，不能出现在聊天正文。"""
+    route_json = json.dumps(
+        {
+            "finish_reason": None,
+            "tasks": [{"next_agent": "diet_agent", "task": "记录饮食"}],
+        },
+        ensure_ascii=False,
+    )
+
+    class SupervisorInterruptGraph:
+        def stream(self, *_args, **_kwargs):
+            yield "messages", (
+                AIMessageChunk(content=route_json),
+                {"langgraph_node": "supervisor"},
+            )
+            yield "updates", {
+                "__interrupt__": [
+                    SimpleNamespace(value={"type": "diet_confirm"})
+                ]
+            }
+
+    monkeypatch.setattr("app.api.chat.get_graph", lambda: SupervisorInterruptGraph())
+
+    frames = list(_run_graph_and_stream({}, {}, "test-conversation"))
+
+    assert all("event: token" not in frame for frame in frames)
 
 
 @pytest.mark.parametrize(

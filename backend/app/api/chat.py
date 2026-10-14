@@ -70,6 +70,90 @@ _TITLE_SYSTEM = (
 )
 _TITLE_FALLBACK_LEN = 12
 
+_FINISH_REASON_RESPONSES = {
+    "out_of_scope": (
+        "抱歉，这个请求不在我的健康管理范围内。我目前可以帮你处理饮食记录与营养查询、"
+        "运动记录与消耗查询、营养与健身知识问答，以及个性化计划。"
+    ),
+    "small_talk": (
+        "你好！我可以帮你记录或查询饮食和运动、回答营养健身问题，"
+        "或者生成个性化计划。"
+    ),
+    "unclear": (
+        "我还不确定你想完成什么。你可以具体说说饮食、运动、营养问答或计划方面的需求。"
+    ),
+    "no_action": (
+        "我没有发现需要执行的新操作。如果你想继续，可以告诉我下一步要记录、查询或生成什么。"
+    ),
+    "completed": "本轮任务已处理完成。",
+    "route_limit": (
+        "本轮执行步骤已达到安全上限，我先停止后续调度。你可以把剩余需求拆成新消息继续处理。"
+    ),
+    "worker_failed": "部分任务执行状态不确定，请先核对相关记录，再决定是否重试，以免重复提交。",
+    "routing_mismatch": "我暂时无法可靠判断该请求应由哪个功能处理，请换一种方式说明你的需求。",
+}
+_CONTROL_FINISH_REASONS = {
+    "out_of_scope",
+    "small_talk",
+    "unclear",
+    "no_action",
+    "route_limit",
+    "worker_failed",
+    "routing_mismatch",
+}
+
+_WORKER_LABELS = {
+    "diet_agent": "饮食任务",
+    "exercise_agent": "运动任务",
+    "qa_agent": "知识问答任务",
+    "plan_agent": "计划任务",
+}
+
+
+def _worker_failure_response(failures: list[dict]) -> str:
+    """Turn failed-task records into a safe, actionable user-facing fallback."""
+    retryable_tasks: list[str] = []
+    uncertain_tasks: list[str] = []
+    committed_tasks: list[str] = []
+    for failure in failures:
+        task = str(failure.get("task") or "")
+        if task:
+            label = task
+        else:
+            label = (
+                _WORKER_LABELS.get(str(failure.get("agent")), "部分任务")
+            )
+        side_effect = failure.get("side_effect")
+        if side_effect == "committed":
+            committed_tasks.append(label)
+        elif side_effect != "none":
+            uncertain_tasks.append(label)
+        else:
+            retryable_tasks.append(label)
+
+    replies: list[str] = []
+    if committed_tasks:
+        replies.append(
+            "以下任务已经执行过写入步骤，请先核对记录，不要直接重复提交："
+            + "；".join(committed_tasks)
+            + "。"
+        )
+    if uncertain_tasks:
+        replies.append(
+            "以下任务的写入结果不确定，请先核对记录，再决定是否重试，以免重复提交："
+            + "；".join(uncertain_tasks)
+            + "。"
+        )
+    if retryable_tasks:
+        replies.append(
+            "以下任务暂时未能完成："
+            + "；".join(retryable_tasks)
+            + "。你可以稍后重试。"
+        )
+    if not replies:
+        return _FINISH_REASON_RESPONSES["worker_failed"]
+    return "\n".join(replies)
+
 
 def _normalize_assistant_content(content: str) -> str:
     """把误泄漏到助手正文的图片识别 JSON 转成用户可读摘要。
@@ -163,6 +247,23 @@ class ResumeRequest(BaseModel):
     value: Any
 
 
+def _collect_turn_agent_names(
+    agent_trace: list[str] | None,
+    current_agent: str | None = None,
+) -> list[str]:
+    """Return unique worker names from this turn's supervisor trace in order."""
+    names: list[str] = []
+    for entry in agent_trace or []:
+        if not isinstance(entry, str):
+            continue
+        name = entry.rsplit("→", 1)[-1].strip()
+        if name and name != "FINISH" and name not in names:
+            names.append(name)
+    if current_agent and current_agent not in names:
+        names.append(current_agent)
+    return names
+
+
 def _build_graph_config(conversation_id: str, user_id: int, entrypoint: str) -> dict:
     """构造图执行配置，并按开关注入 Langfuse 全链路追踪。"""
     config = {"configurable": {"thread_id": conversation_id, "user_id": user_id}}
@@ -211,7 +312,10 @@ def _extract_tool_calls(update: dict) -> list[dict]:
     return list(calls.values())
 
 
-def _collect_turn_final_reports(messages: list) -> list[str]:
+def _collect_turn_final_reports(
+    messages: list,
+    discarded_ranges: list[dict] | None = None,
+) -> list[str]:
     """提取本轮每个 worker 的终态汇报，供多领域请求合并展示。
 
     同一轮可能按“饮食 → 运动”接力执行。messages 是 append-only 的，若出站层
@@ -224,10 +328,25 @@ def _collect_turn_final_reports(messages: list) -> list[str]:
             start = i + 1
             break
 
+    ranges = discarded_ranges or []
+
+    def is_discarded(index: int) -> bool:
+        for item in ranges:
+            try:
+                range_start = int(item.get("start", 0))
+                range_end = int(item.get("end", 0))
+            except (AttributeError, TypeError, ValueError):
+                continue
+            if range_start <= index < range_end:
+                return True
+        return False
+
     reports: list[str] = []
     tool_names: dict[str, str] = {}
     skip_next_diet_report = False
-    for message in messages[start:]:
+    for index, message in enumerate(messages[start:], start=start):
+        if is_discarded(index):
+            continue
         message_type = getattr(message, "type", None)
         if message_type == "ai":
             calls = getattr(message, "tool_calls", None) or []
@@ -403,7 +522,12 @@ def _run_graph_and_stream(
             graph_input, stream_cfg, stream_mode=["messages", "updates"]
         ):
             if mode == "messages":
-                msg, _meta = chunk
+                msg, meta = chunk
+                # Supervisor 的输出是路由用的 Pydantic JSON，不是用户正文。
+                # LangGraph 在部分版本中仍会把它作为 AIMessageChunk 发出；
+                # 若不按节点过滤，会被误封装成 token 事件并直接渲染到聊天区。
+                if isinstance(meta, dict) and meta.get("langgraph_node") == "supervisor":
+                    continue
                 # 只推文本增量：content 为空的分片是 tool_call 编码，跳过
                 if msg.type == "AIMessageChunk" and isinstance(msg.content, str) and msg.content:
                     token_buffer.append(msg.content)
@@ -470,9 +594,27 @@ def _run_graph_and_stream(
         final_state = graph.get_state(cfg).values
         phase_metrics = _current_request_metrics(usage_collector, started_at)
         metrics = merge_usage_metrics(pending_metrics, phase_metrics)
-        reports = _collect_turn_final_reports(final_state.get("messages") or [])
+        finish_reason = final_state.get("finish_reason")
+        agent_names = _collect_turn_agent_names(
+            final_state.get("agent_trace"), current_agent
+        )
+        reports = _collect_turn_final_reports(
+            final_state.get("messages") or [],
+            discarded_ranges=list(final_state.get("worker_discarded_ranges") or []),
+        )
         content = "\n\n".join(_normalize_assistant_content(report) for report in reports)
-        content = content or _normalize_assistant_content("".join(token_buffer))
+        if finish_reason == "worker_failed":
+            failure_reply = _worker_failure_response(
+                list(final_state.get("worker_failures") or [])
+            )
+            content = f"{content}\n\n{failure_reply}" if content else failure_reply
+        elif not content:
+            if finish_reason in _CONTROL_FINISH_REASONS:
+                content = _FINISH_REASON_RESPONSES.get(finish_reason, "")
+            else:
+                content = _normalize_assistant_content("".join(token_buffer))
+                if not content:
+                    content = _FINISH_REASON_RESPONSES.get(finish_reason, "")
 
         if content:
             db = SessionLocal()
@@ -493,6 +635,7 @@ def _run_graph_and_stream(
                         role="assistant",
                         content=content,
                         agent_name=current_agent,
+                        agent_names=json.dumps(agent_names, ensure_ascii=False),
                         tool_trace=json.dumps(tool_trace, ensure_ascii=False),
                         citations=json.dumps(citations, ensure_ascii=False) if citations else None,
                         duration_ms=metrics["duration_ms"],
@@ -510,7 +653,9 @@ def _run_graph_and_stream(
             {
                 "interrupted": False,
                 "agent_name": current_agent,
+                "agent_names": agent_names,
                 "persisted": bool(content),
+                "finish_reason": final_state.get("finish_reason"),
                 # 权威终稿：流式 token 可能混入 react agent 的工具间叙述（"现在我将…"），
                 # 前端收到 done 后用 content 替换累积的 token 文本，保证最终消息干净
                 "content": content,
@@ -543,6 +688,31 @@ def _get_own_conversation(
     return conv
 
 
+def _get_pending_interrupt_payload(graph: Any, cfg: dict) -> dict | None:
+    """Return the unresolved HITL payload for this graph thread, if any."""
+    state = graph.get_state(cfg)
+    if not state.next:
+        return None
+    for interrupt in getattr(state, "interrupts", ()) or ():
+        value = getattr(interrupt, "value", None)
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+@router.get("/{conversation_id}/pending-action")
+async def get_pending_action(
+    conversation_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return a persisted HITL confirmation payload after a page reload."""
+    conv = _get_own_conversation(conversation_id, user, db)
+    cfg = _build_graph_config(conv.id, user.id, "pending_action")
+    payload = _get_pending_interrupt_payload(get_graph(), cfg)
+    return {"pending": payload is not None, "payload": payload}
+
+
 @router.post("/{conversation_id}/chat")
 async def chat(
     conversation_id: str,
@@ -552,6 +722,13 @@ async def chat(
 ):
     """发消息并以 SSE 流式返回 Agent 的执行过程与回复。"""
     conv = _get_own_conversation(conversation_id, user, db)
+    graph = get_graph()
+    cfg = _build_graph_config(conv.id, user.id, "chat")
+
+    # interrupt 后 checkpoint 仍停在旧工具节点。向同一 thread 注入新消息会
+    # 重放旧节点并重新推送过期草稿，必须先确认或取消该待处理操作。
+    if graph.get_state(cfg).next:
+        raise HTTPException(status_code=409, detail="当前会话有待确认的饮食记录，请先确认或取消")
 
     # user 消息先落库（流失败也有痕迹），顺带刷新会话活跃时间（列表按此排序）
     db.add(
@@ -577,8 +754,6 @@ async def chat(
         "user_id": str(user.id),
         "image_url": req.image_url,
     }
-    cfg = _build_graph_config(conv.id, user.id, "chat")
-
     return StreamingResponse(
         _run_graph_and_stream(graph_input, cfg, conv.id),
         media_type="text/event-stream",
@@ -597,9 +772,9 @@ async def resume_chat(
     graph = get_graph()
     cfg = _build_graph_config(conv.id, user.id, "resume")
 
-    # state.next 非空 = 图停在某个节点上等 resume；空 = 没有挂起的操作，
-    # 此时灌 resume 值会变成往 checkpoint 写一条无意义的 resume 记录，拦掉
-    if not graph.get_state(cfg).next:
+    # 只允许恢复真正携带 interrupt payload 的 checkpoint，避免普通执行态
+    # 被误当成待确认流程而写入无意义的 resume 值。
+    if _get_pending_interrupt_payload(graph, cfg) is None:
         raise HTTPException(status_code=400, detail="当前没有待确认的操作")
 
     return StreamingResponse(
